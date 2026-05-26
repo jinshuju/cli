@@ -4,8 +4,8 @@
   "description": "Command line interface for Jinshuju Open API v1",
   "type": "module",
   "bin": {
-    "jinshuju": "./dist/cli.js",
-    "jsj": "./dist/cli.js"
+    "jinshuju": "./dist/cli-bin.js",
+    "jsj": "./dist/cli-bin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -14,7 +14,9 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts"
   ],
   "engines": {
     "node": ">=20"
