@@ -1,0 +1,26 @@
+{
+  "name": "@jinshuju/cli",
+  "version": "0.1.0",
+  "description": "Command line interface for Jinshuju Open API v1",
+  "type": "module",
+  "bin": {
+    "jinshuju": "./dist/cli.js",
+    "jsj": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3"
+  }
+}
