@@ -112,8 +112,75 @@ function json(value: unknown): string {
 
 function text(value: unknown): string {
   if (typeof value === 'string') return value;
-  if (value === undefined) return '';
+  if (value === undefined || value === null) return '';
+  if (Array.isArray(value)) return renderList(value);
+  if (typeof value === 'object') return renderObject(value as Record<string, unknown>);
+  return String(value);
+}
+
+function renderObject(value: Record<string, unknown>): string {
+  const listKey = ['data', 'items', 'forms', 'entries', 'views'].find((key) => Array.isArray(value[key]));
+  const scalarLines = Object.entries(value)
+    .filter(([key]) => key !== listKey)
+    .filter(([, fieldValue]) => !Array.isArray(fieldValue) && (fieldValue === null || typeof fieldValue !== 'object'))
+    .map(([key, fieldValue]) => `${key}: ${formatCell(fieldValue)}`);
+
+  if (listKey) {
+    const listText = renderList(value[listKey] as unknown[]);
+    return [...scalarLines, `${listKey}:`, listText].filter(Boolean).join('\n');
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) return '{}';
+  return entries.map(([key, fieldValue]) => `${key}: ${formatField(fieldValue)}`).join('\n');
+}
+
+function renderList(values: unknown[]): string {
+  if (values.length === 0) return '(empty)';
+  if (!values.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item))) {
+    return values.map((item) => formatField(item)).join('\n');
+  }
+
+  const rows = values as Record<string, unknown>[];
+  const columns = collectColumns(rows);
+  if (columns.length === 0) return rows.map((row) => json(row)).join('\n');
+
+  const widths = columns.map((column) => Math.max(column.length, ...rows.map((row) => formatCell(row[column]).length)));
+  const header = columns.map((column, index) => column.padEnd(widths[index])).join('  ');
+  const separator = widths.map((width) => '-'.repeat(width)).join('  ');
+  const body = rows.map((row) => columns.map((column, index) => formatCell(row[column]).padEnd(widths[index])).join('  '));
+  return [header, separator, ...body].join('\n');
+}
+
+function collectColumns(rows: Record<string, unknown>[]): string[] {
+  const preferred = ['token', 'serial_number', 'id', 'name', 'title', 'label', 'type', 'state', 'status', 'created_at', 'updated_at'];
+  const seen = new Set<string>();
+  for (const key of preferred) {
+    if (rows.some((row) => Object.prototype.hasOwnProperty.call(row, key) && isScalar(row[key]))) seen.add(key);
+  }
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row)) {
+      if (seen.size >= 6) return [...seen];
+      if (isScalar(value)) seen.add(key);
+    }
+  }
+  return [...seen];
+}
+
+function isScalar(value: unknown): boolean {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function formatField(value: unknown): string {
+  if (isScalar(value)) return formatCell(value);
   return json(value);
+}
+
+function formatCell(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
 }
 
 export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Promise<CliResult> {

@@ -62,10 +62,17 @@ test('form create rejects non API v1 field type', async () => {
   assert.match(result.stderr, /API v1 field type/);
 });
 
-test('text output for API commands prints the response body instead of a placeholder', async () => {
+test('text output for API commands prints a human-readable response instead of JSON or placeholders', async () => {
   const client = {
     async request<T>(): Promise<T> {
-      return { total: 0, count: 0, data: [], next: null } as T;
+      return {
+        total: 2,
+        count: 2,
+        data: [
+          { token: 'BaLZpn', name: '报名表', status: 'active', fields: [{ type: 'TextField' }] },
+          { token: 'Cx9Kq2', name: '反馈表', status: 'archived', fields: [] }
+        ]
+      } as T;
     }
   };
 
@@ -75,8 +82,10 @@ test('text output for API commands prints the response body instead of a placeho
   });
 
   assert.equal(result.exitCode, 0);
-  assert.match(result.stdout, /"total": 0/);
-  assert.match(result.stdout, /"data": \[\]/);
+  assert.match(result.stdout, /total: 2/);
+  assert.match(result.stdout, /token\s+name\s+status/);
+  assert.match(result.stdout, /BaLZpn\s+报名表\s+active/);
+  assert.doesNotMatch(result.stdout, /"total": 2/);
   assert.doesNotMatch(result.stdout, /Entries fetched/);
 });
 
