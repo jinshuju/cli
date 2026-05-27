@@ -126,15 +126,14 @@ test('form list and form view entry list also forward API v1 next cursor', async
   assert.equal(viewEntries.requests[0].path, '/api/v1/forms/BaLZpn/views/Mixqc1/entries?next=51');
 });
 
-test('page and per-page options fail with API v1 cursor pagination guidance', async () => {
+test('page and per-page options are not exposed as CLI options', async () => {
   const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: createMockClient().client
   });
 
   assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /API v1 pagination uses --next/);
-  assert.match(result.stderr, /fixed page size is 50/);
+  assert.match(result.stderr, /Unknown option --per-page/);
 });
 
 test('view help documents six character alphanumeric token', async () => {
