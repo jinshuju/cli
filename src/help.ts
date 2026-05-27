@@ -97,8 +97,7 @@ Examples:
 List forms accessible to current credentials.
 
 Options:
-  --page <number>             Page number, if API supports it
-  --per-page <number>         Page size, if API supports it
+  --next <cursor>             API v1 pagination cursor from previous response
   --output <format>           text, json; default text
   -h, --help                  Show help
 
@@ -154,8 +153,7 @@ Arguments:
   form-token                  Form token, for example q1234567890
 
 Options:
-  --page <number>             Page number, if API supports it
-  --per-page <number>         Page size, if API supports it
+  --next <cursor>             API v1 pagination cursor from previous response
   --output <format>           text, json; default text
   -h, --help                  Show help
 
@@ -236,8 +234,7 @@ Arguments:
   view-token                  Six-character alphanumeric token, for example aB3dE9
 
 Options:
-  --page <number>             Page number, if API supports it
-  --per-page <number>         Page size, if API supports it
+  --next <cursor>             API v1 pagination cursor from previous response
   --output <format>           text, json; default text
   -h, --help                  Show help
 

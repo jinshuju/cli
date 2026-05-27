@@ -96,34 +96,45 @@ test('API command errors are returned as CLI errors instead of uncaught promise 
   assert.match(result.stderr, /Missing JINSHUJU_API_KEY or JINSHUJU_API_SECRET/);
 });
 
-test('form entry list forwards pagination options as API query params', async () => {
+test('form entry list forwards API v1 next cursor as pagination query param', async () => {
   const mock = createMockClient();
 
-  const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--page', '2', '--per-page', '50'], {
+  const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--next', '51'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: mock.client
   });
 
   assert.equal(result.exitCode, 0);
   assert.equal(mock.requests[0].method, 'GET');
-  assert.equal(mock.requests[0].path, '/api/v1/forms/BaLZpn/entries?page=2&per_page=50');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/BaLZpn/entries?next=51');
 });
 
-test('form list and form view entry list also forward pagination options', async () => {
+test('form list and form view entry list also forward API v1 next cursor', async () => {
   const formList = createMockClient();
   const viewEntries = createMockClient();
 
-  await runCli(['form', 'list', '--page', '3'], {
+  await runCli(['form', 'list', '--next', '60cc514761936ced06123456'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: formList.client
   });
-  await runCli(['form', 'view', 'entry', 'list', 'BaLZpn', 'Mixqc1', '--per-page', '20'], {
+  await runCli(['form', 'view', 'entry', 'list', 'BaLZpn', 'Mixqc1', '--next', '51'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: viewEntries.client
   });
 
-  assert.equal(formList.requests[0].path, '/api/v1/forms?page=3');
-  assert.equal(viewEntries.requests[0].path, '/api/v1/forms/BaLZpn/views/Mixqc1/entries?per_page=20');
+  assert.equal(formList.requests[0].path, '/api/v1/forms?next=60cc514761936ced06123456');
+  assert.equal(viewEntries.requests[0].path, '/api/v1/forms/BaLZpn/views/Mixqc1/entries?next=51');
+});
+
+test('page and per-page options fail with API v1 cursor pagination guidance', async () => {
+  const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: createMockClient().client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /API v1 pagination uses --next/);
+  assert.match(result.stderr, /fixed page size is 50/);
 });
 
 test('view help documents six character alphanumeric token', async () => {

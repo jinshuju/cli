@@ -21,6 +21,7 @@ type GlobalOptions = {
   jsonPayload?: string;
   page?: string;
   perPage?: string;
+  next?: string;
 };
 
 type ParsedArgs = {
@@ -80,6 +81,9 @@ function parseArgs(args: string[]): ParsedArgs {
       case '--per-page':
         options.perPage = readOptionValue(args, ++i, '--per-page');
         break;
+      case '--next':
+        options.next = readOptionValue(args, ++i, '--next');
+        break;
       default:
         if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}`);
         positionals.push(arg);
@@ -107,11 +111,17 @@ function commandKey(positionals: string[]): string {
 }
 
 function paginatedPath(path: string, options: GlobalOptions): string {
+  assertApiV1CursorPaginationOptions(options);
   const params = new URLSearchParams();
-  if (options.page) params.set('page', options.page);
-  if (options.perPage) params.set('per_page', options.perPage);
+  if (options.next) params.set('next', options.next);
   const query = params.toString();
   return query ? `${path}?${query}` : path;
+}
+
+function assertApiV1CursorPaginationOptions(options: GlobalOptions): void {
+  if (options.page || options.perPage) {
+    throw new Error('API v1 pagination uses --next <cursor>; --page/--per-page are not supported because the fixed page size is 50. Use the next value returned by the previous response.');
+  }
 }
 
 function json(value: unknown): string {
