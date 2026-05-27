@@ -110,6 +110,12 @@ function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function text(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === undefined) return '';
+  return json(value);
+}
+
 export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Promise<CliResult> {
   let parsed: ParsedArgs;
   try {
@@ -126,7 +132,7 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
   try {
     switch (key) {
       case 'auth status':
-        return authStatus(parsed.options, runtime);
+        return await authStatus(parsed.options, runtime);
       case 'config get':
         return configGet(parsed.positionals, parsed.options);
       case 'config set':
@@ -134,23 +140,23 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
       case 'config unset':
         return configUnset(parsed.positionals, parsed.options);
       case 'form list':
-        return apiGet('/api/v1/forms', parsed.options, runtime, 'Forms');
+        return await apiGet('/api/v1/forms', parsed.options, runtime);
       case 'form get':
-        return apiGet(`/api/v1/forms/${requireArg(parsed.positionals[2], 'form-token')}`, parsed.options, runtime, 'Form');
+        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[2], 'form-token')}`, parsed.options, runtime);
       case 'form create':
         return await formCreate(parsed.options, runtime);
       case 'form entry list':
-        return apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries`, parsed.options, runtime, 'Entries');
+        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries`, parsed.options, runtime);
       case 'form entry get':
-        return apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries/${requireArg(parsed.positionals[4], 'entry-serial-number')}`, parsed.options, runtime, 'Entry');
+        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries/${requireArg(parsed.positionals[4], 'entry-serial-number')}`, parsed.options, runtime);
       case 'form entry create':
         return await entryCreate(parsed.positionals, parsed.options, runtime);
       case 'form view list':
-        return apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/views`, parsed.options, runtime, 'Views');
+        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/views`, parsed.options, runtime);
       case 'form view get':
-        return apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/views/${requireArg(parsed.positionals[4], 'view-token')}`, parsed.options, runtime, 'View');
+        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/views/${requireArg(parsed.positionals[4], 'view-token')}`, parsed.options, runtime);
       case 'form view entry list':
-        return apiGet(`/api/v1/forms/${requireArg(parsed.positionals[4], 'form-token')}/views/${requireArg(parsed.positionals[5], 'view-token')}/entries`, parsed.options, runtime, 'Entries');
+        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[4], 'form-token')}/views/${requireArg(parsed.positionals[5], 'view-token')}/entries`, parsed.options, runtime);
       default:
         return fail(`Unknown command: ${parsed.positionals.join(' ')}`);
     }
@@ -215,23 +221,20 @@ function configUnset(positionals: string[], options: GlobalOptions): CliResult {
   return ok(`Unset ${key}`);
 }
 
-async function apiGet(path: string, options: GlobalOptions, runtime: CliRuntime, label: string): Promise<CliResult> {
+async function apiGet(path: string, options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
   const result = await createClient(options, runtime).request({ method: 'GET', path });
-  if (options.output === 'json') return ok(json(result));
-  return ok(`${label} fetched`);
+  return ok(options.output === 'json' ? json(result) : text(result));
 }
 
 async function formCreate(options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
   const payload = validateCreateFormPayload(parseJsonPayload(requireArg(options.jsonPayload, 'json')));
   const result = await createClient(options, runtime).request({ method: 'POST', path: '/api/v1/forms', body: payload });
-  if (options.output === 'json') return ok(json(result));
-  return ok('Form created');
+  return ok(options.output === 'json' ? json(result) : text(result));
 }
 
 async function entryCreate(positionals: string[], options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
   const formToken = requireArg(positionals[3], 'form-token');
   const payload = parseJsonPayload(requireArg(options.jsonPayload, 'json'));
   const result = await createClient(options, runtime).request({ method: 'POST', path: `/api/v1/forms/${formToken}/entries`, body: payload });
-  if (options.output === 'json') return ok(json(result));
-  return ok('Entry created');
+  return ok(options.output === 'json' ? json(result) : text(result));
 }

@@ -62,6 +62,31 @@ test('form create rejects non API v1 field type', async () => {
   assert.match(result.stderr, /API v1 field type/);
 });
 
+test('text output for API commands prints the response body instead of a placeholder', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return { total: 0, count: 0, data: [], next: null } as T;
+    }
+  };
+
+  const result = await runCli(['form', 'view', 'entry', 'list', 'BaLZpn', 'Mixqc1', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /"total": 0/);
+  assert.match(result.stdout, /"data": \[\]/);
+  assert.doesNotMatch(result.stdout, /Entries fetched/);
+});
+
+test('API command errors are returned as CLI errors instead of uncaught promise rejections', async () => {
+  const result = await runCli(['form', 'list'], { env: {} });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /Missing JINSHUJU_API_KEY or JINSHUJU_API_SECRET/);
+});
+
 test('view help documents six character alphanumeric token', async () => {
   const result = await runCli(['form', 'view', 'get', '--help']);
 
