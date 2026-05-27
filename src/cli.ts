@@ -19,8 +19,7 @@ type GlobalOptions = {
   verify: boolean;
   showSecret: boolean;
   jsonPayload?: string;
-  page?: string;
-  perPage?: string;
+  next?: string;
 };
 
 type ParsedArgs = {
@@ -74,11 +73,8 @@ function parseArgs(args: string[]): ParsedArgs {
       case '--show-secret':
         options.showSecret = true;
         break;
-      case '--page':
-        options.page = readOptionValue(args, ++i, '--page');
-        break;
-      case '--per-page':
-        options.perPage = readOptionValue(args, ++i, '--per-page');
+      case '--next':
+        options.next = readOptionValue(args, ++i, '--next');
         break;
       default:
         if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}`);
@@ -108,8 +104,7 @@ function commandKey(positionals: string[]): string {
 
 function paginatedPath(path: string, options: GlobalOptions): string {
   const params = new URLSearchParams();
-  if (options.page) params.set('page', options.page);
-  if (options.perPage) params.set('per_page', options.perPage);
+  if (options.next) params.set('next', options.next);
   const query = params.toString();
   return query ? `${path}?${query}` : path;
 }
