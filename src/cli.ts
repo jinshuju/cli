@@ -106,6 +106,14 @@ function commandKey(positionals: string[]): string {
   return positionals.slice(0, 2).join(' ').trim() || positionals[0] || '';
 }
 
+function paginatedPath(path: string, options: GlobalOptions): string {
+  const params = new URLSearchParams();
+  if (options.page) params.set('page', options.page);
+  if (options.perPage) params.set('per_page', options.perPage);
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
@@ -207,13 +215,13 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
       case 'config unset':
         return configUnset(parsed.positionals, parsed.options);
       case 'form list':
-        return await apiGet('/api/v1/forms', parsed.options, runtime);
+        return await apiGet(paginatedPath('/api/v1/forms', parsed.options), parsed.options, runtime);
       case 'form get':
         return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[2], 'form-token')}`, parsed.options, runtime);
       case 'form create':
         return await formCreate(parsed.options, runtime);
       case 'form entry list':
-        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries`, parsed.options, runtime);
+        return await apiGet(paginatedPath(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries`, parsed.options), parsed.options, runtime);
       case 'form entry get':
         return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/entries/${requireArg(parsed.positionals[4], 'entry-serial-number')}`, parsed.options, runtime);
       case 'form entry create':
@@ -223,7 +231,7 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
       case 'form view get':
         return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[3], 'form-token')}/views/${requireArg(parsed.positionals[4], 'view-token')}`, parsed.options, runtime);
       case 'form view entry list':
-        return await apiGet(`/api/v1/forms/${requireArg(parsed.positionals[4], 'form-token')}/views/${requireArg(parsed.positionals[5], 'view-token')}/entries`, parsed.options, runtime);
+        return await apiGet(paginatedPath(`/api/v1/forms/${requireArg(parsed.positionals[4], 'form-token')}/views/${requireArg(parsed.positionals[5], 'view-token')}/entries`, parsed.options), parsed.options, runtime);
       default:
         return fail(`Unknown command: ${parsed.positionals.join(' ')}`);
     }

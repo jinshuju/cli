@@ -96,6 +96,36 @@ test('API command errors are returned as CLI errors instead of uncaught promise 
   assert.match(result.stderr, /Missing JINSHUJU_API_KEY or JINSHUJU_API_SECRET/);
 });
 
+test('form entry list forwards pagination options as API query params', async () => {
+  const mock = createMockClient();
+
+  const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--page', '2', '--per-page', '50'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/BaLZpn/entries?page=2&per_page=50');
+});
+
+test('form list and form view entry list also forward pagination options', async () => {
+  const formList = createMockClient();
+  const viewEntries = createMockClient();
+
+  await runCli(['form', 'list', '--page', '3'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: formList.client
+  });
+  await runCli(['form', 'view', 'entry', 'list', 'BaLZpn', 'Mixqc1', '--per-page', '20'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: viewEntries.client
+  });
+
+  assert.equal(formList.requests[0].path, '/api/v1/forms?page=3');
+  assert.equal(viewEntries.requests[0].path, '/api/v1/forms/BaLZpn/views/Mixqc1/entries?per_page=20');
+});
+
 test('view help documents six character alphanumeric token', async () => {
   const result = await runCli(['form', 'view', 'get', '--help']);
 
