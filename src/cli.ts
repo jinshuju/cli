@@ -1,3 +1,4 @@
+import { loginWithOAuth, refreshOAuthToken, revokeOAuthToken } from './auth.js';
 import { assertConfigKey, defaultConfigPath, getConfig, loadConfig, maskSecret, setConfigValue, unsetConfigValue, type ConfigKey } from './config.js';
 import { helpByCommand, rootHelp } from './help.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
@@ -15,6 +16,11 @@ type GlobalOptions = {
   configPath: string;
   apiKey?: string;
   apiSecret?: string;
+  host?: string;
+  authHost?: string;
+  clientId?: string;
+  scopes?: string;
+  noOpen: boolean;
   help: boolean;
   verify: boolean;
   showSecret: boolean;
@@ -39,6 +45,7 @@ function parseArgs(args: string[]): ParsedArgs {
   const options: GlobalOptions = {
     output: 'text',
     configPath: defaultConfigPath,
+    noOpen: false,
     help: false,
     verify: false,
     showSecret: false
@@ -63,6 +70,21 @@ function parseArgs(args: string[]): ParsedArgs {
         break;
       case '--api-secret':
         options.apiSecret = readOptionValue(args, ++i, '--api-secret');
+        break;
+      case '--host':
+        options.host = readOptionValue(args, ++i, '--host');
+        break;
+      case '--auth-host':
+        options.authHost = readOptionValue(args, ++i, '--auth-host');
+        break;
+      case '--client-id':
+        options.clientId = readOptionValue(args, ++i, '--client-id');
+        break;
+      case '--scopes':
+        options.scopes = readOptionValue(args, ++i, '--scopes');
+        break;
+      case '--no-open':
+        options.noOpen = true;
         break;
       case '--json':
         options.jsonPayload = readOptionValue(args, ++i, '--json');
@@ -201,8 +223,14 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
 
   try {
     switch (key) {
+      case 'auth login':
+        return await authLogin(parsed.options, runtime);
       case 'auth status':
         return await authStatus(parsed.options, runtime);
+      case 'auth refresh':
+        return await authRefresh(parsed.options, runtime);
+      case 'auth logout':
+        return await authLogout(parsed.options, runtime);
       case 'config get':
         return configGet(parsed.positionals, parsed.options);
       case 'config set':
@@ -241,23 +269,56 @@ function requireArg(value: string | undefined, name: string): string {
 }
 
 function createClient(options: GlobalOptions, runtime: CliRuntime): HttpClient {
-  return runtime.client ?? new JinshujuHttpClient(loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret } }));
+  return runtime.client ?? new JinshujuHttpClient(loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host } }));
+}
+
+async function authLogin(options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
+  const result = await loginWithOAuth({
+    configPath: options.configPath,
+    env: runtime.env,
+    host: options.host,
+    authHost: options.authHost,
+    clientId: options.clientId,
+    scopes: options.scopes,
+    openBrowser: !options.noOpen
+  });
+  const payload = { authenticated: true, mode: 'oauth', auth_host: result.token.auth_host, client_id: result.token.client_id, scope: result.token.scope, expires_at: result.token.expires_at };
+  if (options.output === 'json') return ok(json(payload));
+  return ok(`Authenticated with OAuth.\nConfig: ${options.configPath}`);
 }
 
 async function authStatus(options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
-  const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret } });
-  const authenticated = Boolean(config.apiKey && config.apiSecret);
+  const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host, authHost: options.authHost, clientId: options.clientId } });
+  const authenticated = Boolean((config.apiKey && config.apiSecret) || config.auth?.access_token);
+  const mode = config.apiKey && config.apiSecret ? 'api_key_secret' : config.auth?.access_token ? 'oauth' : 'none';
   const payload = {
     authenticated,
-    mode: 'api_key_secret',
+    mode,
+    host: config.host,
+    auth_host: config.authHost,
     sources: config.sources,
-    notes: 'API Key / Secret mode has no session; login/logout are reserved for OAuth.'
+    oauth: config.auth ? { client_id: config.auth.client_id, scope: config.auth.scope, expires_at: config.auth.expires_at, has_refresh_token: Boolean(config.auth.refresh_token) } : undefined
   };
   if (options.verify && authenticated) {
     await createClient(options, runtime).request({ method: 'GET', path: '/api/v1/forms' });
   }
   if (options.output === 'json') return ok(json(payload));
-  return ok(authenticated ? 'Authenticated with API Key / Secret (no session).' : 'Missing API Key / Secret.');
+  if (mode === 'oauth') return ok('Authenticated with OAuth.');
+  if (mode === 'api_key_secret') return ok('Authenticated with API Key / Secret.');
+  return ok('Missing authentication. Run `jinshuju auth login` or configure API Key / Secret.');
+}
+
+async function authRefresh(options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
+  const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { host: options.host, authHost: options.authHost, clientId: options.clientId } });
+  const auth = await refreshOAuthToken(config);
+  if (options.output === 'json') return ok(json({ authenticated: true, mode: 'oauth', expires_at: auth.expires_at, scope: auth.scope }));
+  return ok('OAuth token refreshed.');
+}
+
+async function authLogout(options: GlobalOptions, runtime: CliRuntime): Promise<CliResult> {
+  const config = loadConfig({ configPath: options.configPath, env: runtime.env });
+  await revokeOAuthToken(config);
+  return ok(options.output === 'json' ? json({ authenticated: false }) : 'Logged out.');
 }
 
 function configGet(positionals: string[], options: GlobalOptions): CliResult {

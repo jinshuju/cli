@@ -17,7 +17,7 @@ function createMockClient() {
   };
 }
 
-test('auth status reports configured credentials without login/logout session', async () => {
+test('auth status reports configured credentials and supports API key mode', async () => {
   const result = await runCli(['auth', 'status', '--output', 'json'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }
   });
@@ -26,7 +26,7 @@ test('auth status reports configured credentials without login/logout session', 
   const body = JSON.parse(result.stdout);
   assert.equal(body.authenticated, true);
   assert.equal(body.mode, 'api_key_secret');
-  assert.match(body.notes, /no session/i);
+  assert.equal(body.sources.apiKey, 'env');
 });
 
 test('form create posts API v1 payload without injecting api_code', async () => {
@@ -93,7 +93,7 @@ test('API command errors are returned as CLI errors instead of uncaught promise 
   const result = await runCli(['form', 'list'], { env: {} });
 
   assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /Missing JINSHUJU_API_KEY or JINSHUJU_API_SECRET/);
+  assert.match(result.stderr, /Missing authentication/);
 });
 
 test('form entry list forwards API v1 next cursor as pagination query param', async () => {

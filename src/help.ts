@@ -1,7 +1,10 @@
 export const rootHelp = `Usage: jinshuju <command> [options]
 
 Commands:
-  auth status                 Check API Key / Secret configuration
+  auth login                  Sign in with Web OAuth (PKCE)
+  auth status                 Check authentication status
+  auth refresh                Refresh OAuth token
+  auth logout                 Revoke and clear OAuth session
   config get [key]            Show local CLI configuration
   config set <key> <value>    Set local CLI configuration
   config unset <key>          Remove local CLI configuration
@@ -20,13 +23,36 @@ Options:
   -v, --version               Show version
 
 Notes:
-  First version uses API Key / Secret only. login/logout are reserved for OAuth.
+  Use jinshuju auth login for interactive Web OAuth, or API Key / Secret for scripts.
 `;
 
 export const helpByCommand = new Map<string, string>([
+  ['auth login', `Usage: jinshuju auth login [options]
+
+Sign in with Web OAuth using Authorization Code + PKCE and a loopback callback.
+
+Options:
+  --host <url>                 API host, default https://jinshuju.net
+  --auth-host <url>            OAuth host, default https://account.jinshuju.net
+  --client-id <id>             OAuth public client id
+  --scopes <scopes>            Space-separated OAuth scopes
+  --no-open                    Print login URL instead of opening browser
+  --config <path>              Config path
+  --output <format>            text, json; default text
+  -h, --help                   Show help
+
+Environment:
+  JINSHUJU_OAUTH_CLIENT_ID
+  JINSHUJU_AUTH_HOST
+  JINSHUJU_HOST
+
+Examples:
+  jinshuju auth login --client-id YOUR_PUBLIC_CLIENT_ID
+  jinshuju auth login --auth-host https://account.jinshuju.net --host https://jinshuju.net
+`],
   ['auth status', `Usage: jinshuju auth status [options]
 
-Check whether API Key / Secret are available.
+Check whether OAuth or API Key / Secret authentication is available.
 
 Options:
   --verify                    Verify credentials with a lightweight API call
@@ -36,6 +62,9 @@ Options:
 Environment:
   JINSHUJU_API_KEY
   JINSHUJU_API_SECRET
+  JINSHUJU_OAUTH_CLIENT_ID
+  JINSHUJU_HOST
+  JINSHUJU_AUTH_HOST
 
 Examples:
   jinshuju auth status
@@ -43,7 +72,25 @@ Examples:
   jinshuju auth status --output json
 
 Notes:
-  API Key / Secret mode has no session. First version does not provide login/logout.
+  API Key / Secret stays supported for scripts. OAuth sessions are stored locally.
+`],
+  ['auth refresh', `Usage: jinshuju auth refresh [options]
+
+Refresh the saved OAuth access token using the refresh token.
+
+Options:
+  --config <path>              Config path
+  --output <format>            text, json; default text
+  -h, --help                   Show help
+`],
+  ['auth logout', `Usage: jinshuju auth logout [options]
+
+Revoke the current OAuth access token and clear the local OAuth session.
+
+Options:
+  --config <path>              Config path
+  --output <format>            text, json; default text
+  -h, --help                   Show help
 `],
   ['config get', `Usage: jinshuju config get [key] [options]
 
