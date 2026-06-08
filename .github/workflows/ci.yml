@@ -3,10 +3,11 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - main
+      - master
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -41,5 +42,19 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Verify package contents
-        run: npm pack --dry-run
+      - name: Verify package contents and CLI bins
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          packed_tgz="$(npm pack --json | node -e "let s = ''; process.stdin.on('data', d => s += d).on('end', () => process.stdout.write(JSON.parse(s)[0].filename))")"
+          prefix="$(mktemp -d)"
+
+          npm install -g "./${packed_tgz}" --prefix "${prefix}"
+
+          test -x "${prefix}/bin/jinshuju"
+          test -x "${prefix}/bin/jsj"
+          test -f "${prefix}/lib/node_modules/@jinshuju/cli/dist/cli-bin.js"
+
+          "${prefix}/bin/jinshuju" --help
+          "${prefix}/bin/jsj" --help
