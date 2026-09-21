@@ -421,3 +421,50 @@ test('opensearch edit turns a query on or off, but not both', async () => {
   assert.equal(both.exitCode, 2);
   assert.match(both.stderr, /--enable and --disable are opposites/);
 });
+
+test('several --name keywords stay separate, so the API matches any of them', async () => {
+  const forms = createMockClient();
+  const tables = createMockClient();
+
+  await cli(['form', 'list', '--name', '报名', '--name', '问卷'], { env: WRITE_ENV, client: forms.client });
+  await cli(['table', 'list', '--name', '台账'], { env: WRITE_ENV, client: tables.client });
+
+  assert.equal(forms.requests[0].path, '/api/v1/forms?q%5B%5D=%E6%8A%A5%E5%90%8D&q%5B%5D=%E9%97%AE%E5%8D%B7');
+  assert.equal(tables.requests[0].path, '/api/v1/tables?q%5B%5D=%E5%8F%B0%E8%B4%A6');
+});
+
+test('--labels is asked for on the entry reads, and left off otherwise', async () => {
+  const listed = createMockClient();
+  const got = createMockClient();
+  const viewed = createMockClient();
+  const bare = createMockClient();
+
+  await cli(['entry', 'list', '--form', 'Kp7mQ2', '--labels'], { env: WRITE_ENV, client: listed.client });
+  await cli(['entry', 'get', '--form', 'Kp7mQ2', '12', '--labels'], { env: WRITE_ENV, client: got.client });
+  await cli(['entry', 'list', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--labels'], { env: WRITE_ENV, client: viewed.client });
+  await cli(['entry', 'list', '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: bare.client });
+
+  assert.equal(listed.requests[0].path, '/api/v1/forms/Kp7mQ2/entries?include_labels=true');
+  assert.equal(got.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12?include_labels=true');
+  assert.equal(viewed.requests[0].path, '/api/v1/forms/Kp7mQ2/views/aB3dE9/entries?include_labels=true');
+  assert.equal(bare.requests[0].path, '/api/v1/forms/Kp7mQ2/entries');
+});
+
+test('table move and --with-default-entries reach their own endpoints', async () => {
+  const moved = createMockClient();
+  const rooted = createMockClient();
+  const seeded = createMockClient();
+
+  await cli(['table', 'move', 'Vn4xR8', '--folder', 'Nf7mDC'], { env: WRITE_ENV, client: moved.client });
+  await cli(['table', 'move', 'Vn4xR8'], { env: WRITE_ENV, client: rooted.client });
+  await cli(['table', 'create', '--json', '{"name":"台账","fields":[]}', '--with-default-entries'],
+    { env: WRITE_ENV, client: seeded.client });
+
+  assert.equal(moved.requests[0].method, 'PATCH');
+  assert.equal(moved.requests[0].path, '/api/v1/tables/Vn4xR8/folder');
+  assert.deepEqual(moved.requests[0].body, { folder_token: 'Nf7mDC' });
+  assert.deepEqual(rooted.requests[0].body, { folder_token: '' });
+  // folder_token stays undefined and is dropped on the wire by JSON.stringify.
+  assert.deepEqual(seeded.requests[0].body,
+    { name: '台账', fields: [], folder_token: undefined, with_default_entries: true });
+});

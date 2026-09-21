@@ -21,10 +21,13 @@ export interface ArgSpec {
   readonly description: string;
 }
 
+/** A repeated parameter arrives as a list; everything else is one value. */
+export type QueryValues = Record<string, string | readonly string[] | undefined>;
+
 export interface HttpRequest {
   readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly path: string;
-  readonly query?: Record<string, string | undefined>;
+  readonly query?: QueryValues;
   readonly body?: unknown;
 }
 
@@ -152,6 +155,25 @@ function list(value: unknown): string | undefined {
   return values && values.length > 0 ? values.join(',') : undefined;
 }
 
+/**
+ * Keywords stay separate: the API matches a name containing any of them, and
+ * joining them would ask for one keyword with a comma in it.
+ */
+function keywords(value: unknown): readonly string[] | undefined {
+  const values = value as string[] | undefined;
+  return values && values.length > 0 ? values : undefined;
+}
+
+function labels(input: CommandInput): string | undefined {
+  return input.options.labels ? 'true' : undefined;
+}
+
+const LABELS_OPTION: OptionSpec = {
+  name: '--labels',
+  type: 'boolean',
+  description: "Pair each value with its field's label, saving a second read of the form"
+};
+
 const LISTING: Pagination = { items: 'data', cursor: 'next' };
 
 /** What the batch count endpoint accepts, and what the design document states. */
@@ -227,7 +249,7 @@ const FORM: readonly Command[] = [
     request: (input) => ({
       method: 'GET',
       path: `${API}/forms`,
-      query: { q: list(input.options.name), filters: filters(input), sort: sort(input, 'field'), ...paging(input) }
+      query: { q: keywords(input.options.name), filters: filters(input), sort: sort(input, 'field'), ...paging(input) }
     }),
     paginate: LISTING,
     examples: ["jinshuju form list --name 报名", "jinshuju form list --sort entries_count:desc --limit 10"]
@@ -346,7 +368,7 @@ const TABLE: readonly Command[] = [
     request: (input) => ({
       method: 'GET',
       path: `${API}/tables`,
-      query: { q: list(input.options.name), filters: filters(input), sort: sort(input, 'field'), ...paging(input) }
+      query: { q: keywords(input.options.name), filters: filters(input), sort: sort(input, 'field'), ...paging(input) }
     }),
     paginate: LISTING,
     examples: ['jinshuju table list --name 台账', 'jinshuju entry list --table Vn4xR8']
@@ -362,13 +384,33 @@ const TABLE: readonly Command[] = [
     path: ['table', 'create'],
     summary: 'Create a table',
     description: 'Column types use the API v1 names. Do not pass api_code: the backend generates it.',
-    options: [JSON_OPTION, FOLDER_OPTION],
+    options: [
+      JSON_OPTION, FOLDER_OPTION,
+      { name: '--with-default-entries', type: 'boolean', description: 'Seed a few blank rows, as the UI does. Leave it off when rows follow' }
+    ],
     request: (input) => ({
       method: 'POST',
       path: `${API}/tables`,
-      body: { ...(payload(input) as Record<string, unknown>), folder_token: input.options.folder }
+      body: {
+        ...(payload(input) as Record<string, unknown>),
+        folder_token: input.options.folder,
+        with_default_entries: input.options.with_default_entries ? true : undefined
+      }
     }),
     examples: ['jinshuju table create --json @table.json']
+  },
+  {
+    path: ['table', 'move'],
+    summary: 'Move a table into a folder, or out of one',
+    description: 'The folder must be a table folder; a form folder cannot hold a table.',
+    args: [{ name: 'table', required: true, description: 'Table token' }],
+    options: [FOLDER_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: `${API}/tables/${input.args.table}/folder`,
+      body: { folder_token: (input.options.folder as string | undefined) ?? '' }
+    }),
+    examples: ['jinshuju table move Vn4xR8 --folder Nf7mDC', 'jinshuju table move Vn4xR8']
   },
   {
     path: ['table', 'edit'],
@@ -554,7 +596,7 @@ const ENTRY: readonly Command[] = [
       { name: '--view', type: 'string', placeholder: '<view>', description: 'Read the entries of this view' },
       { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
       { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' },
-      FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
+      LABELS_OPTION, FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
     ],
     request: (input) => {
       const view = input.options.view as string | undefined;
@@ -565,7 +607,11 @@ const ENTRY: readonly Command[] = [
             throw new UsageError(`--${flag} cannot be combined with --view: the view carries its own filter and sort`);
           }
         }
-        return { method: 'GET', path: `${containerPath(input)}/views/${view}/entries`, query: paging(input) };
+        return {
+          method: 'GET',
+          path: `${containerPath(input)}/views/${view}/entries`,
+          query: { include_labels: labels(input), ...paging(input) }
+        };
       }
       return {
         method: 'GET',
@@ -574,6 +620,7 @@ const ENTRY: readonly Command[] = [
           filters: filters(input),
           keyword: input.options.keyword as string | undefined,
           fields: list(input.options.fields),
+          include_labels: labels(input),
           sort: sort(input, 'api_code'),
           ...paging(input)
         }
@@ -736,12 +783,13 @@ const ENTRY: readonly Command[] = [
     args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
     options: [
       ...CONTAINER_OPTIONS,
-      { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' }
+      { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' },
+      LABELS_OPTION
     ],
     request: (input) => ({
       method: 'GET',
       path: `${containerPath(input)}/entries/${input.args.serial}`,
-      query: { fields: list(input.options.fields) }
+      query: { fields: list(input.options.fields), include_labels: labels(input) }
     })
   }
 ];

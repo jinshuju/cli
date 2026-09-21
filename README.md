@@ -162,6 +162,15 @@ jinshuju opensearch edit Qy7nR3 --disable
 删除一律要 `--yes`。这个 CLI 不交互——stdin 留给 `--json -`——所以确认是个 flag，
 不给就不删，而不是抛一个没人回答的问题。
 
+## 其他
+
+```bash
+jinshuju form list --name 报名 --name 问卷       # 多个关键词是「任意匹配」，不是拼成一个词
+jinshuju entry list --form Kp7mQ2 --labels       # 每个值带上字段名，省一次读表单
+jinshuju table move Vn4xR8 --folder Nf7mDC       # 表格只能进 kind=table 的文件夹
+jinshuju table create --json @t.json --with-default-entries   # 播几行空行，跟界面上建表一样
+```
+
 ## Token 格式
 
 表单、表格、视图的 token 都是**六位大小写字母加数字**，例如 `Kp7mQ2`、`Vn4xR8`、`aB3dE9`。

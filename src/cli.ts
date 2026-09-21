@@ -4,7 +4,7 @@ import {
   assertConfigKey, defaultConfigPath, getConfig, loadConfig, maskSecret, setConfigValue, unsetConfigValue, type ConfigKey
 } from './config.js';
 import { loginWithOAuth, refreshOAuthToken, revokeOAuthToken } from './auth.js';
-import { COMMANDS, findCommand, type Command } from './commands.js';
+import { COMMANDS, findCommand, type Command, type QueryValues } from './commands.js';
 import { commandHelp, helpFor, rootHelp, unknownCommandHelp } from './help.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
 import {
@@ -310,7 +310,7 @@ async function runRemote(
  */
 async function readAllPages(
   client: HttpClient,
-  request: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; query?: Record<string, string | undefined>; body?: unknown },
+  request: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; query?: QueryValues; body?: unknown },
   paginate: { items: string; cursor: string }
 ): Promise<unknown[]> {
   const rows: unknown[] = [];
@@ -326,10 +326,20 @@ async function readAllPages(
   return rows;
 }
 
-function withQuery(path: string, query?: Record<string, string | undefined>): string {
+/**
+ * A list value repeats its parameter as `name[]=a&name[]=b`, which is how Rails
+ * reads a list. Joining them with a comma would ask for one keyword containing
+ * a comma instead of two keywords.
+ */
+function withQuery(path: string, query?: QueryValues): string {
   const params = new URLSearchParams();
   for (const [name, value] of Object.entries(query ?? {})) {
-    if (value !== undefined) params.set(name, value);
+    if (value === undefined) continue;
+    if (typeof value === 'string') {
+      params.set(name, value);
+    } else {
+      for (const item of value) params.append(`${name}[]`, item);
+    }
   }
   const search = params.toString();
   return search ? `${path}?${search}` : path;
