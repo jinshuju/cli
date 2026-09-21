@@ -1,5 +1,5 @@
 import {
-  CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, PAGINATION_OPTIONS, SORT_OPTION,
+  CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION, PAGINATION_OPTIONS, SORT_OPTION,
   UsageError, parseFilter, parseSort, resolveContainer, type FilterCondition, type OptionSpec, type SortRule
 } from './options.js';
 import { validateCreateFormPayload } from './payload.js';
@@ -107,7 +107,10 @@ function sort(input: CommandInput, key: 'api_code' | 'field'): string | undefine
 }
 
 function paging(input: CommandInput): Record<string, string | undefined> {
-  return { next: input.options.next as string | undefined };
+  return {
+    limit: input.options.limit === undefined ? undefined : String(input.options.limit),
+    next: input.options.next as string | undefined
+  };
 }
 
 function list(value: unknown): string | undefined {
@@ -145,7 +148,8 @@ const ACCOUNT: readonly Command[] = [
   {
     path: ['account', 'member', 'list'],
     summary: 'List account members',
-    request: () => ({ method: 'GET', path: `${API}/billing_account/users` })
+    options: [LIMIT_OPTION],
+    request: (input) => ({ method: 'GET', path: `${API}/billing_account/users`, query: paging(input) })
   }
 ];
 
@@ -153,7 +157,8 @@ const FOLDER: readonly Command[] = [
   {
     path: ['folder', 'list'],
     summary: 'List folders',
-    request: () => ({ method: 'GET', path: `${API}/folders` })
+    options: [LIMIT_OPTION],
+    request: (input) => ({ method: 'GET', path: `${API}/folders`, query: paging(input) })
   }
 ];
 

@@ -142,6 +142,21 @@ test('form list and a view listing also forward the cursor', async () => {
   assert.equal(viewEntries.requests[0].path, '/api/v1/forms/BaLZpn/views/Mixqc1/entries?next=51');
 });
 
+test('--limit rides along on listings, including the two without a cursor', async () => {
+  const entries = createMockClient();
+  const folders = createMockClient();
+  const members = createMockClient();
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  await cli(['entry', 'list', '--form', 'BaLZpn', '--limit', '5'], { env, client: entries.client });
+  await cli(['folder', 'list', '--limit', '5'], { env, client: folders.client });
+  await cli(['account', 'member', 'list', '--limit', '5'], { env, client: members.client });
+
+  assert.equal(entries.requests[0].path, '/api/v1/forms/BaLZpn/entries?limit=5');
+  assert.equal(folders.requests[0].path, '/api/v1/folders?limit=5');
+  assert.equal(members.requests[0].path, '/api/v1/billing_account/users?limit=5');
+});
+
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },

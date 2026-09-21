@@ -64,12 +64,13 @@ export const SORT_OPTION: OptionSpec = {
   description: 'Sort rule, repeatable'
 };
 
-/**
- * `--limit` is in the design but not here yet: v1 fixes its page size at 50 and
- * ignores the parameter, so offering the flag would look like it worked. It
- * arrives with the endpoint change.
- */
+/** Asks for a smaller page; a listing's default is also its cap. */
+export const LIMIT_OPTION: OptionSpec = {
+  name: '--limit', type: 'integer', placeholder: '<n>', description: 'Rows per page, up to the listing default'
+};
+
 export const PAGINATION_OPTIONS: readonly OptionSpec[] = [
+  LIMIT_OPTION,
   { name: '--next', type: 'string', placeholder: '<cursor>', description: 'Cursor from the previous response, passed back verbatim' },
   { name: '--all', type: 'boolean', description: 'Follow the cursor and return every page' }
 ];
