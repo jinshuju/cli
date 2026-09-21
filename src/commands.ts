@@ -3,7 +3,11 @@ import {
   MINE_OPTION, PAGINATION_OPTIONS, SORT_OPTION, TIME_BUCKETS, UsageError, parseDimension, parseFilter, parseMetric, parseSort,
   resolveContainer, resolveContainers, type FilterCondition, type OptionSpec, type SortRule
 } from './options.js';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+
 import { validateCreateFormPayload } from './payload.js';
+import type { HttpClient } from './http.js';
 
 /**
  * Every command the CLI has, as data.
@@ -31,6 +35,8 @@ export interface HttpRequest {
   readonly path: string;
   readonly query?: QueryValues;
   readonly body?: unknown;
+  /** A multipart body, for the endpoints that take a file. */
+  readonly form?: FormData;
 }
 
 /** How a listing returns its next page, which is what `--all` follows. */
@@ -56,6 +62,11 @@ export interface Command {
   readonly options?: readonly OptionSpec[];
   readonly examples?: readonly string[];
   readonly request?: (input: CommandInput) => HttpRequest;
+  /**
+   * For the commands a single request cannot express: uploading a file and then
+   * acting on it. It gets the client and returns whatever should be printed.
+   */
+  readonly run?: (input: CommandInput, client: HttpClient) => Promise<unknown>;
   readonly paginate?: Pagination;
   /**
    * Narrows the response to what the command is about. `field list` asks for a
@@ -290,6 +301,22 @@ function includes(input: CommandInput): Record<string, string | undefined> {
   return query;
 }
 
+function themeBody(input: CommandInput): Record<string, unknown> {
+  const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
+  return {
+    ...rest,
+    primary_color: input.options.primary_color,
+    secondary_color: input.options.secondary_color
+  };
+}
+
+async function uploadImage(client: HttpClient, file: string, imageType: string): Promise<string> {
+  const uploaded = await client.request<{ attachment_id: string }>(
+    upload(`${API}/form_image_attachments`, file, { image_type: imageType })
+  );
+  return uploaded.attachment_id;
+}
+
 const FORM: readonly Command[] = [
   {
     path: ['form', 'list'],
@@ -399,18 +426,31 @@ const FORM: readonly Command[] = [
     options: [
       { name: '--primary-color', type: 'string', placeholder: '<hex>', description: 'Primary colour, e.g. #1F6FEB' },
       { name: '--secondary-color', type: 'string', placeholder: '<hex>', description: 'Secondary colour' },
+      { name: '--wallpaper', type: 'string', placeholder: '<file>', description: 'Image file to use as the background' },
+      { name: '--header', type: 'string', placeholder: '<file>', description: 'Image file to use as the header' },
       JSON_OPTION
     ],
-    request: (input) => {
-      const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
-      const body = {
-        ...rest,
-        primary_color: input.options.primary_color,
-        secondary_color: input.options.secondary_color
-      };
-      return { method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body };
+    request: (input) => ({ method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body: themeBody(input) }),
+    run: async (input, client) => {
+      const wallpaper = input.options.wallpaper as string | undefined;
+      const header = input.options.header as string | undefined;
+      if (!wallpaper && !header) return undefined;
+
+      const body = themeBody(input) as Record<string, Record<string, unknown>>;
+      if (wallpaper) {
+        const image = await uploadImage(client, wallpaper, 'wallpaper');
+        body.wallpaper = { ...(body.wallpaper ?? {}), background_image_attachment_id: image };
+      }
+      if (header) {
+        const image = await uploadImage(client, header, 'header');
+        body.header = { ...(body.header ?? {}), header_image_attachment_id: image };
+      }
+      return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body });
     },
-    examples: ['jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"']
+    examples: [
+      'jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"',
+      'jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png'
+    ]
   },
   {
     path: ['form', 'rule', 'get'],
@@ -719,9 +759,55 @@ const VIEW: readonly Command[] = [
   }
 ];
 
+// --- uploads ----------------------------------------------------------------
+
+/**
+ * A file on disk, as multipart. The three endpoints that take one authenticate
+ * like every other request, so there is no ticket to fetch first: the file goes
+ * up in one call and comes back with an id to refer to it by.
+ */
+function upload(path: string, file: string, extra: Record<string, string> = {}): HttpRequest {
+  const form = new FormData();
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(file);
+  } catch (error) {
+    throw new UsageError(`could not read ${file}: ${(error as Error).message}`);
+  }
+  form.append('file', new Blob([new Uint8Array(bytes)]), basename(file));
+  for (const [name, value] of Object.entries(extra)) form.append(name, value);
+  return { method: 'POST', path, form };
+}
+
+/** `field_3=名称` or `field_3=2`: a label if it is not a column number. */
+function parseColumnMapping(input: string): Record<string, string | number> {
+  const at = input.indexOf('=');
+  if (at <= 0) throw new UsageError(`--map must be '<api-code>=<column>', got ${JSON.stringify(input)}`);
+  const field_api_code = input.slice(0, at);
+  const column = input.slice(at + 1);
+  if (!column) throw new UsageError(`--map needs a column after '=', got ${JSON.stringify(input)}`);
+  return /^\d+$/.test(column)
+    ? { field_api_code, sheet_column_index: Number.parseInt(column, 10) }
+    : { field_api_code, column_label: column };
+}
+
+/** `field_5=/path/a.png`, or `field_5.sub_1=/path/a.png` for a table column. */
+function parseAttachment(input: string): { field: string; dimension?: string; file: string } {
+  const at = input.indexOf('=');
+  if (at <= 0) throw new UsageError(`--attach must be '<api-code>[.<sub>]=<file>', got ${JSON.stringify(input)}`);
+  const [field, dimension] = input.slice(0, at).split('.');
+  const file = input.slice(at + 1);
+  if (!field || !file) throw new UsageError(`--attach must be '<api-code>[.<sub>]=<file>', got ${JSON.stringify(input)}`);
+  return dimension === undefined ? { field, file } : { field, dimension, file };
+}
+
 const BATCH_OPTION: OptionSpec = {
   name: '--batch', type: 'json', placeholder: '<json|@file|->', description: 'Several rows in one request'
 };
+
+function attachments(input: CommandInput): { field: string; dimension?: string; file: string }[] {
+  return ((input.options.attach as string[] | undefined) ?? []).map(parseAttachment);
+}
 
 function batchRows(input: CommandInput): unknown[] | undefined {
   const rows = input.options.batch;
@@ -984,11 +1070,35 @@ const ENTRY: readonly Command[] = [
     description:
       'The payload is keyed by field api_code, not by field label. --batch takes a list of them and ' +
       'writes them in one request.',
-    options: [...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION],
+    options: [
+      ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
+      { name: '--attach', type: 'string', repeatable: true, placeholder: '<api-code>[.<sub>]=<file>', description: 'Upload a file and fill this attachment field with it, repeatable' }
+    ],
     request: (input) => {
       const batch = batchRows(input);
       if (batch) return { method: 'POST', path: batchPath(input), body: { entries: batch } };
       return { method: 'POST', path: `${containerPath(input)}/entries`, body: payload(input) };
+    },
+    run: async (input, client) => {
+      const attached = attachments(input);
+      if (attached.length === 0) return undefined;
+      if (input.options.batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
+
+      const container = containerPath(input);
+      const { token } = resolveContainer(input.options);
+      const body = { ...((input.options.json as Record<string, unknown> | undefined) ?? {}) };
+      for (const { field, dimension, file } of attached) {
+        const uploaded = await client.request<{ id: string }>(
+          upload(`${API}/forms/${token}/entry_attachments`, file,
+            dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension })
+        );
+        // A field holds a list of attachments, so each upload appends rather
+        // than replacing what an earlier --attach for the same field put there.
+        const key = dimension === undefined ? field : `${field}.${dimension}`;
+        const existing = body[key];
+        body[key] = Array.isArray(existing) ? [...existing, uploaded.id] : [uploaded.id];
+      }
+      return client.request({ method: 'POST', path: `${container}/entries`, body });
     },
     examples: [
       'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
@@ -1024,6 +1134,46 @@ const ENTRY: readonly Command[] = [
     examples: [
       'jinshuju entry update --form Kp7mQ2 12 --json \'{"field_1":"李四"}\'',
       'jinshuju entry update --form Kp7mQ2 --batch @rows.json'
+    ]
+  },
+  {
+    path: ['entry', 'import'],
+    summary: 'Import a spreadsheet into a form or table',
+    description:
+      'Two requests underneath: the file goes up, then the mapping says which column feeds which ' +
+      'field. Everything knowable up front — the file, the size your plan allows, the header row, ' +
+      'the mapping — is checked before any row is written, so a refused import has changed nothing ' +
+      'and the message names the sheet\'s real layout. Once accepted the rows are written in the ' +
+      'background: the answer means started, not finished.',
+    args: [{ name: 'file', required: true, description: 'Path to an .xlsx, .xls or .csv file' }],
+    options: [
+      ...CONTAINER_OPTIONS,
+      { name: '--map', type: 'string', repeatable: true, placeholder: '<api-code>=<column>', description: 'Which column feeds which field. A number is a column index, anything else a header label' },
+      { name: '--header-row', type: 'integer', placeholder: '<n>', description: 'Which row holds the headers, when it is not the first' },
+      { name: '--unique', type: 'string', placeholder: '<api-code>', description: 'Treat this field as the key: a row matching an existing one updates it' }
+    ],
+    run: async (input, client) => {
+      const { token } = resolveContainer(input.options);
+      const mappings = (input.options.map as string[] | undefined) ?? [];
+      if (mappings.length === 0) throw new UsageError('--map <api-code>=<column> is required, at least once');
+
+      const uploaded = await client.request<{ id: string }>(
+        upload(`${API}/forms/${token}/import_files`, input.args.file as string)
+      );
+      return client.request({
+        method: 'POST',
+        path: `${API}/forms/${token}/entry_imports`,
+        body: {
+          attachment_id: uploaded.id,
+          columns: mappings.map(parseColumnMapping),
+          header_row_index: input.options.header_row,
+          unique_field_code: input.options.unique
+        }
+      });
+    },
+    examples: [
+      'jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --map field_2=手机号',
+      'jinshuju entry import --table Vn4xR8 ./rows.csv --map field_1=1 --map field_2=2 --header-row 2'
     ]
   },
   {
