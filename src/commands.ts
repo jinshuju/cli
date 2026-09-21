@@ -165,6 +165,18 @@ function given<T extends Record<string, unknown>>(body: T): Partial<T> {
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
 
+/**
+ * A payload with the flags that were actually given laid over it.
+ *
+ * The obvious spelling — spread the payload, then assign each flag — writes
+ * `undefined` for every flag the caller left out, and that erases whatever the
+ * payload said. Someone asking for an exam form through --json got a plain one
+ * and no error. Only the flags that were given may override.
+ */
+function overriding(payload: Record<string, unknown>, flags: Record<string, unknown>): Record<string, unknown> {
+  return { ...payload, ...given(flags) };
+}
+
 /** A write that names one thing still sends the API a list of one. */
 function one(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
@@ -316,8 +328,7 @@ function includes(input: CommandInput): Record<string, string | undefined> {
 
 function themeBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
-  return given({
-    ...rest,
+  return overriding(rest, {
     primary_color: input.options.primary_color,
     secondary_color: input.options.secondary_color
   });
@@ -380,8 +391,7 @@ function createFormBody(input: CommandInput): { body: Record<string, unknown>; s
   if (settings) delete payloadBody[settings.key];
 
   return {
-    body: given({
-      ...payloadBody,
+    body: overriding(payloadBody, {
       scene: sceneFor(input),
       layout: input.options.layout,
       folder_token: input.options.folder
@@ -633,8 +643,7 @@ const TABLE: readonly Command[] = [
     request: (input) => ({
       method: 'POST',
       path: `${API}/tables`,
-      body: given({
-        ...(payload(input) as Record<string, unknown>),
+      body: overriding(payload(input) as Record<string, unknown>, {
         folder_token: input.options.folder,
         with_default_entries: input.options.with_default_entries ? true : undefined
       })
@@ -814,8 +823,7 @@ const VIEW_OPTIONS: readonly OptionSpec[] = [
 
 function viewBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
-  return given({
-    ...rest,
+  return overriding(rest, {
     view_type: input.options.type,
     prefer_columns: input.options.columns,
     sort: sortRules(input),
@@ -865,7 +873,7 @@ const VIEW: readonly Command[] = [
     request: (input) => ({
       method: 'PATCH',
       path: `${containerPath(input)}/views/${input.args.view}`,
-      body: { ...viewBody(input), name: input.options.name }
+      body: overriding(viewBody(input), { name: input.options.name })
     })
   },
   {
@@ -1500,7 +1508,7 @@ const OPENSEARCH: readonly Command[] = [
       return {
         method: 'POST',
         path: `${API}/opensearch/queries`,
-        body: given({ ...(payload(input) as Record<string, unknown>), form_token: form })
+        body: overriding(payload(input) as Record<string, unknown>, { form_token: form })
       };
     }
   },
@@ -1522,7 +1530,7 @@ const OPENSEARCH: readonly Command[] = [
       return {
         method: 'PATCH',
         path: `${API}/opensearch/queries/${input.args.query}`,
-        body: given({ ...rest, enabled })
+        body: overriding(rest, { enabled })
       };
     },
     examples: ['jinshuju opensearch edit Qy7nR3 --disable']

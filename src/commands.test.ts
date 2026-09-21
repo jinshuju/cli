@@ -811,3 +811,45 @@ test('-V prints the version and -v no longer does', async () => {
   assert.match(version.stdout, /^\d+\.\d+\.\d+/);
   assert.notEqual(old.stdout.trim(), version.stdout.trim());
 });
+
+test('a lone - is a value, not the next flag, so stdin input reaches the command', async () => {
+  const mock = createMockClient();
+
+  const result = await cli(['entry', 'create', '--form', 'Kp7mQ2', '--json', '-'],
+    { env: WRITE_ENV, client: mock.client, stdin: () => '{"field_1":"张三"}' });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(mock.requests[0].body, { field_1: '张三' });
+});
+
+test('a boolean flag does not swallow the argument behind it', async () => {
+  const before = createMockClient();
+  const after = createMockClient();
+
+  // Both orders mean the same thing and both have to work.
+  await cli(['entry', 'delete', '--form', 'Kp7mQ2', '--yes', '12'], { env: WRITE_ENV, client: before.client });
+  await cli(['entry', 'delete', '--form', 'Kp7mQ2', '12', '--yes'], { env: WRITE_ENV, client: after.client });
+
+  assert.equal(before.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12');
+  assert.equal(after.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12');
+});
+
+test('a flag left out never erases what the payload said', async () => {
+  const fromJson = createMockClient();
+  const overridden = createMockClient();
+  const themed = createMockClient();
+
+  await cli(['form', 'create', '--json', '{"name":"考试","fields":[{"type":"TextField","label":"姓名"}],"scene":"exam","folder_token":"Fd2xK8"}'],
+    { env: WRITE_ENV, client: fromJson.client });
+  await cli(['form', 'create', '--scene', 'survey', '--json', '{"name":"x","fields":[{"type":"TextField","label":"姓名"}],"scene":"exam"}'],
+    { env: WRITE_ENV, client: overridden.client });
+  await cli(['form', 'theme', 'set', 'Kp7mQ2', '--json', '{"primary_color":"#112233"}'],
+    { env: WRITE_ENV, client: themed.client });
+
+  // The payload asked for an exam form in a folder; no flag said otherwise.
+  assert.equal((fromJson.requests[0].body as Record<string, unknown>).scene, 'exam');
+  assert.equal((fromJson.requests[0].body as Record<string, unknown>).folder_token, 'Fd2xK8');
+  // A flag that was given still wins.
+  assert.equal((overridden.requests[0].body as Record<string, unknown>).scene, 'survey');
+  assert.equal((themed.requests[0].body as Record<string, unknown>).primary_color, '#112233');
+});
