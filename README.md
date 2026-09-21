@@ -52,6 +52,10 @@ Authenticated with an access token (from env).
 字段 `type` 使用 API v1 类型名，创建字段时不要传 `api_code`，后端会生成。
 
 ```bash
+jinshuju form create --json @form.json --scene registry --layout card --folder Fd2xK8
+jinshuju form create --json @exam.json --type exam        # 载荷里可带 exam_setting
+jinshuju form edit Kp7mQ2 --json '{"exam_setting":{"limited_time":45}}'
+
 jinshuju form create --json '{
   "name": "活动报名表",
   "fields": [
@@ -60,6 +64,12 @@ jinshuju form create --json '{
   ]
 }'
 ```
+
+`--type exam` / `--type evaluation` 同时决定场景和它专属的设置块。那个设置块有自己的端点，
+所以带它的载荷是两次请求——而且**通用的表单更新根本不认这个键**（它只读 name、description、
+setting、fields、field_rules），不分派的话 `exam_setting` 会被静默丢掉。
+
+设置块总是先发：它是可能因「这不是考试表单」被拒的那一半，先发才能保证被拒时其余改动一律没发生。
 
 ## 读数据
 

@@ -154,6 +154,16 @@ function confirmed(input: CommandInput, what: string): void {
   if (!input.options.yes) throw new UsageError(`${what} is permanent; pass --yes to go ahead`);
 }
 
+/**
+ * Drops the keys an optional flag left undefined. JSON.stringify would drop
+ * them on the wire anyway, but a body that carries them reads as though the
+ * caller asked for the field to be unset, and shows up that way in --output
+ * json and in anything asserting on the request.
+ */
+function given<T extends Record<string, unknown>>(body: T): Partial<T> {
+  return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== undefined)) as Partial<T>;
+}
+
 /** A write that names one thing still sends the API a list of one. */
 function one(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
@@ -271,6 +281,10 @@ const FOLDER: readonly Command[] = [
  * that fetches it.
  */
 const FORM_INCLUDES: Record<string, string> = {
+  // `setting` is in the design and already part of the payload, so asking for
+  // it is honoured by there being nothing to fetch. It is listed so the help
+  // matches what the flag accepts.
+  setting: '',
   theme: 'include_theme',
   rules: 'include_field_rules',
   extended: 'include_extended_attributes',
@@ -289,10 +303,8 @@ function includes(input: CommandInput): Record<string, string | undefined> {
   const asked = (input.options.include as string[] | undefined) ?? [];
   const query: Record<string, string | undefined> = {};
   for (const name of asked) {
-    // `setting` is named in the design and is already part of the payload, so
-    // asking for it is honoured by there being nothing to do.
-    if (name === 'setting') continue;
     const parameter = FORM_INCLUDES[name];
+    if (parameter === '') continue;
     if (!parameter) {
       throw new UsageError(`--include takes ${Object.keys(FORM_INCLUDES).join(', ')}, got ${JSON.stringify(name)}`);
     }
@@ -303,11 +315,11 @@ function includes(input: CommandInput): Record<string, string | undefined> {
 
 function themeBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
-  return {
+  return given({
     ...rest,
     primary_color: input.options.primary_color,
     secondary_color: input.options.secondary_color
-  };
+  });
 }
 
 async function uploadImage(client: HttpClient, file: string, imageType: string): Promise<string> {
@@ -315,6 +327,60 @@ async function uploadImage(client: HttpClient, file: string, imageType: string):
     upload(`${API}/form_image_attachments`, file, { image_type: imageType })
   );
   return uploaded.attachment_id;
+}
+
+/** The scenes a form can be created for, as the API names them. */
+const FORM_SCENES = ['survey', 'registry', 'vote', 'exam', 'reservation',
+  'customer_acquisition', 'evaluation', 'online_payment'] as const;
+
+/**
+ * A form's type picks both the scene it is created in and the settings block
+ * that belongs to it. Those settings live behind their own endpoint, so a
+ * payload carrying one is two requests, not one — and a generic edit would
+ * drop the block on the floor, since the form update only reads name,
+ * description, setting, fields and field_rules.
+ */
+const FORM_TYPES: Record<string, { scene?: string; settingKey?: string; path?: string }> = {
+  normal: {},
+  exam: { scene: 'exam', settingKey: 'exam_setting', path: 'exam_setting' },
+  evaluation: { scene: 'evaluation', settingKey: 'evaluation_setting', path: 'evaluation_setting' }
+};
+
+/** Which settings block a payload carries, and where it has to be sent. */
+function settingsBlock(body: Record<string, unknown>): { key: string; path: string; value: unknown } | undefined {
+  for (const { settingKey, path } of Object.values(FORM_TYPES)) {
+    if (settingKey && path && body[settingKey] !== undefined) {
+      return { key: settingKey, path, value: body[settingKey] };
+    }
+  }
+  return undefined;
+}
+
+/** The scene a --type implies, refusing a --scene that contradicts it. */
+function sceneFor(input: CommandInput): string | undefined {
+  const type = (input.options.type as string | undefined) ?? 'normal';
+  const scene = input.options.scene as string | undefined;
+  const implied = FORM_TYPES[type]?.scene;
+  if (implied && scene && scene !== implied) {
+    throw new UsageError(`--type ${type} is the ${implied} scene, so --scene ${scene} contradicts it`);
+  }
+  return implied ?? scene;
+}
+
+function createFormBody(input: CommandInput): { body: Record<string, unknown>; settings?: { key: string; path: string; value: unknown } } {
+  const payloadBody = { ...(validateCreateFormPayload(payload(input)) as Record<string, unknown>) };
+  const settings = settingsBlock(payloadBody);
+  if (settings) delete payloadBody[settings.key];
+
+  return {
+    body: given({
+      ...payloadBody,
+      scene: sceneFor(input),
+      layout: input.options.layout,
+      folder_token: input.options.folder
+    }),
+    settings
+  };
 }
 
 const FORM: readonly Command[] = [
@@ -373,10 +439,41 @@ const FORM: readonly Command[] = [
     path: ['form', 'create'],
     summary: 'Create a form',
     description:
-      'Field types use the API v1 names (TextField, MobileField, RadioButton). Do not pass api_code: the backend generates it.',
-    options: [JSON_OPTION],
-    request: (input) => ({ method: 'POST', path: `${API}/forms`, body: validateCreateFormPayload(payload(input)) }),
-    examples: ['jinshuju form create --json @form.json', 'cat form.json | jinshuju form create --json -']
+      'Field types use the API v1 names (TextField, MobileField, RadioButton). Do not pass api_code: ' +
+      'the backend generates it. The scene decides what kind of form it is — an exam scores its ' +
+      'answers, a reservation holds slots — and the card layout refuses the field types it cannot show.',
+    options: [
+      JSON_OPTION,
+      { name: '--type', type: 'string', choices: Object.keys(FORM_TYPES), placeholder: '<type>', description: 'normal, exam or evaluation. An exam or evaluation also takes its own settings block in the payload' },
+      { name: '--scene', type: 'string', choices: FORM_SCENES, placeholder: '<scene>', description: `What the form is for: ${FORM_SCENES.join(', ')}` },
+      { name: '--layout', type: 'string', choices: ['classic', 'card'], placeholder: '<layout>', description: 'classic shows every field at once, card one page at a time' },
+      FOLDER_OPTION
+    ],
+    request: (input) => ({
+      method: 'POST',
+      path: `${API}/forms`,
+      body: createFormBody(input).body
+    }),
+    run: async (input, client) => {
+      const { body, settings } = createFormBody(input);
+      if (!settings) return undefined;
+
+      const form = await client.request<{ token: string }>({ method: 'POST', path: `${API}/forms`, body });
+      try {
+        await client.request({ method: 'PATCH', path: `${API}/forms/${form.token}/${settings.path}`, body: settings.value });
+      } catch (error) {
+        // The form exists; saying so beats an error that reads as though
+        // nothing happened and inviting a second one to be created.
+        throw new Error(`form ${form.token} was created, but its ${settings.key} was refused: ` +
+          `${(error as Error).message}. Fix it and apply with \`form edit\`.`);
+      }
+      return client.request({ method: 'GET', path: `${API}/forms/${form.token}` });
+    },
+    examples: [
+      'jinshuju form create --json @form.json',
+      'jinshuju form create --json @exam.json --type exam',
+      'cat form.json | jinshuju form create --json -'
+    ]
   },
   {
     path: ['form', 'edit'],
@@ -387,7 +484,24 @@ const FORM: readonly Command[] = [
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
     request: (input) => ({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body: payload(input) }),
-    examples: ['jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'']
+    run: async (input, client) => {
+      const body = { ...(payload(input) as Record<string, unknown>) };
+      const settings = settingsBlock(body);
+      if (!settings) return undefined;
+
+      delete body[settings.key];
+      // The settings go first: they are the half that can be refused for what
+      // the form is, and a refusal that has already renamed the form would
+      // leave the edit half applied.
+      await client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}/${settings.path}`, body: settings.value });
+      if (Object.keys(body).length === 0) return client.request({ method: 'GET', path: `${API}/forms/${input.args.form}` });
+
+      return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
+    },
+    examples: [
+      'jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'',
+      'jinshuju form edit Kp7mQ2 --json \'{"exam_setting":{"total_score":100}}\''
+    ]
   },
   {
     path: ['form', 'copy'],
@@ -400,7 +514,7 @@ const FORM: readonly Command[] = [
     request: (input) => ({
       method: 'POST',
       path: `${API}/forms/${input.args.form}/copy`,
-      body: { name: input.options.name, folder_token: input.options.folder }
+      body: given({ name: input.options.name, folder_token: input.options.folder })
     })
   },
   {
@@ -512,11 +626,11 @@ const TABLE: readonly Command[] = [
     request: (input) => ({
       method: 'POST',
       path: `${API}/tables`,
-      body: {
+      body: given({
         ...(payload(input) as Record<string, unknown>),
         folder_token: input.options.folder,
         with_default_entries: input.options.with_default_entries ? true : undefined
-      }
+      })
     }),
     examples: ['jinshuju table create --json @table.json']
   },
@@ -693,13 +807,13 @@ const VIEW_OPTIONS: readonly OptionSpec[] = [
 
 function viewBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
-  return {
+  return given({
     ...rest,
     view_type: input.options.type,
     prefer_columns: input.options.columns,
     sort: sortRules(input),
     filter: filterConditions(input)
-  };
+  });
 }
 
 const VIEW: readonly Command[] = [
@@ -1163,12 +1277,12 @@ const ENTRY: readonly Command[] = [
       return client.request({
         method: 'POST',
         path: `${API}/forms/${token}/entry_imports`,
-        body: {
+        body: given({
           attachment_id: uploaded.id,
           columns: mappings.map(parseColumnMapping),
           header_row_index: input.options.header_row,
           unique_field_code: input.options.unique
-        }
+        })
       });
     },
     examples: [
@@ -1240,7 +1354,7 @@ const COMMENT: readonly Command[] = [
     request: (input) => ({
       method: 'POST',
       path: `${commentsPath(input)}`,
-      body: { content: input.args.content, parent_id: input.options.reply_to }
+      body: given({ content: input.args.content, parent_id: input.options.reply_to })
     }),
     examples: ['jinshuju comment create --form Kp7mQ2 --entry 12 "已联系，等回复"']
   },
@@ -1311,7 +1425,7 @@ const OPENSEARCH: readonly Command[] = [
       return {
         method: 'POST',
         path: `${API}/opensearch/queries`,
-        body: { ...(payload(input) as Record<string, unknown>), form_token: form }
+        body: given({ ...(payload(input) as Record<string, unknown>), form_token: form })
       };
     }
   },
@@ -1333,7 +1447,7 @@ const OPENSEARCH: readonly Command[] = [
       return {
         method: 'PATCH',
         path: `${API}/opensearch/queries/${input.args.query}`,
-        body: { ...rest, enabled }
+        body: given({ ...rest, enabled })
       };
     },
     examples: ['jinshuju opensearch edit Qy7nR3 --disable']
