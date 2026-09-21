@@ -1,6 +1,6 @@
 import {
   CONTAINER_LIST_OPTIONS, CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION,
-  PAGINATION_OPTIONS, SORT_OPTION, TIME_BUCKETS, UsageError, parseDimension, parseFilter, parseMetric, parseSort,
+  MINE_OPTION, PAGINATION_OPTIONS, SORT_OPTION, TIME_BUCKETS, UsageError, parseDimension, parseFilter, parseMetric, parseSort,
   resolveContainer, resolveContainers, type FilterCondition, type OptionSpec, type SortRule
 } from './options.js';
 import { validateCreateFormPayload } from './payload.js';
@@ -18,6 +18,8 @@ import { validateCreateFormPayload } from './payload.js';
 export interface ArgSpec {
   readonly name: string;
   readonly required: boolean;
+  /** Takes the rest of the words; only the last argument may. */
+  readonly variadic?: boolean;
   readonly description: string;
 }
 
@@ -39,6 +41,8 @@ export interface Pagination {
 
 export interface CommandInput {
   readonly args: Record<string, string>;
+  /** The values of a variadic argument, in the order given. */
+  readonly rest: readonly string[];
   readonly options: Record<string, unknown>;
 }
 
@@ -150,6 +154,20 @@ const FOLDER_OPTION: OptionSpec = {
   name: '--folder', type: 'string', placeholder: '<token>', description: 'Folder token; empty moves it out of any folder'
 };
 
+/**
+ * `--mine` is a different range, not a narrower one: it reads what the caller
+ * submitted to forms they need not own. The flags that describe the owner-side
+ * question have no counterpart there, so naming one alongside --mine is
+ * refused rather than quietly dropped.
+ */
+function refuseWithMine(input: CommandInput, flags: readonly string[]): void {
+  for (const flag of flags) {
+    const value = input.options[flag];
+    const given = Array.isArray(value) ? value.length > 0 : value !== undefined;
+    if (given) throw new UsageError(`--${flag.replace(/_/g, '-')} cannot be combined with --mine`);
+  }
+}
+
 function list(value: unknown): string | undefined {
   const values = value as string[] | undefined;
   return values && values.length > 0 ? values.join(',') : undefined;
@@ -236,6 +254,42 @@ const FOLDER: readonly Command[] = [
   }
 ];
 
+/**
+ * What `form get --include` accepts, and the parameter each one asks for. The
+ * names are the CLI's — short, and about the thing rather than about the flag
+ * that fetches it.
+ */
+const FORM_INCLUDES: Record<string, string> = {
+  theme: 'include_theme',
+  rules: 'include_field_rules',
+  extended: 'include_extended_attributes',
+  transactions: 'include_transactions',
+  analytics: 'include_analytics'
+};
+
+const INCLUDE_OPTION: OptionSpec = {
+  name: '--include',
+  type: 'list',
+  placeholder: Object.keys(FORM_INCLUDES).join(','),
+  description: `Extra blocks to carry: ${Object.keys(FORM_INCLUDES).join(', ')}. The setting is always there`
+};
+
+function includes(input: CommandInput): Record<string, string | undefined> {
+  const asked = (input.options.include as string[] | undefined) ?? [];
+  const query: Record<string, string | undefined> = {};
+  for (const name of asked) {
+    // `setting` is named in the design and is already part of the payload, so
+    // asking for it is honoured by there being nothing to do.
+    if (name === 'setting') continue;
+    const parameter = FORM_INCLUDES[name];
+    if (!parameter) {
+      throw new UsageError(`--include takes ${Object.keys(FORM_INCLUDES).join(', ')}, got ${JSON.stringify(name)}`);
+    }
+    query[parameter] = 'true';
+  }
+  return query;
+}
+
 const FORM: readonly Command[] = [
   {
     path: ['form', 'list'],
@@ -243,23 +297,50 @@ const FORM: readonly Command[] = [
     description:
       'Filters act on the form itself: form_name, created_at, last_entry_created_at, entries_count.',
     options: [
-      { name: '--name', type: 'string', repeatable: true, placeholder: '<kw>', description: 'Match forms whose name contains the keyword' },
+      { name: '--name', type: 'string', repeatable: true, placeholder: '<kw>', description: 'Match forms whose name contains the keyword, repeatable' },
+      { name: '--with-transactions', type: 'boolean', description: "Carry each payment form's collected totals" },
+      MINE_OPTION,
       FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
     ],
-    request: (input) => ({
+    request: (input) => {
+      if (input.options.mine) {
+        refuseWithMine(input, ['name', 'with_transactions', 'filter', 'filters', 'sort']);
+        return { method: 'GET', path: `${API}/my/forms`, query: paging(input) };
+      }
+      return {
       method: 'GET',
       path: `${API}/forms`,
-      query: { q: keywords(input.options.name), filters: filters(input), sort: sort(input, 'field'), ...paging(input) }
-    }),
+      query: {
+        q: keywords(input.options.name),
+        include_transactions: input.options.with_transactions ? 'true' : undefined,
+        filters: filters(input),
+        sort: sort(input, 'field'),
+        ...paging(input)
+      }
+      };
+    },
     paginate: LISTING,
-    examples: ["jinshuju form list --name 报名", "jinshuju form list --sort entries_count:desc --limit 10"]
+    examples: [
+      "jinshuju form list --name 报名",
+      'jinshuju form list --sort entries_count:desc --limit 10',
+      'jinshuju form list --mine'
+    ]
   },
   {
     path: ['form', 'get'],
     summary: 'Show a form: fields, types, choices',
+    description:
+      'The form carries its setting already. --include adds the blocks that are separate reads ' +
+      'otherwise, so asking for a form and its rules is one round trip. analytics says which ' +
+      'statistics each field takes, which is what the analysis reads validate against.',
     args: [{ name: 'form', required: true, description: 'Form token, six letters and digits, e.g. Kp7mQ2' }],
-    request: (input) => ({ method: 'GET', path: `${API}/forms/${input.args.form}` }),
-    examples: ['jinshuju form get Kp7mQ2']
+    options: [INCLUDE_OPTION],
+    request: (input) => ({
+      method: 'GET',
+      path: `${API}/forms/${input.args.form}`,
+      query: includes(input)
+    }),
+    examples: ['jinshuju form get Kp7mQ2', 'jinshuju form get Kp7mQ2 --include theme,rules,analytics']
   },
   {
     path: ['form', 'create'],
@@ -424,6 +505,32 @@ const TABLE: readonly Command[] = [
   }
 ];
 
+/** `field_7:choice_1` into the target the check endpoint reads. */
+function parseCheckTarget(target: string): Record<string, unknown> {
+  const [field_api_code, choice_value] = target.split(':');
+  if (!field_api_code) throw new UsageError(`a check target must be '<api-code>[:<choice>]', got ${JSON.stringify(target)}`);
+  return choice_value === undefined ? { field_api_code } : { field_api_code, choice_value };
+}
+
+/**
+ * The targets a batch check asks about: the plain ones as arguments, and the
+ * shapes the argument grammar cannot reach through --json. Both at once is
+ * allowed — one edit's targets belong in one call, whatever shape each is.
+ */
+function checks(input: CommandInput, parse: (target: string) => Record<string, unknown>): unknown[] {
+  const fromArgs = input.rest.map(parse);
+  const fromJson = input.options.json === undefined ? [] : one(input.options.json);
+  const all = [...fromArgs, ...fromJson];
+  if (all.length === 0) throw new UsageError('name at least one target, as an argument or through --json');
+  return all;
+}
+
+function requiredOption(input: CommandInput, key: string): string {
+  const value = input.options[key] as string | undefined;
+  if (!value) throw new UsageError(`--${key.replace(/_/g, '-')} is required`);
+  return value;
+}
+
 const FIELD: readonly Command[] = [
   {
     path: ['field', 'list'],
@@ -473,6 +580,54 @@ const FIELD: readonly Command[] = [
         }
       }
     })
+  },
+  {
+    path: ['field', 'check'],
+    summary: 'Ask whether fields or choices already hold data',
+    description:
+      'The question to ask before removing one: removing a field or choice that still holds ' +
+      'entries deletes those entries with it. Name a choice with <api-code>:<choice>. A shape ' +
+      'this cannot express — a matrix statement, a cascade level — goes through --json.',
+    args: [{ name: 'target', required: false, variadic: true, description: 'field api_code, or api_code:choice' }],
+    options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    request: (input) => ({
+      method: 'GET',
+      path: `${containerPath(input)}/fields/check`,
+      query: { checks: JSON.stringify(checks(input, parseCheckTarget)) }
+    }),
+    examples: [
+      'jinshuju field check --form Kp7mQ2 field_3 field_9',
+      'jinshuju field check --form Kp7mQ2 field_7:choice_1'
+    ]
+  },
+  {
+    path: ['field', 'preview-convert'],
+    summary: 'Preview what changing a field\'s type would do to its data',
+    description:
+      'The conversion happens in place, so the only thing at stake is the data: this reports how ' +
+      'many values are kept and how many are cleared. supported=false means the edit would refuse it.',
+    args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
+    options: [
+      ...CONTAINER_OPTIONS,
+      { name: '--to', type: 'string', placeholder: '<type>', description: 'Target field type, e.g. RadioButton' },
+      { name: '--precision', type: 'string', placeholder: '<precision>', description: 'For a DateTimeField target, the precision the edit will use' },
+      JSON_OPTION
+    ],
+    request: (input) => {
+      const inline = input.options.json === undefined
+        ? [{
+            field_api_code: input.args['api-code'],
+            target_type: requiredOption(input, 'to'),
+            target_precision: input.options.precision
+          }]
+        : one(input.options.json);
+      return {
+        method: 'GET',
+        path: `${containerPath(input)}/fields/preview_convert`,
+        query: { checks: JSON.stringify(inline) }
+      };
+    },
+    examples: ['jinshuju field preview-convert --form Kp7mQ2 field_1 --to RadioButton']
   },
   {
     path: ['field', 'remove'],
@@ -596,9 +751,24 @@ const ENTRY: readonly Command[] = [
       { name: '--view', type: 'string', placeholder: '<view>', description: 'Read the entries of this view' },
       { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
       { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' },
-      LABELS_OPTION, FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
+      LABELS_OPTION, MINE_OPTION, FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
     ],
     request: (input) => {
+      if (input.options.mine) {
+        refuseWithMine(input, ['view', 'sort']);
+        const { token } = resolveContainer(input.options);
+        return {
+          method: 'GET',
+          path: `${API}/my/forms/${token}/entries`,
+          query: {
+            filters: filters(input),
+            keyword: input.options.keyword as string | undefined,
+            fields: list(input.options.fields),
+            include_labels: labels(input),
+            ...paging(input)
+          }
+        };
+      }
       const view = input.options.view as string | undefined;
       if (view) {
         for (const flag of ['filter', 'filters', 'keyword', 'sort'] as const) {
@@ -630,7 +800,8 @@ const ENTRY: readonly Command[] = [
     examples: [
       'jinshuju entry list --form Kp7mQ2',
       "jinshuju entry list --form Kp7mQ2 --filter 'field_3 gte 80' --sort created_at:desc",
-      'jinshuju entry list --form Kp7mQ2 --all'
+      'jinshuju entry list --form Kp7mQ2 --all',
+      'jinshuju entry list --form Kp7mQ2 --mine'
     ]
   },
   {
@@ -656,6 +827,95 @@ const ENTRY: readonly Command[] = [
     examples: [
       "jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'",
       'jinshuju entry count --form Kp7mQ2 --form Vn4xR8 --form aB3dE9'
+    ]
+  },
+  {
+    path: ['entry', 'search'],
+    summary: 'Search several forms for one keyword at once',
+    description:
+      'Answers, per form, how many entries matched and some of their serial numbers; values are ' +
+      'never returned. Read what you need afterwards with `entry get` or `entry list --keyword`. ' +
+      'A form that matched nothing is left out, so a token you named and cannot find was searched ' +
+      'and matched nothing. A form that could not be searched is listed with a reason instead — ' +
+      '"not searched" is not "no match". Name up to 10 containers, or name none and let ' +
+      '--scope-filter describe them; the call is refused rather than truncated when more than 10 match.',
+    args: [{ name: 'keyword', required: true, description: 'The text to search for' }],
+    options: [
+      ...CONTAINER_LIST_OPTIONS,
+      {
+        name: '--scope-filter',
+        type: 'string',
+        repeatable: true,
+        placeholder: "'<field> <op> [value]'",
+        description:
+          'Which forms to search, not which entries match. Takes form_name, created_at, ' +
+          'last_entry_created_at, entries_count. Empty forms are skipped unless you say otherwise'
+      },
+      MINE_OPTION
+    ],
+    request: (input) => {
+      const containers = (input.options.form as string[] | undefined) ?? [];
+      const tables = (input.options.table as string[] | undefined) ?? [];
+      if (containers.length > 0 && tables.length > 0) {
+        throw new UsageError('--form and --table are mutually exclusive');
+      }
+      const tokens = containers.length > 0 ? containers : tables;
+      if (input.options.mine) {
+        refuseWithMine(input, ['table', 'scope_filter']);
+        return {
+          method: 'GET',
+          path: `${API}/my/search`,
+          query: {
+            keyword: input.args.keyword,
+            form_tokens: tokens.length > 0 ? tokens.join(',') : undefined
+          }
+        };
+      }
+      const scope = (input.options.scope_filter as string[] | undefined) ?? [];
+      return {
+        method: 'GET',
+        path: `${API}/entries/search`,
+        query: {
+          keyword: input.args.keyword,
+          form_tokens: tokens.length > 0 ? tokens.join(',') : undefined,
+          filters: scope.length > 0 ? JSON.stringify(scope.map(parseFilter)) : undefined
+        }
+      };
+    },
+    examples: [
+      'jinshuju entry search 某某公司',
+      'jinshuju entry search 13800138000 --form Kp7mQ2 --form Vn4xR8',
+      "jinshuju entry search 报修 --scope-filter 'entries_count gt 100'",
+      'jinshuju entry search 某某公司 --mine'
+    ]
+  },
+  {
+    path: ['entry', 'stats'],
+    summary: 'Count submissions per form over a date range',
+    description:
+      'Not the question `entry count` answers. These are submissions as they happened: an import ' +
+      'lands on the day it ran whatever dates its rows carry, and deletions are never subtracted, ' +
+      'so this is how much arrived rather than how much is still there. A whole day is the ' +
+      'smallest window; both ends are inclusive and days are cut in the reported time zone.',
+    options: [
+      { name: '--from', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'First day to count, inclusive' },
+      { name: '--to', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'Last day to count, inclusive. Defaults to today' },
+      { name: '--kind', type: 'string', choices: ['form', 'table'], placeholder: '<kind>', description: 'Count only forms, or only tables' },
+      { name: '--limit', type: 'integer', placeholder: '<n>', description: 'How many forms to list, most submissions first (default 100, max 100)' }
+    ],
+    request: (input) => ({
+      method: 'GET',
+      path: `${API}/entries/stats`,
+      query: {
+        from: requiredOption(input, 'from'),
+        to: input.options.to as string | undefined,
+        kind: input.options.kind as string | undefined,
+        limit: input.options.limit === undefined ? undefined : String(input.options.limit)
+      }
+    }),
+    examples: [
+      'jinshuju entry stats --from 2026-09-01',
+      'jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10'
     ]
   },
   {

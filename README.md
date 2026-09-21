@@ -162,6 +162,42 @@ jinshuju opensearch edit Qy7nR3 --disable
 删除一律要 `--yes`。这个 CLI 不交互——stdin 留给 `--json -`——所以确认是个 flag，
 不给就不删，而不是抛一个没人回答的问题。
 
+## 跨表单
+
+```bash
+jinshuju entry search 某某公司                        # 我能读到的所有表单和表格，最多 10 个
+jinshuju entry search 13800138000 --form Kp7mQ2 --form Vn4xR8
+jinshuju entry search 报修 --scope-filter 'entries_count gt 100'   # 筛「搜哪些表单」，不筛数据
+
+jinshuju entry stats --from 2026-09-01               # 每张表单这段时间收到多少条
+jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10
+```
+
+搜不到的表单会被**留在结果里并注明原因**，而不是当成「没匹配」丢掉——「没搜」和「没有」不是一回事。
+`entry stats` 和 `entry count` 口径不同：前者是「来了多少」（导入按运行那天记，删除不扣减），
+后者是「现在还剩多少」。
+
+## 我填写的
+
+```bash
+jinshuju form list --mine                      # 我填过哪些表单（不是我拥有的）
+jinshuju entry list --form Kp7mQ2 --mine       # 我在这张表单里提交过什么
+jinshuju entry search 某某公司 --mine           # 我提交过的数据里有没有它
+```
+
+范围钉死在自己的提交上，读不到别人的，也不需要对那张表单有任何权限。
+只在 owner 视角成立的 flag（`--sort` / `--view` / `--scope-filter` 等）跟 `--mine` 一起给会被拒绝。
+
+## 删字段之前
+
+```bash
+jinshuju field check --form Kp7mQ2 field_3 field_7:choice_1
+jinshuju field preview-convert --form Kp7mQ2 field_1 --to RadioButton
+```
+
+`field check` 回答「这个字段/选项底下有没有数据」——删了就连数据一起没了，删之前先问一句。
+`preview-convert` 报告类型转换会保留多少、清掉多少。
+
 ## 其他
 
 ```bash

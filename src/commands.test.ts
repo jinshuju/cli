@@ -468,3 +468,126 @@ test('table move and --with-default-entries reach their own endpoints', async ()
   assert.deepEqual(seeded.requests[0].body,
     { name: '台账', fields: [], folder_token: undefined, with_default_entries: true });
 });
+
+test('form get --include names the blocks, and setting is honoured by already being there', async () => {
+  const asked = createMockClient();
+  const settingOnly = createMockClient();
+
+  await cli(['form', 'get', 'Kp7mQ2', '--include', 'theme,rules,extended,transactions,analytics'],
+    { env: WRITE_ENV, client: asked.client });
+  await cli(['form', 'get', 'Kp7mQ2', '--include', 'setting'], { env: WRITE_ENV, client: settingOnly.client });
+  const unknown = await cli(['form', 'get', 'Kp7mQ2', '--include', 'wallpaper'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  const query = new URL(asked.requests[0].path, 'https://x').searchParams;
+  assert.deepEqual([...query.keys()].sort(),
+    ['include_analytics', 'include_extended_attributes', 'include_field_rules', 'include_theme', 'include_transactions']);
+  assert.equal(settingOnly.requests[0].path, '/api/v1/forms/Kp7mQ2');
+  assert.equal(unknown.exitCode, 2);
+  assert.match(unknown.stderr, /--include takes theme, rules, extended, transactions, analytics/);
+});
+
+test('form list asks for transaction totals only when told to', async () => {
+  const withTotals = createMockClient();
+  const without = createMockClient();
+
+  await cli(['form', 'list', '--with-transactions'], { env: WRITE_ENV, client: withTotals.client });
+  await cli(['form', 'list'], { env: WRITE_ENV, client: without.client });
+
+  assert.equal(withTotals.requests[0].path, '/api/v1/forms?include_transactions=true');
+  assert.equal(without.requests[0].path, '/api/v1/forms');
+});
+
+test('field check batches its targets, from arguments and from --json alike', async () => {
+  const plain = createMockClient();
+  const mixed = createMockClient();
+
+  await cli(['field', 'check', '--form', 'Kp7mQ2', 'field_3', 'field_7:choice_1'],
+    { env: WRITE_ENV, client: plain.client });
+  await cli(['field', 'check', '--table', 'Vn4xR8', 'field_3',
+    '--json', '[{"field_api_code":"field_9","choice_value":"s1","choice_type":"statement"}]'],
+    { env: WRITE_ENV, client: mixed.client });
+  const empty = await cli(['field', 'check', '--form', 'Kp7mQ2'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  const checks = (path: string) => JSON.parse(new URL(path, 'https://x').searchParams.get('checks') as string);
+  assert.deepEqual(checks(plain.requests[0].path),
+    [{ field_api_code: 'field_3' }, { field_api_code: 'field_7', choice_value: 'choice_1' }]);
+  assert.deepEqual(checks(mixed.requests[0].path),
+    [{ field_api_code: 'field_3' },
+     { field_api_code: 'field_9', choice_value: 's1', choice_type: 'statement' }]);
+  assert.equal(empty.exitCode, 2);
+  assert.match(empty.stderr, /name at least one target/);
+});
+
+test('field preview-convert asks about one conversion, and needs a target type', async () => {
+  const mock = createMockClient();
+
+  await cli(['field', 'preview-convert', '--form', 'Kp7mQ2', 'field_1', '--to', 'RadioButton'],
+    { env: WRITE_ENV, client: mock.client });
+  const noType = await cli(['field', 'preview-convert', '--form', 'Kp7mQ2', 'field_1'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  const checks = JSON.parse(new URL(mock.requests[0].path, 'https://x').searchParams.get('checks') as string);
+  assert.equal(mock.requests[0].path.split('?')[0], '/api/v1/forms/Kp7mQ2/fields/preview_convert');
+  assert.deepEqual(checks, [{ field_api_code: 'field_1', target_type: 'RadioButton' }]);
+  assert.equal(noType.exitCode, 2);
+  assert.match(noType.stderr, /--to is required/);
+});
+
+test('entry search names its containers, or describes them with --scope-filter', async () => {
+  const named = createMockClient();
+  const described = createMockClient();
+  const everything = createMockClient();
+
+  await cli(['entry', 'search', '某某公司', '--form', 'Kp7mQ2', '--form', 'aB3dE9'],
+    { env: WRITE_ENV, client: named.client });
+  await cli(['entry', 'search', '报修', '--scope-filter', 'entries_count gt 100'],
+    { env: WRITE_ENV, client: described.client });
+  await cli(['entry', 'search', '张三'], { env: WRITE_ENV, client: everything.client });
+  const mixed = await cli(['entry', 'search', '张三', '--form', 'Kp7mQ2', '--table', 'Vn4xR8'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  const query = (path: string) => new URL(path, 'https://x').searchParams;
+  assert.equal(query(named.requests[0].path).get('form_tokens'), 'Kp7mQ2,aB3dE9');
+  assert.equal(query(described.requests[0].path).get('filters'),
+    '[{"field":"entries_count","operator":"gt","value":"100"}]');
+  // No container and no scope filter means every form the caller can reach.
+  assert.equal(everything.requests[0].path, '/api/v1/entries/search?keyword=%E5%BC%A0%E4%B8%89');
+  assert.equal(mixed.exitCode, 2);
+  assert.match(mixed.stderr, /--form and --table are mutually exclusive/);
+});
+
+test('--mine switches all three reads to what the caller submitted', async () => {
+  const forms = createMockClient();
+  const entries = createMockClient();
+  const search = createMockClient();
+
+  await cli(['form', 'list', '--mine'], { env: WRITE_ENV, client: forms.client });
+  await cli(['entry', 'list', '--form', 'Kp7mQ2', '--mine', '--keyword', '报修'],
+    { env: WRITE_ENV, client: entries.client });
+  await cli(['entry', 'search', '某某公司', '--mine', '--form', 'Kp7mQ2'],
+    { env: WRITE_ENV, client: search.client });
+
+  assert.equal(forms.requests[0].path, '/api/v1/my/forms');
+  assert.equal(entries.requests[0].path, '/api/v1/my/forms/Kp7mQ2/entries?keyword=%E6%8A%A5%E4%BF%AE');
+  assert.equal(search.requests[0].path,
+    '/api/v1/my/search?keyword=%E6%9F%90%E6%9F%90%E5%85%AC%E5%8F%B8&form_tokens=Kp7mQ2');
+});
+
+test('--mine refuses the flags that only make sense on the owner side', async () => {
+  const env = WRITE_ENV;
+  const sorted = await cli(['form', 'list', '--mine', '--sort', 'entries_count:desc'],
+    { env, client: createMockClient().client });
+  const viewed = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--mine', '--view', 'aB3dE9'],
+    { env, client: createMockClient().client });
+  const scoped = await cli(['entry', 'search', '张三', '--mine', '--scope-filter', 'entries_count gt 1'],
+    { env, client: createMockClient().client });
+
+  assert.equal(sorted.exitCode, 2);
+  assert.match(sorted.stderr, /--sort cannot be combined with --mine/);
+  assert.equal(viewed.exitCode, 2);
+  assert.match(viewed.stderr, /--view cannot be combined with --mine/);
+  assert.equal(scoped.exitCode, 2);
+  assert.match(scoped.stderr, /--scope-filter cannot be combined with --mine/);
+});

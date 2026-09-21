@@ -129,10 +129,19 @@ function coerceOne(spec: OptionSpec, value: unknown, stdin: () => string): unkno
   return text;
 }
 
-function bindArgs(command: Command, words: readonly string[]): Record<string, string> {
+function bindArgs(command: Command, words: readonly string[]): { args: Record<string, string>; rest: string[] } {
   const positionals = words.slice(command.path.length);
+  const specs = command.args ?? [];
   const args: Record<string, string> = {};
-  (command.args ?? []).forEach((arg, index) => {
+  let rest: string[] = [];
+  specs.forEach((arg, index) => {
+    if (arg.variadic) {
+      rest = positionals.slice(index);
+      if (arg.required && rest.length === 0) {
+        throw new UsageError(`jinshuju ${command.path.join(' ')} needs <${arg.name}>: ${arg.description}`);
+      }
+      return;
+    }
     const value = positionals[index];
     if (value === undefined) {
       if (arg.required) throw new UsageError(`jinshuju ${command.path.join(' ')} needs <${arg.name}>: ${arg.description}`);
@@ -140,11 +149,13 @@ function bindArgs(command: Command, words: readonly string[]): Record<string, st
     }
     args[arg.name] = value;
   });
-  const extra = positionals.slice((command.args ?? []).length);
-  if (extra.length > 0) {
-    throw new UsageError(`jinshuju ${command.path.join(' ')} takes no argument ${JSON.stringify(extra[0])}`);
+  if (!specs.some((arg) => arg.variadic)) {
+    const extra = positionals.slice(specs.length);
+    if (extra.length > 0) {
+      throw new UsageError(`jinshuju ${command.path.join(' ')} takes no argument ${JSON.stringify(extra[0])}`);
+    }
   }
-  return args;
+  return { args, rest };
 }
 
 function localOptions(flags: Record<string, unknown>, stdin: () => string): LocalOptions {
@@ -282,7 +293,7 @@ async function runRemote(
   const label = `jinshuju ${command.path.join(' ')}`;
   const specs = [...(command.options ?? []), ...GLOBAL_OPTIONS, ...LOCAL_OPTIONS];
   const options = bindOptions(specs, flags, label, stdin);
-  const input = { args: bindArgs(command, words), options };
+  const input = { ...bindArgs(command, words), options };
   const output = (options.output as OutputFormat) ?? 'text';
 
   const client = runtime.client ?? new JinshujuHttpClient(loadConfig({
