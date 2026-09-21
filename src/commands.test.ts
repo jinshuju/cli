@@ -464,9 +464,7 @@ test('table move and --with-default-entries reach their own endpoints', async ()
   assert.equal(moved.requests[0].path, '/api/v1/tables/Vn4xR8/folder');
   assert.deepEqual(moved.requests[0].body, { folder_token: 'Nf7mDC' });
   assert.deepEqual(rooted.requests[0].body, { folder_token: '' });
-  // folder_token stays undefined and is dropped on the wire by JSON.stringify.
-  assert.deepEqual(seeded.requests[0].body,
-    { name: '台账', fields: [], folder_token: undefined, with_default_entries: true });
+  assert.deepEqual(seeded.requests[0].body, { name: '台账', fields: [], with_default_entries: true });
 });
 
 test('form get --include names the blocks, and setting is honoured by already being there', async () => {
@@ -484,7 +482,7 @@ test('form get --include names the blocks, and setting is honoured by already be
     ['include_analytics', 'include_extended_attributes', 'include_field_rules', 'include_theme', 'include_transactions']);
   assert.equal(settingOnly.requests[0].path, '/api/v1/forms/Kp7mQ2');
   assert.equal(unknown.exitCode, 2);
-  assert.match(unknown.stderr, /--include takes theme, rules, extended, transactions, analytics/);
+  assert.match(unknown.stderr, /--include takes setting, theme, rules, extended, transactions, analytics/);
 });
 
 test('form list asks for transaction totals only when told to', async () => {
@@ -622,8 +620,7 @@ test('entry import sends the file, then the mapping that refers to it', async ()
     attachment_id: 'att_1',
     columns: [{ field_api_code: 'field_1', column_label: '姓名' },
               { field_api_code: 'field_2', sheet_column_index: 3 }],
-    header_row_index: 2,
-    unique_field_code: undefined
+    header_row_index: 2
   });
 });
 
@@ -670,7 +667,80 @@ test('form theme set uploads an image and hands the theme its id', async () => {
   assert.equal(mock.requests[0].path, '/api/v1/form_image_attachments');
   assert.deepEqual(mock.requests[1].body, {
     primary_color: '#1F6FEB',
-    secondary_color: undefined,
     wallpaper: { background_image_attachment_id: 'img_1' }
   });
+});
+
+test('form create carries the scene, layout and folder the design asks for', async () => {
+  const mock = createMockClient();
+  const bare = createMockClient();
+
+  await cli(['form', 'create', '--json', '{"name":"考试","fields":[{"type":"TextField","label":"姓名"}]}',
+    '--scene', 'exam', '--layout', 'card', '--folder', 'Fd2xK8'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'create', '--json', '{"name":"普通","fields":[{"type":"TextField","label":"姓名"}]}'],
+    { env: WRITE_ENV, client: bare.client });
+  const unknownScene = await cli(['form', 'create', '--json', '{"name":"x","fields":[]}', '--scene', 'picnic'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  assert.deepEqual(mock.requests[0].body, {
+    name: '考试', fields: [{ type: 'TextField', label: '姓名' }],
+    scene: 'exam', layout: 'card', folder_token: 'Fd2xK8'
+  });
+  // An absent flag sends nothing, rather than a key asking for the default.
+  assert.deepEqual(bare.requests[0].body, { name: '普通', fields: [{ type: 'TextField', label: '姓名' }] });
+  assert.equal(unknownScene.exitCode, 2);
+});
+
+test('--type picks the scene, and refuses a --scene that contradicts it', async () => {
+  const exam = createMockClient();
+
+  await cli(['form', 'create', '--json', '{"name":"考试","fields":[{"type":"TextField","label":"姓名"}]}', '--type', 'exam'],
+    { env: WRITE_ENV, client: exam.client });
+  const clash = await cli(['form', 'create', '--type', 'exam', '--scene', 'registry',
+    '--json', '{"name":"x","fields":[{"type":"TextField","label":"姓名"}]}'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  assert.equal((exam.requests[0].body as Record<string, unknown>).scene, 'exam');
+  assert.equal(clash.exitCode, 2);
+  assert.match(clash.stderr, /--type exam is the exam scene, so --scene registry contradicts it/);
+});
+
+test('a settings block travels to its own endpoint, on create and on edit', async () => {
+  const created = uploadingClient({ '/api/v1/forms': { token: 'Kp7mQ2' } });
+  const edited = createMockClient();
+  const editedBoth = createMockClient();
+
+  await cli(['form', 'create', '--type', 'exam',
+    '--json', '{"name":"考试","fields":[{"type":"TextField","label":"姓名"}],"exam_setting":{"total_score":100}}'],
+    { env: WRITE_ENV, client: created.client });
+  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"exam_setting":{"total_score":90}}'],
+    { env: WRITE_ENV, client: edited.client });
+  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"name":"改名","exam_setting":{"total_score":90}}'],
+    { env: WRITE_ENV, client: editedBoth.client });
+
+  // Created without the block, then the block to its own path.
+  assert.equal(created.requests[0].path, '/api/v1/forms');
+  assert.equal((created.requests[0].body as Record<string, unknown>).exam_setting, undefined);
+  assert.equal(created.requests[1].path, '/api/v1/forms/Kp7mQ2/exam_setting');
+  assert.deepEqual(created.requests[1].body, { total_score: 100 });
+
+  // A block on its own never touches the generic update, which would drop it.
+  assert.equal(edited.requests.length, 2);
+  assert.equal(edited.requests[0].path, '/api/v1/forms/Kp7mQ2/exam_setting');
+  assert.equal(edited.requests[1].method, 'GET');
+
+  // Alongside other changes, the block goes first: a refusal then leaves the
+  // rest of the edit unapplied rather than half done.
+  assert.equal(editedBoth.requests[0].path, '/api/v1/forms/Kp7mQ2/exam_setting');
+  assert.deepEqual(editedBoth.requests[1].body, { name: '改名' });
+});
+
+test('an edit with no settings block is still one request', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"name":"改名"}'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests.length, 1);
+  assert.equal(mock.requests[0].method, 'PATCH');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2');
 });
