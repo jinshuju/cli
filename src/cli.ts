@@ -267,7 +267,7 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
   const { words, flags } = splitArgs(args);
   const stdin = runtime.stdin ?? readStdin;
 
-  if (flags['--version'] || flags['-v']) return ok(VERSION);
+  if (flags['--version'] || flags['-V']) return ok(VERSION);
   if (args.length === 0) return ok(rootHelp());
   if (flags['--help'] || flags['-h']) return ok(helpFor(words));
 
