@@ -87,16 +87,22 @@ function containerPath(input: CommandInput): string {
   return `${API}/${kind === 'table' ? 'tables' : 'forms'}/${token}`;
 }
 
-function filters(input: CommandInput): string | undefined {
+/** The conditions themselves. A read sends them as a query string, a write as a body. */
+function filterConditions(input: CommandInput): unknown {
   const compact = (input.options.filter as string[] | undefined) ?? [];
   const raw = input.options.filters;
   if (raw !== undefined && compact.length > 0) {
     throw new UsageError('--filter and --filters are alternatives, not both');
   }
-  if (raw !== undefined) return JSON.stringify(raw);
+  if (raw !== undefined) return raw;
   if (compact.length === 0) return undefined;
   const conditions: FilterCondition[] = compact.map(parseFilter);
-  return JSON.stringify(conditions);
+  return conditions;
+}
+
+function filters(input: CommandInput): string | undefined {
+  const conditions = filterConditions(input);
+  return conditions === undefined ? undefined : JSON.stringify(conditions);
 }
 
 function sort(input: CommandInput, key: 'api_code' | 'field'): string | undefined {
@@ -113,6 +119,33 @@ function paging(input: CommandInput): Record<string, string | undefined> {
     next: input.options.next as string | undefined
   };
 }
+
+/** The sort rules as the API's own objects, for a body. */
+function sortRules(input: CommandInput): { api_code: string; order: string }[] | undefined {
+  const rules = (input.options.sort as string[] | undefined) ?? [];
+  if (rules.length === 0) return undefined;
+  return rules.map(parseSort).map((rule: SortRule) => ({ api_code: rule.field, order: rule.order }));
+}
+
+/**
+ * A delete says so out loud. Nothing here prompts — stdin belongs to `--json -`
+ * — so the confirmation is a flag, and leaving it out is the safe outcome
+ * rather than a question nobody is there to answer.
+ */
+function confirmed(input: CommandInput, what: string): void {
+  if (!input.options.yes) throw new UsageError(`${what} is permanent; pass --yes to go ahead`);
+}
+
+/** A write that names one thing still sends the API a list of one. */
+function one(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [value];
+}
+
+const YES_OPTION: OptionSpec = { name: '--yes', type: 'boolean', description: 'Confirm the deletion' };
+
+const FOLDER_OPTION: OptionSpec = {
+  name: '--folder', type: 'string', placeholder: '<token>', description: 'Folder token; empty moves it out of any folder'
+};
 
 function list(value: unknown): string | undefined {
   const values = value as string[] | undefined;
@@ -163,6 +196,21 @@ const FOLDER: readonly Command[] = [
     summary: 'List folders',
     options: [LIMIT_OPTION],
     request: (input) => ({ method: 'GET', path: `${API}/folders`, query: paging(input) })
+  },
+  {
+    path: ['folder', 'create'],
+    summary: 'Create a folder',
+    description: 'A folder holds one kind. A table refuses a form folder, so say which when it is not forms.',
+    args: [{ name: 'name', required: true, description: 'Folder name' }],
+    options: [
+      { name: '--kind', type: 'string', choices: ['form', 'table'], placeholder: '<kind>', description: 'What the folder holds (default form)' }
+    ],
+    request: (input) => ({
+      method: 'POST',
+      path: `${API}/folders`,
+      body: { name: input.args.name, kind: input.options.kind }
+    }),
+    examples: ['jinshuju folder create 2026年活动', 'jinshuju folder create 台账 --kind table']
   }
 ];
 
@@ -201,10 +249,83 @@ const FORM: readonly Command[] = [
     examples: ['jinshuju form create --json @form.json', 'cat form.json | jinshuju form create --json -']
   },
   {
+    path: ['form', 'edit'],
+    summary: 'Edit a form',
+    description:
+      'The payload carries the operations to apply: name, description, setting, and fields as ' +
+      '{add, update, update_choices, remove}. Only what is named changes.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [JSON_OPTION],
+    request: (input) => ({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body: payload(input) }),
+    examples: ['jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'']
+  },
+  {
+    path: ['form', 'copy'],
+    summary: 'Copy a form',
+    args: [{ name: 'form', required: true, description: 'Form token to copy' }],
+    options: [
+      { name: '--name', type: 'string', placeholder: '<name>', description: 'Name for the copy' },
+      FOLDER_OPTION
+    ],
+    request: (input) => ({
+      method: 'POST',
+      path: `${API}/forms/${input.args.form}/copy`,
+      body: { name: input.options.name, folder_token: input.options.folder }
+    })
+  },
+  {
+    path: ['form', 'move'],
+    summary: 'Move a form into a folder, or out of one',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [FOLDER_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: `${API}/forms/${input.args.form}/folder`,
+      body: { folder_token: (input.options.folder as string | undefined) ?? '' }
+    }),
+    examples: ['jinshuju form move Kp7mQ2 --folder Fd2xK8', 'jinshuju form move Kp7mQ2']
+  },
+  {
+    path: ['form', 'theme', 'set'],
+    summary: "Set a form's theme",
+    description:
+      'The colours have flags of their own; everything else the theme takes — typography, ' +
+      'form_container, submit_button — goes through --json. Images are not settable yet: uploading ' +
+      'one needs a ticket the REST API has no way to issue.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [
+      { name: '--primary-color', type: 'string', placeholder: '<hex>', description: 'Primary colour, e.g. #1F6FEB' },
+      { name: '--secondary-color', type: 'string', placeholder: '<hex>', description: 'Secondary colour' },
+      JSON_OPTION
+    ],
+    request: (input) => {
+      const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
+      const body = {
+        ...rest,
+        primary_color: input.options.primary_color,
+        secondary_color: input.options.secondary_color
+      };
+      return { method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body };
+    },
+    examples: ['jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"']
+  },
+  {
     path: ['form', 'rule', 'get'],
     summary: 'Show the field display rules of a form',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     request: (input) => ({ method: 'GET', path: `${API}/forms/${input.args.form}/field_rules` })
+  },
+  {
+    path: ['form', 'rule', 'edit'],
+    summary: 'Edit the field display rules of a form',
+    description: 'The payload is {add, update, remove}; a rule is targeted by the index `form rule get` shows.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [JSON_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: `${API}/forms/${input.args.form}`,
+      body: { field_rules: payload(input) }
+    })
   },
   {
     path: ['form', 'cooperator', 'list'],
@@ -236,6 +357,28 @@ const TABLE: readonly Command[] = [
     args: [{ name: 'table', required: true, description: 'Table token, six letters and digits, e.g. Vn4xR8' }],
     request: (input) => ({ method: 'GET', path: `${API}/tables/${input.args.table}` }),
     examples: ['jinshuju table get Vn4xR8']
+  },
+  {
+    path: ['table', 'create'],
+    summary: 'Create a table',
+    description: 'Column types use the API v1 names. Do not pass api_code: the backend generates it.',
+    options: [JSON_OPTION, FOLDER_OPTION],
+    request: (input) => ({
+      method: 'POST',
+      path: `${API}/tables`,
+      body: { ...(payload(input) as Record<string, unknown>), folder_token: input.options.folder }
+    }),
+    examples: ['jinshuju table create --json @table.json']
+  },
+  {
+    path: ['table', 'edit'],
+    summary: 'Edit a table',
+    description:
+      'The payload carries the operations to apply: name, description, setting, and columns as ' +
+      'fields: {add, update, update_choices, remove}.',
+    args: [{ name: 'table', required: true, description: 'Table token' }],
+    options: [JSON_OPTION],
+    request: (input) => ({ method: 'PATCH', path: `${API}/tables/${input.args.table}`, body: payload(input) })
   }
 ];
 
@@ -247,8 +390,80 @@ const FIELD: readonly Command[] = [
     options: [...CONTAINER_OPTIONS],
     request: (input) => ({ method: 'GET', path: containerPath(input) }),
     select: (body) => ({ data: selectFields(body) })
+  },
+  {
+    path: ['field', 'add'],
+    summary: 'Add fields to a form or table',
+    description: 'One field object, or a list of them. Do not pass api_code: the backend generates it.',
+    options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: containerPath(input),
+      body: { fields: { add: one(payload(input)) } }
+    }),
+    examples: ['jinshuju field add --form Kp7mQ2 --json \'{"type":"TextField","label":"备注"}\'']
+  },
+  {
+    path: ['field', 'update'],
+    summary: 'Update one field',
+    description: 'The patch is merged onto the field; the api_code comes from the argument, not the payload.',
+    args: [{ name: 'api-code', required: true, description: 'Field api_code, e.g. field_3' }],
+    options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: containerPath(input),
+      body: { fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] } }
+    }),
+    examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
+  },
+  {
+    path: ['field', 'update-choices'],
+    summary: "Change a field's choices",
+    description: 'The payload is the choice operations the field takes, e.g. {add, update, remove}.',
+    args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
+    options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: containerPath(input),
+      body: {
+        fields: {
+          update_choices: [{ ...(payload(input) as Record<string, unknown>), field_api_code: input.args['api-code'] }]
+        }
+      }
+    })
+  },
+  {
+    path: ['field', 'remove'],
+    summary: 'Remove a field',
+    description:
+      'Removing a field that still holds answers deletes those answers with it, and cannot be undone.',
+    args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
+    options: [...CONTAINER_OPTIONS, YES_OPTION],
+    request: (input) => {
+      confirmed(input, `Removing ${input.args['api-code']} and any answers it holds`);
+      return { method: 'PATCH', path: containerPath(input), body: { fields: { remove: [input.args['api-code']] } } };
+    },
+    examples: ['jinshuju field remove --form Kp7mQ2 field_9 --yes']
   }
 ];
+
+/** What `view create` and `view edit` both take, beyond the name. */
+const VIEW_OPTIONS: readonly OptionSpec[] = [
+  { name: '--type', type: 'string', choices: ['grid', 'kanban', 'stats'], placeholder: '<type>', description: 'View type' },
+  { name: '--columns', type: 'list', placeholder: '<api-code,...>', description: 'Columns to show, in this order' },
+  FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, JSON_OPTION
+];
+
+function viewBody(input: CommandInput): Record<string, unknown> {
+  const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
+  return {
+    ...rest,
+    view_type: input.options.type,
+    prefer_columns: input.options.columns,
+    sort: sortRules(input),
+    filter: filterConditions(input)
+  };
+}
 
 const VIEW: readonly Command[] = [
   {
@@ -263,8 +478,70 @@ const VIEW: readonly Command[] = [
     args: [{ name: 'view', required: true, description: 'View token, six letters and digits, e.g. aB3dE9' }],
     options: [...CONTAINER_OPTIONS],
     request: (input) => ({ method: 'GET', path: `${containerPath(input)}/views/${input.args.view}` })
+  },
+  {
+    path: ['view', 'create'],
+    summary: 'Create a view',
+    description:
+      'A view carries its own filter, sort and columns, so `entry list --view` needs none of them. ' +
+      'Anything without a flag of its own — kanban grouping, visibility — goes through --json.',
+    args: [{ name: 'name', required: true, description: 'View name' }],
+    options: [...CONTAINER_OPTIONS, ...VIEW_OPTIONS],
+    request: (input) => ({
+      method: 'POST',
+      path: `${containerPath(input)}/views`,
+      body: { ...viewBody(input), name: input.args.name }
+    }),
+    examples: ["jinshuju view create --form Kp7mQ2 高分 --filter 'field_3 gte 80' --sort created_at:desc"]
+  },
+  {
+    path: ['view', 'edit'],
+    summary: 'Edit a view',
+    description: 'Only what is named changes; --name renames it.',
+    args: [{ name: 'view', required: true, description: 'View token' }],
+    options: [
+      ...CONTAINER_OPTIONS,
+      { name: '--name', type: 'string', placeholder: '<name>', description: 'Rename the view' },
+      ...VIEW_OPTIONS
+    ],
+    request: (input) => ({
+      method: 'PATCH',
+      path: `${containerPath(input)}/views/${input.args.view}`,
+      body: { ...viewBody(input), name: input.options.name }
+    })
+  },
+  {
+    path: ['view', 'delete'],
+    summary: 'Delete a view',
+    args: [{ name: 'view', required: true, description: 'View token' }],
+    options: [...CONTAINER_OPTIONS, YES_OPTION],
+    request: (input) => {
+      confirmed(input, `Deleting view ${input.args.view}`);
+      return { method: 'DELETE', path: `${containerPath(input)}/views/${input.args.view}` };
+    }
   }
 ];
+
+const BATCH_OPTION: OptionSpec = {
+  name: '--batch', type: 'json', placeholder: '<json|@file|->', description: 'Several rows in one request'
+};
+
+function batchRows(input: CommandInput): unknown[] | undefined {
+  const rows = input.options.batch;
+  if (rows === undefined) return undefined;
+  if (input.options.json !== undefined) throw new UsageError('--json and --batch are alternatives, not both');
+  if (!Array.isArray(rows)) throw new UsageError('--batch must be a list');
+  return rows;
+}
+
+/**
+ * Batch writes are served under the forms path alone, and it takes a table's
+ * token just as well, so a table batches through the same URL.
+ */
+function batchPath(input: CommandInput): string {
+  const { token } = resolveContainer(input.options);
+  return `${API}/forms/${token}/entries/batch`;
+}
 
 const ENTRY: readonly Command[] = [
   {
@@ -396,11 +673,62 @@ const ENTRY: readonly Command[] = [
   },
   {
     path: ['entry', 'create'],
-    summary: 'Create one entry',
-    description: 'The payload is keyed by field api_code, not by field label.',
-    options: [...CONTAINER_OPTIONS, JSON_OPTION],
-    request: (input) => ({ method: 'POST', path: `${containerPath(input)}/entries`, body: payload(input) }),
-    examples: ['jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'']
+    summary: 'Create entries',
+    description:
+      'The payload is keyed by field api_code, not by field label. --batch takes a list of them and ' +
+      'writes them in one request.',
+    options: [...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION],
+    request: (input) => {
+      const batch = batchRows(input);
+      if (batch) return { method: 'POST', path: batchPath(input), body: { entries: batch } };
+      return { method: 'POST', path: `${containerPath(input)}/entries`, body: payload(input) };
+    },
+    examples: [
+      'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
+      'jinshuju entry create --form Kp7mQ2 --batch @entries.json'
+    ]
+  },
+  {
+    path: ['entry', 'update'],
+    summary: 'Update entries',
+    description:
+      'The payload merges onto the entry, leaving the fields it does not name alone; --replace ' +
+      'writes the entry as given, clearing the rest. --batch takes [{serial_number, entry}] and ' +
+      'always merges.',
+    args: [{ name: 'serial', required: false, description: 'Entry serial number; leave out with --batch' }],
+    options: [
+      ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
+      { name: '--replace', type: 'boolean', description: 'Write the entry as given, clearing fields the payload leaves out' }
+    ],
+    request: (input) => {
+      const batch = batchRows(input);
+      if (batch) {
+        if (input.args.serial) throw new UsageError('--batch carries its own serial numbers, so <serial> is not taken');
+        if (input.options.replace) throw new UsageError('--replace cannot be combined with --batch');
+        return { method: 'PATCH', path: batchPath(input), body: { entries: batch } };
+      }
+      if (!input.args.serial) throw new UsageError('<serial> is required, or pass --batch');
+      return {
+        method: input.options.replace ? 'PUT' : 'PATCH',
+        path: `${containerPath(input)}/entries/${input.args.serial}`,
+        body: payload(input)
+      };
+    },
+    examples: [
+      'jinshuju entry update --form Kp7mQ2 12 --json \'{"field_1":"李四"}\'',
+      'jinshuju entry update --form Kp7mQ2 --batch @rows.json'
+    ]
+  },
+  {
+    path: ['entry', 'delete'],
+    summary: 'Delete one entry',
+    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    options: [...CONTAINER_OPTIONS, YES_OPTION],
+    request: (input) => {
+      confirmed(input, `Deleting entry ${input.args.serial}`);
+      return { method: 'DELETE', path: `${containerPath(input)}/entries/${input.args.serial}` };
+    },
+    examples: ['jinshuju entry delete --form Kp7mQ2 12 --yes']
   },
   {
     path: ['entry', 'get'],
@@ -418,6 +746,17 @@ const ENTRY: readonly Command[] = [
   }
 ];
 
+/** A comment lives under its entry, so every verb needs the entry as well. */
+const ENTRY_OPTION: OptionSpec = {
+  name: '--entry', type: 'string', placeholder: '<serial>', description: 'Entry serial number'
+};
+
+function commentsPath(input: CommandInput): string {
+  const serial = input.options.entry as string | undefined;
+  if (!serial) throw new UsageError('--entry <serial> is required');
+  return `${containerPath(input)}/entries/${serial}/comments`;
+}
+
 const COMMENT: readonly Command[] = [
   {
     path: ['comment', 'list'],
@@ -430,6 +769,45 @@ const COMMENT: readonly Command[] = [
       const serial = input.options.entry as string | undefined;
       if (!serial) throw new UsageError('--entry <serial> is required');
       return { method: 'GET', path: `${containerPath(input)}/entries/${serial}/comments` };
+    }
+  },
+  {
+    path: ['comment', 'create'],
+    summary: 'Comment on an entry',
+    args: [{ name: 'content', required: true, description: 'Comment text' }],
+    options: [
+      ...CONTAINER_OPTIONS, ENTRY_OPTION,
+      { name: '--reply-to', type: 'string', placeholder: '<comment-id>', description: 'Reply under this comment' }
+    ],
+    request: (input) => ({
+      method: 'POST',
+      path: `${commentsPath(input)}`,
+      body: { content: input.args.content, parent_id: input.options.reply_to }
+    }),
+    examples: ['jinshuju comment create --form Kp7mQ2 --entry 12 "已联系，等回复"']
+  },
+  {
+    path: ['comment', 'update'],
+    summary: 'Edit a comment',
+    args: [
+      { name: 'comment', required: true, description: 'Comment id' },
+      { name: 'content', required: true, description: 'New comment text' }
+    ],
+    options: [...CONTAINER_OPTIONS, ENTRY_OPTION],
+    request: (input) => ({
+      method: 'PATCH',
+      path: `${commentsPath(input)}/${input.args.comment}`,
+      body: { content: input.args.content }
+    })
+  },
+  {
+    path: ['comment', 'delete'],
+    summary: 'Delete a comment',
+    args: [{ name: 'comment', required: true, description: 'Comment id' }],
+    options: [...CONTAINER_OPTIONS, ENTRY_OPTION, YES_OPTION],
+    request: (input) => {
+      confirmed(input, `Deleting comment ${input.args.comment}`);
+      return { method: 'DELETE', path: `${commentsPath(input)}/${input.args.comment}` };
     }
   }
 ];
@@ -460,6 +838,47 @@ const OPENSEARCH: readonly Command[] = [
       if (!form) throw new UsageError('--form <token> is required');
       return { method: 'GET', path: `${API}/opensearch/query_suggestions`, query: { form_token: form } };
     }
+  },
+  {
+    path: ['opensearch', 'create'],
+    summary: 'Create a public query',
+    description: 'Ask `opensearch fields --form <token>` which fields a query may search on and return.',
+    options: [
+      { name: '--form', type: 'string', placeholder: '<token>', description: 'Form the query reads' },
+      JSON_OPTION
+    ],
+    request: (input) => {
+      const form = input.options.form as string | undefined;
+      if (!form) throw new UsageError('--form <token> is required');
+      return {
+        method: 'POST',
+        path: `${API}/opensearch/queries`,
+        body: { ...(payload(input) as Record<string, unknown>), form_token: form }
+      };
+    }
+  },
+  {
+    path: ['opensearch', 'edit'],
+    summary: 'Edit a public query, or turn it on and off',
+    args: [{ name: 'query', required: true, description: 'Public query token' }],
+    options: [
+      JSON_OPTION,
+      { name: '--enable', type: 'boolean', description: 'Turn the query on' },
+      { name: '--disable', type: 'boolean', description: 'Turn the query off' }
+    ],
+    request: (input) => {
+      if (input.options.enable && input.options.disable) {
+        throw new UsageError('--enable and --disable are opposites, pass one');
+      }
+      const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
+      const enabled = input.options.enable ? true : input.options.disable ? false : undefined;
+      return {
+        method: 'PATCH',
+        path: `${API}/opensearch/queries/${input.args.query}`,
+        body: { ...rest, enabled }
+      };
+    },
+    examples: ['jinshuju opensearch edit Qy7nR3 --disable']
   }
 ];
 

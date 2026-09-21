@@ -122,6 +122,46 @@ jinshuju entry create --form Kp7mQ2 --json @entry.json
 cat entry.json | jinshuju entry create --form Kp7mQ2 --json -
 ```
 
+## 写
+
+每条写命令都只发一次请求，payload 的键是字段 `api_code`。
+
+```bash
+jinshuju folder create 台账 --kind table          # 文件夹分 form / table，表格进不了表单夹
+jinshuju form edit Kp7mQ2 --json '{"name":"2026 活动报名"}'
+jinshuju form copy Kp7mQ2 --name 副本
+jinshuju form move Kp7mQ2 --folder Fd2xK8         # 不带 --folder 就是移出文件夹
+jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"
+jinshuju table create --json @table.json --folder Nf7mDC
+jinshuju table edit Vn4xR8 --json '{"name":"2026 台账"}'
+```
+
+字段的增删改都落在容器的一次 PATCH 上：
+
+```bash
+jinshuju field add --form Kp7mQ2 --json '{"type":"TextField","label":"备注"}'
+jinshuju field update --form Kp7mQ2 field_3 --json '{"required":true}'
+jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"丙"}]}'
+jinshuju field remove --form Kp7mQ2 field_9 --yes
+```
+
+数据与视图：
+
+```bash
+jinshuju entry create --form Kp7mQ2 --batch @entries.json
+jinshuju entry update --form Kp7mQ2 12 --json '{"field_2":99}'          # 合并
+jinshuju entry update --form Kp7mQ2 12 --replace --json '{"field_1":"李四"}'  # 整条覆盖，没给的清空
+jinshuju entry update --form Kp7mQ2 --batch @rows.json                  # [{serial_number, entry}]
+jinshuju entry delete --form Kp7mQ2 12 --yes
+
+jinshuju view create --form Kp7mQ2 高分 --filter 'field_3 gte 80' --sort created_at:desc
+jinshuju comment create --form Kp7mQ2 --entry 12 "已联系，等回复"
+jinshuju opensearch edit Qy7nR3 --disable
+```
+
+删除一律要 `--yes`。这个 CLI 不交互——stdin 留给 `--json -`——所以确认是个 flag，
+不给就不删，而不是抛一个没人回答的问题。
+
 ## Token 格式
 
 表单、表格、视图的 token 都是**六位大小写字母加数字**，例如 `Kp7mQ2`、`Vn4xR8`、`aB3dE9`。

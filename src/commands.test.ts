@@ -296,3 +296,128 @@ test('entry summary asks for named fields and can drop the overview', async () =
   assert.equal(mock.requests[0].path,
     '/api/v1/forms/Kp7mQ2/entries/summary?fields=field_3%2Cfield_7&include_overview=false');
 });
+
+const WRITE_ENV = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+test('field verbs all ride on the container PATCH, each in its own operation', async () => {
+  const add = createMockClient();
+  const update = createMockClient();
+  const choices = createMockClient();
+  const remove = createMockClient();
+
+  await cli(['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"TextField","label":"备注"}'],
+    { env: WRITE_ENV, client: add.client });
+  await cli(['field', 'update', '--table', 'Vn4xR8', 'field_3', '--json', '{"required":true}'],
+    { env: WRITE_ENV, client: update.client });
+  await cli(['field', 'update-choices', '--form', 'Kp7mQ2', 'field_7', '--json', '{"add":[{"label":"丙"}]}'],
+    { env: WRITE_ENV, client: choices.client });
+  await cli(['field', 'remove', '--form', 'Kp7mQ2', 'field_9', '--yes'],
+    { env: WRITE_ENV, client: remove.client });
+
+  assert.equal(add.requests[0].method, 'PATCH');
+  assert.equal(add.requests[0].path, '/api/v1/forms/Kp7mQ2');
+  assert.deepEqual(add.requests[0].body, { fields: { add: [{ type: 'TextField', label: '备注' }] } });
+  assert.equal(update.requests[0].path, '/api/v1/tables/Vn4xR8');
+  assert.deepEqual(update.requests[0].body, { fields: { update: [{ required: true, api_code: 'field_3' }] } });
+  assert.deepEqual(choices.requests[0].body,
+    { fields: { update_choices: [{ add: [{ label: '丙' }], field_api_code: 'field_7' }] } });
+  assert.deepEqual(remove.requests[0].body, { fields: { remove: ['field_9'] } });
+});
+
+test('a delete refuses until it is confirmed', async () => {
+  const mock = createMockClient();
+  const guarded = await cli(['entry', 'delete', '--form', 'Kp7mQ2', '12'], { env: WRITE_ENV, client: mock.client });
+  const gone = await cli(['entry', 'delete', '--form', 'Kp7mQ2', '12', '--yes'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(guarded.exitCode, 2);
+  assert.match(guarded.stderr, /pass --yes/);
+  assert.equal(mock.requests.length, 1);
+  assert.equal(gone.exitCode, 0);
+  assert.equal(mock.requests[0].method, 'DELETE');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12');
+});
+
+test('entry update merges, --replace writes the whole entry, --batch does neither alone', async () => {
+  const patch = createMockClient();
+  const put = createMockClient();
+  const batch = createMockClient();
+
+  await cli(['entry', 'update', '--form', 'Kp7mQ2', '12', '--json', '{"field_1":"李四"}'],
+    { env: WRITE_ENV, client: patch.client });
+  await cli(['entry', 'update', '--form', 'Kp7mQ2', '12', '--replace', '--json', '{"field_1":"李四"}'],
+    { env: WRITE_ENV, client: put.client });
+  await cli(['entry', 'update', '--table', 'Vn4xR8', '--batch', '[{"serial_number":1,"entry":{"field_1":"甲"}}]'],
+    { env: WRITE_ENV, client: batch.client });
+
+  assert.equal(patch.requests[0].method, 'PATCH');
+  assert.equal(put.requests[0].method, 'PUT');
+  // A table batches through the forms path, the only one that serves it.
+  assert.equal(batch.requests[0].path, '/api/v1/forms/Vn4xR8/entries/batch');
+  assert.deepEqual(batch.requests[0].body, { entries: [{ serial_number: 1, entry: { field_1: '甲' } }] });
+});
+
+test('entry update refuses a serial and --replace alongside --batch', async () => {
+  const withSerial = await cli(['entry', 'update', '--form', 'Kp7mQ2', '12', '--batch', '[]'],
+    { env: WRITE_ENV, client: createMockClient().client });
+  const withReplace = await cli(['entry', 'update', '--form', 'Kp7mQ2', '--replace', '--batch', '[]'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  assert.equal(withSerial.exitCode, 2);
+  assert.match(withSerial.stderr, /carries its own serial numbers/);
+  assert.equal(withReplace.exitCode, 2);
+  assert.match(withReplace.stderr, /--replace cannot be combined with --batch/);
+});
+
+test('view create turns its flags into the body the API reads', async () => {
+  const mock = createMockClient();
+
+  await cli(['view', 'create', '--form', 'Kp7mQ2', '高分', '--type', 'grid',
+    '--columns', 'field_1,field_3', '--sort', 'created_at:desc', '--filter', 'field_3 gte 80'],
+    { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests[0].method, 'POST');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/views');
+  assert.deepEqual(mock.requests[0].body, {
+    view_type: 'grid',
+    prefer_columns: ['field_1', 'field_3'],
+    sort: [{ api_code: 'created_at', order: 'desc' }],
+    filter: [{ field: 'field_3', operator: 'gte', value: '80' }],
+    name: '高分'
+  });
+});
+
+test('a comment is addressed through its entry, and a reply names its parent', async () => {
+  const create = createMockClient();
+  const noEntry = await cli(['comment', 'update', '--form', 'Kp7mQ2', 'c1', '改一下'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  await cli(['comment', 'create', '--form', 'Kp7mQ2', '--entry', '12', '收到', '--reply-to', 'c1'],
+    { env: WRITE_ENV, client: create.client });
+
+  assert.equal(create.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12/comments');
+  assert.deepEqual(create.requests[0].body, { content: '收到', parent_id: 'c1' });
+  assert.equal(noEntry.exitCode, 2);
+  assert.match(noEntry.stderr, /--entry <serial> is required/);
+});
+
+test('form move sends an empty folder when none is named, which is how it leaves one', async () => {
+  const into = createMockClient();
+  const out = createMockClient();
+
+  await cli(['form', 'move', 'Kp7mQ2', '--folder', 'Fd2xK8'], { env: WRITE_ENV, client: into.client });
+  await cli(['form', 'move', 'Kp7mQ2'], { env: WRITE_ENV, client: out.client });
+
+  assert.deepEqual(into.requests[0].body, { folder_token: 'Fd2xK8' });
+  assert.deepEqual(out.requests[0].body, { folder_token: '' });
+});
+
+test('opensearch edit turns a query on or off, but not both', async () => {
+  const off = createMockClient();
+  await cli(['opensearch', 'edit', 'Qy7nR3', '--disable'], { env: WRITE_ENV, client: off.client });
+  const both = await cli(['opensearch', 'edit', 'Qy7nR3', '--enable', '--disable'],
+    { env: WRITE_ENV, client: createMockClient().client });
+
+  assert.deepEqual(off.requests[0].body, { enabled: false });
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /--enable and --disable are opposites/);
+});
