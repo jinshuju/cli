@@ -397,23 +397,33 @@ async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<Cl
 
 async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host, authHost: options.authHost, clientId: options.clientId } });
-  const authenticated = Boolean((config.apiKey && config.apiSecret) || config.auth?.access_token);
-  const mode = config.apiKey && config.apiSecret ? 'api_key_secret' : config.auth?.access_token ? 'oauth' : 'none';
+  const authenticated = Boolean(config.accessToken || (config.apiKey && config.apiSecret) || config.auth?.access_token);
+  const mode = config.accessToken
+    ? 'access_token'
+    : config.apiKey && config.apiSecret
+      ? 'api_key_secret'
+      : config.auth?.access_token
+        ? 'oauth'
+        : 'none';
   const payload = {
     authenticated,
     mode,
     host: config.host,
     auth_host: config.authHost,
     sources: config.sources,
+    source: mode === 'access_token' ? config.sources.accessToken
+      : mode === 'api_key_secret' ? config.sources.apiKey
+        : mode === 'oauth' ? config.sources.auth : 'missing',
     oauth: config.auth ? { client_id: config.auth.client_id, scope: config.auth.scope, expires_at: config.auth.expires_at, has_refresh_token: Boolean(config.auth.refresh_token) } : undefined
   };
   if (options.verify && authenticated) {
     await createClient(options, runtime).request({ method: 'GET', path: '/api/v1/forms' });
   }
   if (options.output === 'json') return ok(json(payload));
+  if (mode === 'access_token') return ok(`Authenticated with an access token (from ${config.sources.accessToken}).`);
   if (mode === 'oauth') return ok('Authenticated with OAuth.');
   if (mode === 'api_key_secret') return ok('Authenticated with API Key / Secret.');
-  return ok('Missing authentication. Run `jinshuju auth login` or configure API Key / Secret.');
+  return ok('Missing authentication. Run `jinshuju auth login`, or set an access token, or configure API Key / Secret.');
 }
 
 async function authRefresh(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
@@ -433,13 +443,19 @@ function configGet(positionals: readonly string[], options: LocalOptions): CliRe
   const requestedKey = positionals[2];
   if (requestedKey) assertConfigKey(requestedKey);
   const config = getConfig(options.configPath);
-  const renderValue = (value: string | undefined) => options.showSecret ? value : maskSecret(value);
+  const secrets = new Set(['access_token', 'api_key', 'api_secret']);
+  const renderValue = (key: string, value: string | undefined) =>
+    options.showSecret || !secrets.has(key) ? value : maskSecret(value);
   let payload: Record<string, string | undefined>;
   if (requestedKey) {
     const configKey = requestedKey as ConfigKey;
-    payload = { [configKey]: renderValue(config[configKey]) };
+    payload = { [configKey]: renderValue(configKey, config[configKey]) };
   } else {
-    payload = { api_key: renderValue(config.api_key), api_secret: renderValue(config.api_secret) };
+    payload = {
+      access_token: renderValue('access_token', config.access_token),
+      api_key: renderValue('api_key', config.api_key),
+      api_secret: renderValue('api_secret', config.api_secret)
+    };
   }
   if (options.output === 'json') return ok(json(payload));
   return ok(Object.entries(payload).map(([k, v]) => `${k}: ${v ?? '(unset)'}`).join('\n'));
