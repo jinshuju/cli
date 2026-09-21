@@ -47,24 +47,48 @@ jinshuju form create --json '{
 }'
 ```
 
-## 创建 entry
+## 读数据
 
-entry payload 使用后端返回 / 生成的字段 `api_code` 作为 key。
+`entry`、`view`、`field`、`comment` 都是一级资源，归属用 `--form` / `--table` 表达
+（两者互斥，都对应 API 的 `form_token`）。
 
 ```bash
-jinshuju form entry create q1234567890 --json '{
+jinshuju entry list --form Kp7mQ2
+jinshuju entry list --table Vn4xR8
+jinshuju entry get 1 --form Kp7mQ2
+jinshuju entry list --form Kp7mQ2 --view aB3dE9
+```
+
+筛选、排序、翻页：
+
+```bash
+jinshuju entry list --form Kp7mQ2 --filter 'field_3 gte 80'
+jinshuju entry list --form Kp7mQ2 --filter 'created_at within_last 30d' --filter 'field_9 not_null'
+jinshuju entry list --form Kp7mQ2 --sort created_at:desc
+jinshuju entry list --form Kp7mQ2 --all
+```
+
+`--filter` 可重复，多个条件为 AND。表达不了的条件用 `--filters <json|@file>`。
+游标是不透明字符串，把上次响应里的 `next` 原样传回即可。
+
+## 创建 entry
+
+payload 的键是字段 `api_code`，不是字段名。`--json` 支持内联、`@文件` 和 `-`（stdin）。
+
+```bash
+jinshuju entry create --form Kp7mQ2 --json '{
   "field_1": "张三",
   "field_2": "13800138000"
 }'
+
+jinshuju entry create --form Kp7mQ2 --json @entry.json
+cat entry.json | jinshuju entry create --form Kp7mQ2 --json -
 ```
 
-## View entry
+## Token 格式
 
-表单 view token 示例统一使用六位字母数字。
-
-```bash
-jinshuju form view entry list q1234567890 aB3dE9
-```
+表单、表格、视图的 token 都是**六位大小写字母加数字**，例如 `Kp7mQ2`、`Vn4xR8`、`aB3dE9`。
+文档和 `--help` 里的示例统一用这个形状。
 
 ## 开发
 

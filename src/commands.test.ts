@@ -76,7 +76,7 @@ test('text output for API commands prints a human-readable response instead of J
     }
   };
 
-  const result = await runCli(['form', 'view', 'entry', 'list', 'BaLZpn', 'Mixqc1', '--output', 'text'], {
+  const result = await runCli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--output', 'text'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client
   });
@@ -96,10 +96,10 @@ test('API command errors are returned as CLI errors instead of uncaught promise 
   assert.match(result.stderr, /Missing authentication/);
 });
 
-test('form entry list forwards API v1 next cursor as pagination query param', async () => {
+test('entry list forwards the cursor back verbatim', async () => {
   const mock = createMockClient();
 
-  const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--next', '51'], {
+  const result = await runCli(['entry', 'list', '--form', 'BaLZpn', '--next', '51'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: mock.client
   });
@@ -109,7 +109,7 @@ test('form entry list forwards API v1 next cursor as pagination query param', as
   assert.equal(mock.requests[0].path, '/api/v1/forms/BaLZpn/entries?next=51');
 });
 
-test('form list and form view entry list also forward API v1 next cursor', async () => {
+test('form list and a view listing also forward the cursor', async () => {
   const formList = createMockClient();
   const viewEntries = createMockClient();
 
@@ -117,7 +117,7 @@ test('form list and form view entry list also forward API v1 next cursor', async
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: formList.client
   });
-  await runCli(['form', 'view', 'entry', 'list', 'BaLZpn', 'Mixqc1', '--next', '51'], {
+  await runCli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--next', '51'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: viewEntries.client
   });
@@ -127,19 +127,20 @@ test('form list and form view entry list also forward API v1 next cursor', async
 });
 
 test('page and per-page options are not exposed as CLI options', async () => {
-  const result = await runCli(['form', 'entry', 'list', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
+  const result = await runCli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: createMockClient().client
   });
 
   assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /Unknown option --per-page/);
+  assert.match(result.stderr, /does not take --per-page/);
 });
 
-test('view help documents six character alphanumeric token', async () => {
-  const result = await runCli(['form', 'view', 'get', '--help']);
+test('view get names its container flags and its token argument', async () => {
+  const result = await runCli(['view', 'get', '--help']);
 
   assert.equal(result.exitCode, 0);
-  assert.match(result.stdout, /Six-character alphanumeric/);
-  assert.match(result.stdout, /aB3dE9/);
+  assert.match(result.stdout, /Usage: jinshuju view get <view>/);
+  assert.match(result.stdout, /--form/);
+  assert.match(result.stdout, /--table/);
 });
