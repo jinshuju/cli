@@ -40,6 +40,15 @@ export const CONTAINER_OPTIONS: readonly OptionSpec[] = [
   { name: '--table', type: 'string', placeholder: '<token>', description: 'Table token, six letters and digits, e.g. Vn4xR8' }
 ];
 
+/**
+ * The same container, repeatable, for the reads that answer about several at
+ * once. Still one kind per call: `--form` and `--table` stay mutually exclusive.
+ */
+export const CONTAINER_LIST_OPTIONS: readonly OptionSpec[] = [
+  { name: '--form', type: 'string', repeatable: true, placeholder: '<token>', description: 'Form token, repeatable, e.g. Kp7mQ2' },
+  { name: '--table', type: 'string', repeatable: true, placeholder: '<token>', description: 'Table token, repeatable, e.g. Vn4xR8' }
+];
+
 export const FILTER_OPTION: OptionSpec = {
   name: '--filter',
   type: 'string',
@@ -179,6 +188,43 @@ export function parseSort(input: string): SortRule {
   return { field, order };
 }
 
+// --- metrics and dimensions ------------------------------------------------
+
+export interface Metric {
+  readonly func: string;
+  readonly field: string;
+}
+
+export interface Dimension {
+  readonly field: string;
+  readonly bucket?: string;
+}
+
+export const TIME_BUCKETS = ['day', 'week', 'month'] as const;
+
+/**
+ * `avg:field_3`. Which functions a field takes is the field's own answer — read
+ * `analytics.agg_funcs` off `form get --include-analytics` — so the function is
+ * passed through rather than checked against a list kept here, the same way an
+ * operator is.
+ */
+export function parseMetric(input: string): Metric {
+  const [func, field] = input.split(':');
+  if (!func || !field) throw new UsageError(`--metric must be '<func>:<field>', got ${JSON.stringify(input)}`);
+  return { func, field };
+}
+
+/** `field_7`, or `created_at:month` for a date. */
+export function parseDimension(input: string): Dimension {
+  const [field, bucket] = input.split(':');
+  if (!field) throw new UsageError(`--by must be '<field>[:${TIME_BUCKETS.join('|')}]', got ${JSON.stringify(input)}`);
+  if (bucket === undefined) return { field };
+  if (!(TIME_BUCKETS as readonly string[]).includes(bucket)) {
+    throw new UsageError(`--by bucket must be ${TIME_BUCKETS.join(', ')}, got ${JSON.stringify(bucket)}`);
+  }
+  return { field, bucket };
+}
+
 // --- json input ------------------------------------------------------------
 
 /** Inline JSON, `@path`, or `-` for stdin. */
@@ -219,4 +265,23 @@ export function resolveContainer(options: Record<string, unknown>): Container {
   if (form) return { token: form, kind: 'form' };
   if (table) return { token: table, kind: 'table' };
   throw new UsageError('one of --form <token> or --table <token> is required');
+}
+
+export interface Containers {
+  readonly tokens: readonly string[];
+  readonly kind: 'form' | 'table';
+}
+
+/** The repeatable form of the above, for a read that answers about several. */
+export function resolveContainers(options: Record<string, unknown>, max: number): Containers {
+  const forms = (options.form as string[] | undefined) ?? [];
+  const tables = (options.table as string[] | undefined) ?? [];
+  if (forms.length > 0 && tables.length > 0) throw new UsageError('--form and --table are mutually exclusive');
+
+  const tokens = forms.length > 0 ? forms : tables;
+  if (tokens.length === 0) throw new UsageError('one of --form <token> or --table <token> is required');
+  if (tokens.length > max) {
+    throw new UsageError(`at most ${max} containers can be asked about in one call, got ${tokens.length}`);
+  }
+  return { tokens, kind: forms.length > 0 ? 'form' : 'table' };
 }
