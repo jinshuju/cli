@@ -54,7 +54,32 @@ type RawArgs = { words: string[]; flags: Record<string, unknown> };
  * Splits the command line before a command is known: `--help` and an unknown
  * command both have to work without one.
  */
-function splitArgs(argv: readonly string[]): RawArgs {
+/** The words before the first flag: enough to find the command, and no more. */
+function leadingWords(argv: readonly string[]): string[] {
+  const words: string[] = [];
+  for (const token of argv) {
+    if (token.startsWith('-') && token !== '-') break;
+    words.push(token);
+  }
+  return words;
+}
+
+/**
+ * Splits the command line, knowing which flags take a value.
+ *
+ * Guessing from the shape of the next token gets two things wrong that a
+ * caller has every right to write: `--json -`, where the value is the very
+ * character that looks like a flag, and `--yes 12`, where a boolean must not
+ * swallow the argument behind it. Both are decided by the option's own type,
+ * so the specs are passed in rather than inferred.
+ */
+function splitArgs(argv: readonly string[], specs: readonly OptionSpec[] = []): RawArgs {
+  const takesValue = new Map<string, boolean>();
+  for (const spec of specs) {
+    takesValue.set(spec.name, spec.type !== 'boolean');
+    if (spec.short) takesValue.set(spec.short, spec.type !== 'boolean');
+  }
+
   const words: string[] = [];
   const flags: Record<string, unknown> = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -71,7 +96,11 @@ function splitArgs(argv: readonly string[]): RawArgs {
     const flag = equals === -1 ? token : token.slice(0, equals);
     const inline = equals === -1 ? undefined : token.slice(equals + 1);
     const next = argv[index + 1];
-    const value = inline ?? (next !== undefined && !next.startsWith('-') ? (index += 1, next) : true);
+    // An unknown flag is assumed to take a value, so it reaches bindOptions
+    // with whatever followed it and is refused by name rather than by shape.
+    const wanted = takesValue.get(flag) ?? true;
+    const consumable = wanted && next !== undefined && (next === '-' || !next.startsWith('-'));
+    const value = inline ?? (consumable ? (index += 1, next) : true);
     const existing = flags[flag];
     flags[flag] = existing === undefined ? value : ([] as unknown[]).concat(existing as never, value as never);
   }
@@ -264,7 +293,12 @@ function formatCell(value: unknown): string {
 }
 
 export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Promise<CliResult> {
-  const { words, flags } = splitArgs(args);
+  // The command has to be found before the line can be split, because only it
+  // says which flags take a value. Its own words come first and hold no flags,
+  // so they are readable without knowing anything.
+  const command = findCommand(leadingWords(args));
+  const specs = [...(command?.options ?? []), ...GLOBAL_OPTIONS, ...LOCAL_OPTIONS];
+  const { words, flags } = splitArgs(args, specs);
   const stdin = runtime.stdin ?? readStdin;
 
   if (flags['--version'] || flags['-V']) return ok(VERSION);
@@ -275,7 +309,6 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
   try {
     if (resource === 'auth' || resource === 'config') return await runLocal(words, flags, runtime, stdin);
 
-    const command = findCommand(words);
     if (!command) return { exitCode: 1, stdout: '', stderr: unknownCommandHelp(words) };
 
     return await runRemote(command, words, flags, runtime, stdin);
