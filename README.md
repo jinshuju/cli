@@ -79,8 +79,11 @@ jinshuju entry list --form Kp7mQ2 --view aB3dE9
 jinshuju entry list --form Kp7mQ2 --filter 'field_3 gte 80'
 jinshuju entry list --form Kp7mQ2 --filter 'created_at within_last 30d' --filter 'field_9 not_null'
 jinshuju entry list --form Kp7mQ2 --sort created_at:desc
+jinshuju entry list --form Kp7mQ2 --limit 10
 jinshuju entry list --form Kp7mQ2 --all
 ```
+
+`--limit`只能往小了要：列表的默认页大小同时也是上限（多数是 50），超了按上限算。
 
 `--filter` 可重复，多个条件为 AND。表达不了的条件用 `--filters <json|@file>`。
 游标是不透明字符串，把上次响应里的 `next` 原样传回即可。
