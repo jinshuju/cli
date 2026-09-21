@@ -1,8 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runCli } from './cli.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { runCli, type CliRuntime } from './cli.js';
 import type { HttpRequest } from './http.js';
+
+/**
+ * A path with no file behind it, so a test never reads the config of whoever is
+ * running it. Without this the suite passes or fails by what is in the
+ * developer's ~/.jinshuju/config.json, and CI — which has none — would never
+ * show it.
+ */
+const NO_CONFIG = join(mkdtempSync(join(tmpdir(), 'jsj-test-')), 'config.json');
+
+function cli(args: string[], runtime: CliRuntime = {}) {
+  return runCli([...args, '--config', NO_CONFIG], runtime);
+}
 
 function createMockClient() {
   const requests: HttpRequest[] = [];
@@ -18,7 +34,7 @@ function createMockClient() {
 }
 
 test('auth status reports configured credentials and supports API key mode', async () => {
-  const result = await runCli(['auth', 'status', '--output', 'json'], {
+  const result = await cli(['auth', 'status', '--output', 'json'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }
   });
 
@@ -39,7 +55,7 @@ test('form create posts API v1 payload without injecting api_code', async () => 
     ]
   };
 
-  const result = await runCli(['form', 'create', '--json', JSON.stringify(payload), '--output', 'json'], {
+  const result = await cli(['form', 'create', '--json', JSON.stringify(payload), '--output', 'json'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: mock.client
   });
@@ -53,7 +69,7 @@ test('form create posts API v1 payload without injecting api_code', async () => 
 
 test('form create rejects non API v1 field type', async () => {
   const payload = { name: '活动报名表', fields: [{ type: 'text', label: '姓名' }] };
-  const result = await runCli(['form', 'create', '--json', JSON.stringify(payload)], {
+  const result = await cli(['form', 'create', '--json', JSON.stringify(payload)], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: createMockClient().client
   });
@@ -76,7 +92,7 @@ test('text output for API commands prints a human-readable response instead of J
     }
   };
 
-  const result = await runCli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--output', 'text'], {
+  const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--output', 'text'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client
   });
@@ -90,7 +106,7 @@ test('text output for API commands prints a human-readable response instead of J
 });
 
 test('API command errors are returned as CLI errors instead of uncaught promise rejections', async () => {
-  const result = await runCli(['form', 'list'], { env: {} });
+  const result = await cli(['form', 'list'], { env: {} });
 
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /Missing authentication/);
@@ -99,7 +115,7 @@ test('API command errors are returned as CLI errors instead of uncaught promise 
 test('entry list forwards the cursor back verbatim', async () => {
   const mock = createMockClient();
 
-  const result = await runCli(['entry', 'list', '--form', 'BaLZpn', '--next', '51'], {
+  const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--next', '51'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: mock.client
   });
@@ -113,11 +129,11 @@ test('form list and a view listing also forward the cursor', async () => {
   const formList = createMockClient();
   const viewEntries = createMockClient();
 
-  await runCli(['form', 'list', '--next', '60cc514761936ced06123456'], {
+  await cli(['form', 'list', '--next', '60cc514761936ced06123456'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: formList.client
   });
-  await runCli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--next', '51'], {
+  await cli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--next', '51'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: viewEntries.client
   });
@@ -127,7 +143,7 @@ test('form list and a view listing also forward the cursor', async () => {
 });
 
 test('page and per-page options are not exposed as CLI options', async () => {
-  const result = await runCli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
+  const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
     client: createMockClient().client
   });
@@ -137,7 +153,7 @@ test('page and per-page options are not exposed as CLI options', async () => {
 });
 
 test('view get names its container flags and its token argument', async () => {
-  const result = await runCli(['view', 'get', '--help']);
+  const result = await cli(['view', 'get', '--help']);
 
   assert.equal(result.exitCode, 0);
   assert.match(result.stdout, /Usage: jinshuju view get <view>/);
@@ -154,12 +170,12 @@ test('an access token is sent as a bearer, and outranks the other credentials', 
   const original = globalThis.fetch;
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   try {
-    await runCli(['form', 'list'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
+    await cli(['form', 'list'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
     // A stored API key must not win over a token the caller set for this run.
-    await runCli(['form', 'list'], {
+    await cli(['form', 'list'], {
       env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc', JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }
     });
-    await runCli(['form', 'list'], { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' } });
+    await cli(['form', 'list'], { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' } });
   } finally {
     globalThis.fetch = original;
   }
@@ -168,7 +184,7 @@ test('an access token is sent as a bearer, and outranks the other credentials', 
 });
 
 test('auth status names the access token and where it came from', async () => {
-  const result = await runCli(['auth', 'status', '--output', 'json'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
+  const result = await cli(['auth', 'status', '--output', 'json'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
 
   const body = JSON.parse(result.stdout);
   assert.equal(body.authenticated, true);
