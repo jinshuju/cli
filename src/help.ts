@@ -48,7 +48,10 @@ export function commandHelp(command: Command): string {
   const usage = [
     'Usage: jinshuju',
     ...command.path,
-    ...(command.args ?? []).map((arg) => (arg.required ? `<${arg.name}>` : `[${arg.name}]`)),
+    ...(command.args ?? []).map((arg) => {
+      const name = arg.required ? `<${arg.name}>` : `[${arg.name}]`;
+      return arg.variadic ? `${name}...` : name;
+    }),
     '[flags]'
   ].join(' ');
 
