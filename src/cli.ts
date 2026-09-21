@@ -4,6 +4,7 @@ import {
   assertConfigKey, defaultConfigPath, getConfig, loadConfig, maskSecret, setConfigValue, unsetConfigValue, type ConfigKey
 } from './config.js';
 import { loginWithOAuth, refreshOAuthToken, revokeOAuthToken } from './auth.js';
+import { progress, type Progress } from './progress.js';
 import { COMMANDS, findCommand, type Command, type QueryValues } from './commands.js';
 import { commandHelp, helpFor, rootHelp, unknownCommandHelp } from './help.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
@@ -314,7 +315,7 @@ async function runRemote(
   if (!request) throw new UsageError(`${label} is not available yet`);
 
   if (options.all && command.paginate) {
-    const rows = await readAllPages(client, request, command.paginate);
+    const rows = await readAllPages(client, request, command.paginate, progress());
     const payload = { count: rows.length, data: rows };
     return ok(output === 'json' ? json(payload) : text(payload));
   }
@@ -330,18 +331,23 @@ async function runRemote(
 async function readAllPages(
   client: HttpClient,
   request: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; query?: QueryValues; body?: unknown },
-  paginate: { items: string; cursor: string }
+  paginate: { items: string; cursor: string },
+  watching: Progress = { step: () => {}, done: () => {} }
 ): Promise<unknown[]> {
   const rows: unknown[] = [];
   let cursor: string | undefined;
+  let page = 0;
   for (;;) {
     const query = { ...request.query, ...(cursor ? { next: cursor } : {}) };
     const body = await client.request<Record<string, unknown>>({ method: request.method, path: withQuery(request.path, query), body: request.body });
     rows.push(...((body?.[paginate.items] as unknown[] | undefined) ?? []));
+    page += 1;
+    watching.step(`read ${page} page${page === 1 ? '' : 's'}, ${rows.length} rows…`);
     const next = body?.[paginate.cursor];
     if (next === undefined || next === null || next === '') break;
     cursor = String(next);
   }
+  watching.done();
   return rows;
 }
 

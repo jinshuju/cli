@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import { validateCreateFormPayload } from './payload.js';
+import { progress } from './progress.js';
 import type { HttpClient } from './http.js';
 
 /**
@@ -323,10 +324,16 @@ function themeBody(input: CommandInput): Record<string, unknown> {
 }
 
 async function uploadImage(client: HttpClient, file: string, imageType: string): Promise<string> {
+  const watching = progress();
+  watching.step(`uploading ${basename(file)}…`);
+  try {
   const uploaded = await client.request<{ attachment_id: string }>(
     upload(`${API}/form_image_attachments`, file, { image_type: imageType })
   );
   return uploaded.attachment_id;
+  } finally {
+    watching.done();
+  }
 }
 
 /** The scenes a form can be created for, as the API names them. */
@@ -915,6 +922,41 @@ function parseAttachment(input: string): { field: string; dimension?: string; fi
   return dimension === undefined ? { field, file } : { field, dimension, file };
 }
 
+interface ImportJob {
+  readonly job_id: string;
+  readonly status: string;
+  readonly total_rows?: number | null;
+  readonly processed_rows?: number | null;
+  readonly error_message?: string | null;
+}
+
+/** The states an import stops in; the rest mean it is still going. */
+const IMPORT_SETTLED = new Set(['success', 'failed', 'cancelled']);
+const IMPORT_POLL_MS = 1000;
+
+/**
+ * Waits for the rows to be written. A failed import exits non-zero, because
+ * the alternative — answering 0 for an import that wrote nothing — is how a
+ * caller comes to believe data is there when it is not.
+ */
+async function awaitImport(client: HttpClient, token: string, jobId: string, watching: { step(m: string): void }): Promise<ImportJob> {
+  for (;;) {
+    const job = await client.request<ImportJob>({
+      method: 'GET', path: `${API}/forms/${token}/entry_imports/${jobId}`
+    });
+    if (IMPORT_SETTLED.has(job.status)) {
+      if (job.status !== 'success') {
+        throw new Error(`import ${job.status}${job.error_message ? `: ${job.error_message}` : ''}`);
+      }
+      return job;
+    }
+    const seen = job.processed_rows ?? 0;
+    const total = job.total_rows;
+    watching.step(`importing ${seen}${total ? `/${total}` : ''} rows…`);
+    await new Promise((resolve) => setTimeout(resolve, IMPORT_POLL_MS));
+  }
+}
+
 const BATCH_OPTION: OptionSpec = {
   name: '--batch', type: 'json', placeholder: '<json|@file|->', description: 'Several rows in one request'
 };
@@ -1201,7 +1243,10 @@ const ENTRY: readonly Command[] = [
       const container = containerPath(input);
       const { token } = resolveContainer(input.options);
       const body = { ...((input.options.json as Record<string, unknown> | undefined) ?? {}) };
+      const watching = progress();
+      try {
       for (const { field, dimension, file } of attached) {
+        watching.step(`uploading ${basename(file)}…`);
         const uploaded = await client.request<{ id: string }>(
           upload(`${API}/forms/${token}/entry_attachments`, file,
             dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension })
@@ -1212,7 +1257,10 @@ const ENTRY: readonly Command[] = [
         const existing = body[key];
         body[key] = Array.isArray(existing) ? [...existing, uploaded.id] : [uploaded.id];
       }
-      return client.request({ method: 'POST', path: `${container}/entries`, body });
+      return await client.request({ method: 'POST', path: `${container}/entries`, body });
+      } finally {
+        watching.done();
+      }
     },
     examples: [
       'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
@@ -1264,31 +1312,58 @@ const ENTRY: readonly Command[] = [
       ...CONTAINER_OPTIONS,
       { name: '--map', type: 'string', repeatable: true, placeholder: '<api-code>=<column>', description: 'Which column feeds which field. A number is a column index, anything else a header label' },
       { name: '--header-row', type: 'integer', placeholder: '<n>', description: 'Which row holds the headers, when it is not the first' },
-      { name: '--unique', type: 'string', placeholder: '<api-code>', description: 'Treat this field as the key: a row matching an existing one updates it' }
+      { name: '--unique', type: 'string', placeholder: '<api-code>', description: 'Treat this field as the key: a row matching an existing one updates it' },
+      { name: '--wait', type: 'boolean', description: 'Wait for the rows to be written and report what the import did, failing if it failed' }
     ],
     run: async (input, client) => {
       const { token } = resolveContainer(input.options);
       const mappings = (input.options.map as string[] | undefined) ?? [];
       if (mappings.length === 0) throw new UsageError('--map <api-code>=<column> is required, at least once');
 
-      const uploaded = await client.request<{ id: string }>(
-        upload(`${API}/forms/${token}/import_files`, input.args.file as string)
-      );
-      return client.request({
-        method: 'POST',
-        path: `${API}/forms/${token}/entry_imports`,
-        body: given({
-          attachment_id: uploaded.id,
-          columns: mappings.map(parseColumnMapping),
-          header_row_index: input.options.header_row,
-          unique_field_code: input.options.unique
-        })
-      });
+      const watching = progress();
+      try {
+        watching.step(`uploading ${basename(input.args.file as string)}…`);
+        const uploaded = await client.request<{ id: string }>(
+          upload(`${API}/forms/${token}/import_files`, input.args.file as string)
+        );
+
+        watching.step('starting the import…');
+        const started = await client.request<ImportJob>({
+          method: 'POST',
+          path: `${API}/forms/${token}/entry_imports`,
+          body: given({
+            attachment_id: uploaded.id,
+            columns: mappings.map(parseColumnMapping),
+            header_row_index: input.options.header_row,
+            unique_field_code: input.options.unique
+          })
+        });
+        if (!input.options.wait) return started;
+
+        return await awaitImport(client, token, started.job_id, watching);
+      } finally {
+        watching.done();
+      }
     },
     examples: [
       'jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --map field_2=手机号',
+      'jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --wait',
       'jinshuju entry import --table Vn4xR8 ./rows.csv --map field_1=1 --map field_2=2 --header-row 2'
     ]
+  },
+  {
+    path: ['entry', 'import-status'],
+    summary: 'Show what an import did, or how far it has got',
+    description:
+      'The id `entry import` answered with. A finished import reports how many rows it wrote, ' +
+      'skipped and rejected; one still running reports how far it has got.',
+    args: [{ name: 'job', required: true, description: 'Job id from `entry import`' }],
+    options: [...CONTAINER_OPTIONS],
+    request: (input) => {
+      const { token } = resolveContainer(input.options);
+      return { method: 'GET', path: `${API}/forms/${token}/entry_imports/${input.args.job}` };
+    },
+    examples: ['jinshuju entry import-status --form Kp7mQ2 6ab12edb3134316548d106a9']
   },
   {
     path: ['entry', 'delete'],
