@@ -302,6 +302,14 @@ async function runRemote(
     cli: { apiKey: options.api_key as string | undefined, apiSecret: options.api_secret as string | undefined, host: options.host as string | undefined }
   }));
 
+  // A command that needs more than one round trip handles itself. Answering
+  // undefined means "this call is the ordinary one", so `entry create` only
+  // takes the long way when a file is actually attached.
+  if (command.run) {
+    const payload = await command.run(input, client);
+    if (payload !== undefined) return ok(output === 'json' ? json(payload) : text(payload));
+  }
+
   const request = command.request?.(input);
   if (!request) throw new UsageError(`${label} is not available yet`);
 

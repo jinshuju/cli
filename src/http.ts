@@ -7,6 +7,11 @@ export type HttpRequest = {
   method: HttpMethod | string;
   path: string;
   body?: unknown;
+  /**
+   * A multipart body, for the three endpoints that take a file. fetch sets its
+   * own Content-Type here, boundary included, so the JSON one must not be sent.
+   */
+  form?: FormData;
 };
 
 export interface HttpClient {
@@ -24,14 +29,16 @@ export class JinshujuHttpClient implements HttpClient {
   }
 
   private async requestWithAuth<T>(request: HttpRequest, allowRefresh: boolean): Promise<T> {
+    const headers: Record<string, string> = {
+      Authorization: await this.authorizationHeader(),
+      Accept: 'application/json'
+    };
+    if (!request.form) headers['Content-Type'] = 'application/json';
+
     const response = await fetch(`${this.baseUrl}${request.path}`, {
       method: request.method,
-      headers: {
-        Authorization: await this.authorizationHeader(),
-        Accept: 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: request.body === undefined ? undefined : JSON.stringify(request.body)
+      headers,
+      body: request.form ?? (request.body === undefined ? undefined : JSON.stringify(request.body))
     });
 
     // Only an OAuth session can be refreshed; an access token that stopped

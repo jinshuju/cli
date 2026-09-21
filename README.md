@@ -188,6 +188,22 @@ jinshuju entry search 某某公司 --mine           # 我提交过的数据里�
 范围钉死在自己的提交上，读不到别人的，也不需要对那张表单有任何权限。
 只在 owner 视角成立的 flag（`--sort` / `--view` / `--scope-filter` 等）跟 `--mine` 一起给会被拒绝。
 
+## 传文件
+
+三条要传文件的命令。CLI 直接用自己的凭证上传，不需要先去换一张票据。
+
+```bash
+jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --map field_2=手机号
+jinshuju entry import --table Vn4xR8 ./rows.csv --map field_1=1 --map field_2=2 --header-row 2 --unique field_1
+
+jinshuju entry create --form Kp7mQ2 --json '{"field_1":"张三"}' --attach field_5=./身份证.jpg
+jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
+```
+
+`--map` 左边是字段 api_code，右边是**列名或列序号**（纯数字按序号）。
+导入前该查的都会先查——文件、套餐允许的大小、表头行、列映射——所以被拒的导入一行都没写，
+报错里还会带上表格真实的列布局。通过之后行是后台写的：命令返回代表**已启动**，不代表已完成。
+
 ## 删字段之前
 
 ```bash

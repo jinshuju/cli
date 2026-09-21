@@ -591,3 +591,86 @@ test('--mine refuses the flags that only make sense on the owner side', async ()
   assert.equal(scoped.exitCode, 2);
   assert.match(scoped.stderr, /--scope-filter cannot be combined with --mine/);
 });
+
+function uploadingClient(responses: Record<string, unknown>) {
+  const requests: HttpRequest[] = [];
+  return {
+    requests,
+    client: {
+      async request<T>(request: HttpRequest): Promise<T> {
+        requests.push(request);
+        const key = Object.keys(responses).find((path) => request.path.startsWith(path));
+        return (key ? responses[key] : { ok: true }) as T;
+      }
+    }
+  };
+}
+
+test('entry import sends the file, then the mapping that refers to it', async () => {
+  const mock = uploadingClient({ '/api/v1/forms/Kp7mQ2/import_files': { id: 'att_1' } });
+
+  const result = await cli(
+    ['entry', 'import', '--form', 'Kp7mQ2', 'package.json', '--map', 'field_1=姓名', '--map', 'field_2=3', '--header-row', '2'],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/import_files');
+  assert.ok(mock.requests[0].form instanceof FormData);
+  assert.deepEqual(mock.requests[1].body, {
+    attachment_id: 'att_1',
+    columns: [{ field_api_code: 'field_1', column_label: '姓名' },
+              { field_api_code: 'field_2', sheet_column_index: 3 }],
+    header_row_index: 2,
+    unique_field_code: undefined
+  });
+});
+
+test('entry import needs a mapping, and names a file it cannot read', async () => {
+  const noMap = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json'],
+    { env: WRITE_ENV, client: uploadingClient({}).client });
+  const missing = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'nosuch.xlsx', '--map', 'field_1=A'],
+    { env: WRITE_ENV, client: uploadingClient({}).client });
+
+  assert.equal(noMap.exitCode, 2);
+  assert.match(noMap.stderr, /--map <api-code>=<column> is required/);
+  assert.equal(missing.exitCode, 2);
+  assert.match(missing.stderr, /could not read nosuch.xlsx/);
+});
+
+test('entry create uploads each --attach and fills the field with what came back', async () => {
+  const mock = uploadingClient({ '/api/v1/forms/Kp7mQ2/entry_attachments': { id: 'file_1' } });
+
+  await cli(['entry', 'create', '--form', 'Kp7mQ2', '--json', '{"field_1":"张三"}', '--attach', 'field_5=package.json'],
+    { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entry_attachments');
+  assert.deepEqual(mock.requests[1].body, { field_1: '张三', field_5: ['file_1'] });
+});
+
+test('entry create without --attach is still one request', async () => {
+  const mock = uploadingClient({});
+
+  await cli(['entry', 'create', '--form', 'Kp7mQ2', '--json', '{"field_1":"张三"}'],
+    { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests.length, 1);
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entries');
+});
+
+test('form theme set uploads an image and hands the theme its id', async () => {
+  const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'img_1' } });
+
+  await cli(['form', 'theme', 'set', 'Kp7mQ2', '--wallpaper', 'package.json', '--primary-color', '#1F6FEB'],
+    { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].path, '/api/v1/form_image_attachments');
+  assert.deepEqual(mock.requests[1].body, {
+    primary_color: '#1F6FEB',
+    secondary_color: undefined,
+    wallpaper: { background_image_attachment_id: 'img_1' }
+  });
+});
