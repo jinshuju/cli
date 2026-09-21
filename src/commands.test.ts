@@ -144,3 +144,59 @@ test('view get names its container flags and its token argument', async () => {
   assert.match(result.stdout, /--form/);
   assert.match(result.stdout, /--table/);
 });
+
+test('an access token is sent as a bearer, and outranks the other credentials', async () => {
+  const seen: (string | undefined)[] = [];
+  const fetchMock = async (_url: unknown, init: { headers: Record<string, string> }) => {
+    seen.push(init.headers.Authorization);
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const original = globalThis.fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  try {
+    await runCli(['form', 'list'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
+    // A stored API key must not win over a token the caller set for this run.
+    await runCli(['form', 'list'], {
+      env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc', JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }
+    });
+    await runCli(['form', 'list'], { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' } });
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  assert.deepEqual(seen, ['Bearer tok_abc', 'Bearer tok_abc', `Basic ${Buffer.from('key:secret').toString('base64')}`]);
+});
+
+test('auth status names the access token and where it came from', async () => {
+  const result = await runCli(['auth', 'status', '--output', 'json'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
+
+  const body = JSON.parse(result.stdout);
+  assert.equal(body.authenticated, true);
+  assert.equal(body.mode, 'access_token');
+  assert.equal(body.source, 'env');
+});
+
+test('an access token is masked like the other secrets', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
+  writeFileSync(path, JSON.stringify({ access_token: 'tok_abcdefghijkl' }));
+
+  const masked = await runCli(['config', 'get', '--config', path, '--output', 'json'], { env: {} });
+  assert.equal(JSON.parse(masked.stdout).access_token, 'tok_…ijkl');
+
+  const shown = await runCli(['config', 'get', '--config', path, '--show-secret', '--output', 'json'], { env: {} });
+  assert.equal(JSON.parse(shown.stdout).access_token, 'tok_abcdefghijkl');
+});
+
+test('config set accepts access_token', async () => {
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
+
+  const result = await runCli(['config', 'set', 'access_token', 'tok_xyz', '--config', path], { env: {} });
+  assert.equal(result.exitCode, 0);
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).access_token, 'tok_xyz');
+});

@@ -34,7 +34,9 @@ export class JinshujuHttpClient implements HttpClient {
       body: request.body === undefined ? undefined : JSON.stringify(request.body)
     });
 
-    if (response.status === 401 && allowRefresh && this.config.auth?.refresh_token) {
+    // Only an OAuth session can be refreshed; an access token that stopped
+    // working has to be replaced by whoever issued it.
+    if (response.status === 401 && allowRefresh && !this.config.accessToken && this.config.auth?.refresh_token) {
       this.config.auth = await refreshOAuthToken(this.config);
       return this.requestWithAuth<T>(request, false);
     }
@@ -49,7 +51,15 @@ export class JinshujuHttpClient implements HttpClient {
     return body as T;
   }
 
+  /**
+   * An explicitly configured credential outranks a stored session: someone who
+   * set a token in the environment meant this request to use it, and finding a
+   * login from last week used instead would be a surprise with no signal.
+   * `auth status` says which one is in play and where it came from.
+   */
   private async authorizationHeader(): Promise<string> {
+    if (this.config.accessToken) return `Bearer ${this.config.accessToken}`;
+
     if (this.config.apiKey && this.config.apiSecret) {
       const credentials = Buffer.from(`${this.config.apiKey}:${this.config.apiSecret}`).toString('base64');
       return `Basic ${credentials}`;
@@ -62,6 +72,6 @@ export class JinshujuHttpClient implements HttpClient {
       return `Bearer ${this.config.auth.access_token}`;
     }
 
-    throw new Error('Missing authentication. Run `jinshuju auth login` or configure JINSHUJU_API_KEY and JINSHUJU_API_SECRET.');
+    throw new Error('Missing authentication. Run `jinshuju auth login`, or configure JINSHUJU_ACCESS_TOKEN, or JINSHUJU_API_KEY with JINSHUJU_API_SECRET.');
   }
 }

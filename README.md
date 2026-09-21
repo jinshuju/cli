@@ -17,21 +17,35 @@ jsj --help
 
 ## 认证
 
-第一版只支持 API Key / API Secret。
+支持三种凭证：访问令牌（Personal / Account Access Token）、API Key + Secret、浏览器登录。
+
+写入配置文件（`~/.jinshuju/config.json`，权限 600）：
 
 ```bash
+jinshuju config set access_token xxx     # 访问令牌
+jinshuju config set api_key xxx          # 或 API Key / Secret
+jinshuju config set api_secret xxx
+```
+
+也可以用环境变量，适合 CI 和脚本：
+
+```bash
+export JINSHUJU_ACCESS_TOKEN=xxx
+# 或
 export JINSHUJU_API_KEY=xxx
 export JINSHUJU_API_SECRET=xxx
 ```
 
-或写入配置文件：
+三种凭证的**优先级**：访问令牌 > API Key / Secret > 浏览器登录（`jinshuju auth login`）。
+显式配置的凭证压过存下来的登录态——设了令牌却用上周的登录，是不该发生的意外。
+当前用的是哪个、从哪来，看 `jinshuju auth status`：
 
-```bash
-jinshuju config set api_key xxx
-jinshuju config set api_secret xxx
+```
+$ jinshuju auth status
+Authenticated with an access token (from env).
 ```
 
-`login` / `logout` 不属于第一版 API Key / Secret 模式，后续 Web OAuth 再支持。
+访问令牌在 `config get` 里和其他密钥一样默认打码，`--show-secret` 才完整显示。
 
 ## 创建表单
 
