@@ -1,6 +1,7 @@
 import {
-  CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION, PAGINATION_OPTIONS, SORT_OPTION,
-  UsageError, parseFilter, parseSort, resolveContainer, type FilterCondition, type OptionSpec, type SortRule
+  CONTAINER_LIST_OPTIONS, CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION,
+  PAGINATION_OPTIONS, SORT_OPTION, TIME_BUCKETS, UsageError, parseDimension, parseFilter, parseMetric, parseSort,
+  resolveContainer, resolveContainers, type FilterCondition, type OptionSpec, type SortRule
 } from './options.js';
 import { validateCreateFormPayload } from './payload.js';
 
@@ -119,6 +120,9 @@ function list(value: unknown): string | undefined {
 }
 
 const LISTING: Pagination = { items: 'data', cursor: 'next' };
+
+/** What the batch count endpoint accepts, and what the design document states. */
+const MAX_COUNTED_CONTAINERS = 10;
 
 /**
  * A form's fields arrive as one object per field, keyed by api_code. A list of
@@ -303,6 +307,91 @@ const ENTRY: readonly Command[] = [
       'jinshuju entry list --form Kp7mQ2',
       "jinshuju entry list --form Kp7mQ2 --filter 'field_3 gte 80' --sort created_at:desc",
       'jinshuju entry list --form Kp7mQ2 --all'
+    ]
+  },
+  {
+    path: ['entry', 'count'],
+    summary: 'Count the entries matching a filter',
+    description:
+      'The container is repeatable, up to 10. Counting several at once answers one row each plus the ' +
+      'sum, and takes no --keyword; a filter then has to name created_at, updated_at or creator_id, ' +
+      'because an api_code is a different field on every form.',
+    options: [
+      ...CONTAINER_LIST_OPTIONS,
+      { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
+      FILTER_OPTION, FILTERS_OPTION
+    ],
+    request: (input) => {
+      const { tokens, kind } = resolveContainers(input.options, MAX_COUNTED_CONTAINERS);
+      const query = { filters: filters(input), keyword: input.options.keyword as string | undefined };
+      if (tokens.length === 1) {
+        return { method: 'GET', path: `${API}/${kind === 'table' ? 'tables' : 'forms'}/${tokens[0]}/entries/count`, query };
+      }
+      return { method: 'GET', path: `${API}/entries/count`, query: { ...query, form_tokens: tokens.join(',') } };
+    },
+    examples: [
+      "jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'",
+      'jinshuju entry count --form Kp7mQ2 --form Vn4xR8 --form aB3dE9'
+    ]
+  },
+  {
+    path: ['entry', 'aggregate'],
+    summary: 'Compute statistics over the entries matching a filter',
+    description:
+      'The response is as big as the metrics and groups asked for, never as big as the data. Which ' +
+      'functions a field takes is the field\'s own answer: read analytics.agg_funcs from `form get`.',
+    options: [
+      ...CONTAINER_OPTIONS,
+      { name: '--metric', type: 'string', repeatable: true, placeholder: '<func>:<field>', description: 'Statistic to compute, repeatable, 1 to 20. e.g. avg:field_3' },
+      { name: '--by', type: 'string', repeatable: true, placeholder: `<field>[:${TIME_BUCKETS.join('|')}]`, description: 'Group by this field, repeatable, at most 2. A date field needs a bucket' },
+      { name: '--limit', type: 'integer', placeholder: '<n>', description: 'How many groups, ranked by the first metric (default 20, max 200)' },
+      FILTER_OPTION, FILTERS_OPTION
+    ],
+    request: (input) => {
+      const metrics = (input.options.metric as string[] | undefined) ?? [];
+      if (metrics.length === 0) throw new UsageError('--metric <func>:<field> is required, up to 20');
+      const dimensions = (input.options.by as string[] | undefined) ?? [];
+      return {
+        method: 'GET',
+        path: `${containerPath(input)}/entries/aggregate`,
+        query: {
+          metrics: JSON.stringify(metrics.map(parseMetric)),
+          dimensions: dimensions.length > 0 ? JSON.stringify(dimensions.map(parseDimension)) : undefined,
+          limit: input.options.limit === undefined ? undefined : String(input.options.limit),
+          filters: filters(input)
+        }
+      };
+    },
+    examples: [
+      'jinshuju entry aggregate --form Kp7mQ2 --metric avg:field_3',
+      'jinshuju entry aggregate --form Kp7mQ2 --metric count:field_1 --by created_at:month',
+      "jinshuju entry aggregate --form Kp7mQ2 --metric sum:field_5 --by field_7 --limit 5 --filter 'created_at within_last 30d'"
+    ]
+  },
+  {
+    path: ['entry', 'summary'],
+    summary: 'Profile every analysable field at once',
+    description:
+      'One pass over the data describing each field in its own terms: choices by share, numbers by ' +
+      'spread, dates by range. Submission metadata is left out — it describes the submitting, not the answer.',
+    options: [
+      ...CONTAINER_OPTIONS,
+      { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Profile only these fields, at most 60' },
+      { name: '--no-overview', type: 'boolean', description: 'Leave out the form-level totals' },
+      FILTER_OPTION, FILTERS_OPTION
+    ],
+    request: (input) => ({
+      method: 'GET',
+      path: `${containerPath(input)}/entries/summary`,
+      query: {
+        fields: list(input.options.fields),
+        include_overview: input.options.no_overview ? 'false' : undefined,
+        filters: filters(input)
+      }
+    }),
+    examples: [
+      'jinshuju entry summary --form Kp7mQ2',
+      'jinshuju entry summary --form Kp7mQ2 --fields field_3,field_7 --no-overview'
     ]
   },
   {

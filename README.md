@@ -88,6 +88,26 @@ jinshuju entry list --form Kp7mQ2 --all
 `--filter` 可重复，多个条件为 AND。表达不了的条件用 `--filters <json|@file>`。
 游标是不透明字符串，把上次响应里的 `next` 原样传回即可。
 
+## 数据分析
+
+不用把数据拉回来自己算——计数、聚合、画像都在服务端做，返回体的大小只取决于问了几个指标、分了几组。
+
+```bash
+jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'
+jinshuju entry count --form Kp7mQ2 --form Vn4xR8            # 容器可重复，最多 10 个
+
+jinshuju entry aggregate --form Kp7mQ2 --metric avg:field_3
+jinshuju entry aggregate --form Kp7mQ2 --metric count:field_1 --by created_at:month --limit 12
+
+jinshuju entry summary --form Kp7mQ2
+jinshuju entry summary --form Kp7mQ2 --fields field_3,field_7 --no-overview
+```
+
+`--metric <func>:<field>` 可重复，1–20 个；`--by <field>[:day|week|month]` 最多 2 个，日期维度必须带分桶。
+某个字段支持哪些函数是字段自己说的，看 `form get` 里的 `analytics.agg_funcs`。
+多容器计数不接受 `--keyword`，`--filter` 只能用 `created_at` / `updated_at` / `creator_id`——
+一个 api_code 在每张表上都是不同的字段，跨表比较没有意义。
+
 ## 创建 entry
 
 payload 的键是字段 `api_code`，不是字段名。`--json` 支持内联、`@文件` 和 `-`（stdin）。

@@ -231,3 +231,68 @@ test('config set accepts access_token', async () => {
   assert.equal(result.exitCode, 0);
   assert.equal(JSON.parse(readFileSync(path, 'utf8')).access_token, 'tok_xyz');
 });
+
+test('entry count takes one container, or several through the batch endpoint', async () => {
+  const one = createMockClient();
+  const many = createMockClient();
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  await cli(['entry', 'count', '--table', 'Vn4xR8', '--keyword', '张三'], { env, client: one.client });
+  await cli(['entry', 'count', '--form', 'Kp7mQ2', '--form', 'aB3dE9'], { env, client: many.client });
+
+  assert.equal(one.requests[0].path, '/api/v1/tables/Vn4xR8/entries/count?keyword=%E5%BC%A0%E4%B8%89');
+  assert.equal(many.requests[0].path, '/api/v1/entries/count?form_tokens=Kp7mQ2%2CaB3dE9');
+});
+
+test('entry count refuses more containers than the endpoint accepts', async () => {
+  const tokens = Array.from({ length: 11 }, (_, index) => ['--form', `Kp7mQ${index}`]).flat();
+  const result = await cli(['entry', 'count', ...tokens], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: createMockClient().client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /at most 10 containers/);
+});
+
+test('entry aggregate turns --metric and --by into the JSON the API reads', async () => {
+  const mock = createMockClient();
+
+  const result = await cli(
+    ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'avg:field_3', '--metric', 'sum:field_5',
+     '--by', 'field_7', '--by', 'created_at:month', '--limit', '5'],
+    { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const query = new URL(mock.requests[0].path, 'https://x').searchParams;
+  assert.equal(query.get('metrics'), '[{"func":"avg","field":"field_3"},{"func":"sum","field":"field_5"}]');
+  assert.equal(query.get('dimensions'), '[{"field":"field_7"},{"field":"created_at","bucket":"month"}]');
+  assert.equal(query.get('limit'), '5');
+});
+
+test('entry aggregate needs a metric, and names the buckets a dimension may take', async () => {
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const noMetric = await cli(['entry', 'aggregate', '--form', 'Kp7mQ2'], { env, client: createMockClient().client });
+  const badBucket = await cli(
+    ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'avg:field_3', '--by', 'created_at:quarter'],
+    { env, client: createMockClient().client }
+  );
+
+  assert.equal(noMetric.exitCode, 2);
+  assert.match(noMetric.stderr, /--metric <func>:<field> is required/);
+  assert.equal(badBucket.exitCode, 2);
+  assert.match(badBucket.stderr, /bucket must be day, week, month/);
+});
+
+test('entry summary asks for named fields and can drop the overview', async () => {
+  const mock = createMockClient();
+
+  await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--fields', 'field_3,field_7', '--no-overview'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0].path,
+    '/api/v1/forms/Kp7mQ2/entries/summary?fields=field_3%2Cfield_7&include_overview=false');
+});
