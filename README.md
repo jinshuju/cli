@@ -210,9 +210,24 @@ jinshuju entry create --form Kp7mQ2 --json '{"field_1":"张三"}' --attach field
 jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
 ```
 
+```bash
+jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --wait   # 等它写完，失败则退出码非 0
+jinshuju entry import-status --form Kp7mQ2 <job-id>                        # 事后查
+```
+
 `--map` 左边是字段 api_code，右边是**列名或列序号**（纯数字按序号）。
 导入前该查的都会先查——文件、套餐允许的大小、表头行、列映射——所以被拒的导入一行都没写，
 报错里还会带上表格真实的列布局。通过之后行是后台写的：命令返回代表**已启动**，不代表已完成。
+
+所以有 `--wait`：它等到写完，报告写了多少、跳过多少、拒了多少，**失败时退出码非 0**。
+不加 `--wait` 的话导入失败是看不见的——命令成功返回，行却一条都没写。事后也可以用
+`entry import-status` 拿 job id 查。
+
+## 进度显示
+
+耗时的命令（`--all` 翻页、上传、`--wait` 等待）会显示进度。进度**只写 stderr，且只在 stderr
+是终端时才写**——所以 `--output json | jq` 拿到的字节和没有进度时完全一样，管道和 agent
+那边一个多余字符都不会有。
 
 ## 删字段之前
 

@@ -744,3 +744,61 @@ test('an edit with no settings block is still one request', async () => {
   assert.equal(mock.requests[0].method, 'PATCH');
   assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2');
 });
+
+test('entry import --wait polls until the import settles and reports what it did', async () => {
+  let polls = 0;
+  const seen: string[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      seen.push(`${request.method} ${request.path}`);
+      if (request.path.endsWith('/import_files')) return { id: 'att_1' } as T;
+      if (request.method === 'POST') return { job_id: 'job_1', status: 'pending' } as T;
+      polls += 1;
+      return (polls < 2
+        ? { job_id: 'job_1', status: 'running', processed_rows: 1, total_rows: 3 }
+        : { job_id: 'job_1', status: 'success', processed_rows: 3, total_rows: 3, imported_count: 3 }) as T;
+    }
+  };
+
+  const result = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json', '--map', 'field_1=A', '--wait', '--output', 'json'],
+    { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(JSON.parse(result.stdout).status, 'success');
+  assert.equal(seen.filter((r) => r.startsWith('GET')).length, 2);
+});
+
+test('a failed import exits non-zero, rather than reporting success for rows nobody wrote', async () => {
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      if (request.path.endsWith('/import_files')) return { id: 'att_1' } as T;
+      if (request.method === 'POST') return { job_id: 'job_1', status: 'pending' } as T;
+      return { job_id: 'job_1', status: 'failed', error_message: '第 2 行的分数不是数字' } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json', '--map', 'field_1=A', '--wait'],
+    { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /import failed: 第 2 行的分数不是数字/);
+});
+
+test('without --wait the import answers the job it started, in one round trip each way', async () => {
+  const mock = uploadingClient({ '/api/v1/forms/Kp7mQ2/import_files': { id: 'att_1' } });
+
+  await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json', '--map', 'field_1=A'],
+    { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[1].method, 'POST');
+});
+
+test('entry import-status reads one job under its form', async () => {
+  const mock = createMockClient();
+
+  await cli(['entry', 'import-status', '--form', 'Kp7mQ2', 'job_1'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entry_imports/job_1');
+});
