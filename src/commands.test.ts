@@ -802,3 +802,12 @@ test('entry import-status reads one job under its form', async () => {
   assert.equal(mock.requests[0].method, 'GET');
   assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entry_imports/job_1');
 });
+
+test('-V prints the version and -v no longer does', async () => {
+  const version = await cli(['-V']);
+  const old = await cli(['-v']);
+
+  assert.equal(version.exitCode, 0);
+  assert.match(version.stdout, /^\d+\.\d+\.\d+/);
+  assert.notEqual(old.stdout.trim(), version.stdout.trim());
+});

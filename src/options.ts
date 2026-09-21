@@ -31,7 +31,10 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   { name: '--output', type: 'string', choices: OUTPUT_FORMATS, placeholder: '<format>', description: 'Output format: text, json' },
   { name: '--config', type: 'string', placeholder: '<path>', description: 'Config file path' },
   { name: '--help', short: '-h', type: 'boolean', description: 'Show help' },
-  { name: '--version', short: '-v', type: 'boolean', description: 'Show version' }
+  // -V rather than -v: nearly every CLI reads -v as verbose, and a flag that
+  // prints a version where the reader expected more output is a small betrayal.
+  // -v is left unclaimed, so it is free for --verbose if that ever exists.
+  { name: '--version', short: '-V', type: 'boolean', description: 'Show version' }
 ];
 
 /** The data container a command acts on. Mutually exclusive; both map to form_token. */
