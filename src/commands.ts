@@ -411,6 +411,14 @@ const FORM_SCENES = ['survey', 'registry', 'vote', 'exam', 'reservation',
   'customer_acquisition', 'evaluation', 'online_payment'] as const;
 
 /**
+ * The field types a table column may be, which is a third of what a form takes.
+ * Worth naming in the help rather than leaving to a rejected create: the absence
+ * of TextField is the one nobody guesses.
+ */
+const TABLE_FIELD_TYPES = ['TextArea', 'RadioButton', 'CheckBox', 'BooleanField', 'MobileField',
+  'NumberField', 'DateTimeField', 'EmailField', 'LinkField', 'AttachmentField', 'FormulaField'] as const;
+
+/**
  * A form's type picks both the scene it is created in and the settings block
  * that belongs to it. Those settings live behind their own endpoint, so a
  * payload carrying one is two requests, not one — and a generic edit would
@@ -694,7 +702,10 @@ const TABLE: readonly Command[] = [
   {
     path: ['table', 'create'],
     summary: 'Create a table',
-    description: 'Column types use the API v1 names. Do not pass api_code: the backend generates it.',
+    description:
+      'Column types use the API v1 names, but a table takes fewer of them than a form: ' +
+      `${TABLE_FIELD_TYPES.join(', ')}. There is no TextField — a single line of text is a ` +
+      'TextArea here. Do not pass api_code: the backend generates it.',
     options: [
       JSON_OPTION, FOLDER_OPTION,
       { name: '--with-default-entries', type: 'boolean', description: 'Seed a few blank rows, as the UI does. Leave it off when rows follow' }

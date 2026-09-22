@@ -56,12 +56,37 @@ type RawArgs = { words: string[]; flags: Record<string, unknown> };
  * Splits the command line before a command is known: `--help` and an unknown
  * command both have to work without one.
  */
-/** The words before the first flag: enough to find the command, and no more. */
+/**
+ * The words that name the command: enough to find it, and no more.
+ *
+ * A flag may come first — `jinshuju --config local.json form list` is what a
+ * shell alias expands to, and what anyone arriving from `git -C` or
+ * `kubectl --context` writes — so a flag this CLI knows without a command is
+ * stepped over, along with its value. Stopping at it instead reported "Unknown
+ * command: jinshuju form list" while offering that very command as a
+ * suggestion.
+ *
+ * An unknown flag still ends the scan. Only a command declares those, so by the
+ * time one appears the command has been named already.
+ */
 function leadingWords(argv: readonly string[]): string[] {
+  const known = new Map<string, OptionSpec>();
+  for (const spec of [...GLOBAL_OPTIONS, ...LOCAL_OPTIONS]) {
+    known.set(spec.name, spec);
+    if (spec.short) known.set(spec.short, spec);
+  }
+
   const words: string[] = [];
-  for (const token of argv) {
-    if (token.startsWith('-') && token !== '-') break;
-    words.push(token);
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] as string;
+    if (!token.startsWith('-') || token === '-') {
+      words.push(token);
+      continue;
+    }
+    const equals = token.indexOf('=');
+    const spec = known.get(equals === -1 ? token : token.slice(0, equals));
+    if (!spec) break;
+    if (equals === -1 && spec.type !== 'boolean') index += 1;
   }
   return words;
 }
