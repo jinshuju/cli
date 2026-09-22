@@ -1,8 +1,9 @@
 import {
-  CONTAINER_LIST_OPTIONS, CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION,
+  CONTAINER_LIST_OPTIONS, CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION, LOCAL_OPTIONS,
   MINE_OPTION, PAGINATION_OPTIONS, SORT_OPTION, TIME_BUCKETS, UsageError, parseDimension, parseFilter, parseMetric, parseSort,
   resolveContainer, resolveContainers, type FilterCondition, type OptionSpec, type SortRule
 } from './options.js';
+import { CONFIG_KEYS } from './config.js';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
@@ -575,12 +576,21 @@ const FORM: readonly Command[] = [
 
       delete body[settings.key];
       // The settings go first: they are the half that can be refused for what
-      // the form is, and a refusal that has already renamed the form would
-      // leave the edit half applied.
+      // the form is, so leading with them is what keeps a refusal from landing
+      // after the rest was already written.
       await client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}/${settings.path}`, body: settings.value });
       if (Object.keys(body).length === 0) return client.request({ method: 'GET', path: `${API}/forms/${input.args.form}` });
 
-      return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
+      try {
+        return await client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
+      } catch (error) {
+        // Ordering cannot make two requests atomic; it only chooses which half
+        // fails first. When the second one fails the first has landed, and an
+        // error that reads as though nothing happened would invite the whole
+        // edit to be sent again.
+        throw new Error(`${settings.key} was saved, but the rest of the edit (${Object.keys(body).join(', ')}) ` +
+          `was refused: ${(error as Error).message}. Re-send only what failed.`);
+      }
     },
     examples: [
       'jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'',
@@ -617,9 +627,9 @@ const FORM: readonly Command[] = [
     path: ['form', 'theme', 'set'],
     summary: "Set a form's theme",
     description:
-      'The colours have flags of their own; everything else the theme takes — typography, ' +
-      'form_container, submit_button — goes through --json. Images are not settable yet: uploading ' +
-      'one needs a ticket the REST API has no way to issue.',
+      'The colours have flags of their own, and --wallpaper and --header each upload an image and ' +
+      'bind it to the theme in one command. Everything else the theme takes — typography, ' +
+      'form_container, submit_button — goes through --json.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [
       { name: '--primary-color', type: 'string', placeholder: '<hex>', description: 'Primary colour, e.g. #1F6FEB' },
@@ -1042,13 +1052,26 @@ const IMPORT_POLL_MS = 1000;
  * caller comes to believe data is there when it is not.
  */
 async function awaitImport(client: HttpClient, token: string, jobId: string, watching: { step(m: string): void }): Promise<ImportJob> {
+  // Every way out of this loop but the good one carries the job id. The rows are
+  // already being written by the time the first poll happens, so an error that
+  // drops the id leaves the caller unable to ask how it went and tempted to
+  // import the file a second time.
+  const recoverable = (reason: string): Error =>
+    new Error(`${reason}. The import is job ${jobId} and may still be running: ` +
+      `jinshuju entry import-status --form ${token} ${jobId}`);
+
   for (;;) {
-    const job = await client.request<ImportJob>({
-      method: 'GET', path: `${API}/forms/${token}/entry_imports/${jobId}`
-    });
+    let job: ImportJob;
+    try {
+      job = await client.request<ImportJob>({
+        method: 'GET', path: `${API}/forms/${token}/entry_imports/${jobId}`
+      });
+    } catch (error) {
+      throw recoverable(`the import started, but asking how it is going failed: ${(error as Error).message}`);
+    }
     if (IMPORT_SETTLED.has(job.status)) {
       if (job.status !== 'success') {
-        throw new Error(`import ${job.status}${job.error_message ? `: ${job.error_message}` : ''}`);
+        throw recoverable(`import ${job.status}${job.error_message ? `: ${job.error_message}` : ''}`);
       }
       return job;
     }
@@ -1661,8 +1684,85 @@ const OPENSEARCH: readonly Command[] = [
   }
 ];
 
+/** The local options a command takes, by flag name. */
+function local(...names: string[]): readonly OptionSpec[] {
+  return names.map((name) => {
+    const spec = LOCAL_OPTIONS.find((candidate) => candidate.name === name);
+    if (!spec) throw new Error(`no local option ${name}`);
+    return spec;
+  });
+}
+
+/**
+ * The commands that never reach the API: they read and write the config file,
+ * or run a browser login. `cli.ts` dispatches them itself, so they carry no
+ * request — but they belong in this table all the same, because help is
+ * rendered from it. Left out, `auth login --help` answered with the root
+ * listing and `--no-open`, `--verify` and `--show-secret` were documented
+ * nowhere a caller could reach.
+ */
+const LOCAL: readonly Command[] = [
+  {
+    path: ['auth', 'login'],
+    summary: 'Log in through the browser and store the session',
+    description:
+      'Opens the authorization page, waits for the redirect on a loopback port, and writes the ' +
+      'session to the config file. An access token or an API key pair, if configured, still ' +
+      'outranks what this stores.',
+    options: local('--auth-host', '--client-id', '--scopes', '--no-open', '--host'),
+    examples: ['jinshuju auth login', 'jinshuju auth login --no-open']
+  },
+  {
+    path: ['auth', 'status'],
+    summary: 'Show which credential is in use, and where it came from',
+    description:
+      'The precedence is access token, then API key and secret, then a stored browser login. ' +
+      '--verify spends one lightweight call to confirm the credential still works.',
+    options: local('--verify', '--api-key', '--api-secret', '--host', '--auth-host', '--client-id'),
+    examples: ['jinshuju auth status', 'jinshuju auth status --verify']
+  },
+  {
+    path: ['auth', 'refresh'],
+    summary: 'Renew the stored browser session',
+    description: 'Only an OAuth session can be refreshed; a token that stopped working has to be replaced by whoever issued it.',
+    options: local('--auth-host', '--client-id')
+  },
+  {
+    path: ['auth', 'logout'],
+    summary: 'Revoke the stored browser session and forget it',
+    description: 'Leaves an access token or API key pair in the config alone: those are not this command\'s to drop.',
+    options: local('--auth-host', '--client-id')
+  },
+  {
+    path: ['config', 'get'],
+    summary: 'Read one configuration value',
+    description: `Keys: ${CONFIG_KEYS.join(', ')}. Secrets are masked unless --show-secret says otherwise.`,
+    args: [{ name: 'key', required: true, description: `One of ${CONFIG_KEYS.join(', ')}` }],
+    options: local('--show-secret'),
+    examples: ['jinshuju config get api_key', 'jinshuju config get access_token --show-secret']
+  },
+  {
+    path: ['config', 'set'],
+    summary: 'Write one configuration value',
+    description:
+      `Keys: ${CONFIG_KEYS.join(', ')}. The file is written with mode 600. Environment variables ` +
+      'of the same name (JINSHUJU_ACCESS_TOKEN, JINSHUJU_API_KEY, …) outrank whatever is stored here.',
+    args: [
+      { name: 'key', required: true, description: `One of ${CONFIG_KEYS.join(', ')}` },
+      { name: 'value', required: true, description: 'The value to store' }
+    ],
+    examples: ['jinshuju config set access_token xxx', 'jinshuju config set host https://jinshuju.net']
+  },
+  {
+    path: ['config', 'unset'],
+    summary: 'Remove one configuration value',
+    args: [{ name: 'key', required: true, description: `One of ${CONFIG_KEYS.join(', ')}` }],
+    examples: ['jinshuju config unset api_secret']
+  }
+];
+
 export const COMMANDS: readonly Command[] = [
-  ...ACCOUNT, ...FOLDER, ...FORM, ...TABLE, ...FIELD, ...VIEW, ...ENTRY, ...COMMENT, ...OPENSEARCH
+  ...LOCAL, ...ACCOUNT, ...FOLDER, ...FORM, ...TABLE, ...FIELD, ...VIEW, ...ENTRY, ...COMMENT, ...OPENSEARCH
 ];
 
 /** The command whose path the words begin with, longest match first. */

@@ -34,6 +34,24 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   { name: '--version', short: '-V', type: 'boolean', description: 'Show version' }
 ];
 
+/**
+ * What the local commands — auth and config, the ones that never reach the API —
+ * accept on top of the global options. They live here so the command table can
+ * describe them: help is rendered from that table, and a flag nobody can find
+ * in it is a flag nobody knows about.
+ */
+export const LOCAL_OPTIONS: readonly OptionSpec[] = [
+  { name: '--api-key', type: 'string', placeholder: '<key>', description: 'Override API key' },
+  { name: '--api-secret', type: 'string', placeholder: '<secret>', description: 'Override API secret' },
+  { name: '--host', type: 'string', placeholder: '<url>', description: 'API host' },
+  { name: '--auth-host', type: 'string', placeholder: '<url>', description: 'OAuth host' },
+  { name: '--client-id', type: 'string', placeholder: '<id>', description: 'OAuth public client id' },
+  { name: '--scopes', type: 'string', placeholder: '<scopes>', description: 'Space-separated OAuth scopes' },
+  { name: '--no-open', type: 'boolean', description: 'Print the login URL instead of opening a browser' },
+  { name: '--verify', type: 'boolean', description: 'Verify the credentials with a lightweight call' },
+  { name: '--show-secret', type: 'boolean', description: 'Show secrets unmasked' }
+];
+
 /** The data container a command acts on. Mutually exclusive; both map to form_token. */
 export const CONTAINER_OPTIONS: readonly OptionSpec[] = [
   { name: '--form', type: 'string', placeholder: '<token>', description: 'Form token, six letters and digits, e.g. Kp7mQ2' },

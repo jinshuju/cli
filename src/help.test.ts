@@ -39,11 +39,29 @@ test('a resource lists its own verbs', async () => {
   assert.match(result.stdout, /entry get/);
 });
 
-for (const args of [['auth', 'status', '--help'], ['config', 'get', '--help']]) {
-  test(`${args.join(' ')} still has help`, async () => {
-    const result = await runCli(args);
+/**
+ * `Usage:` alone is what the root listing says too, so asserting it let the
+ * local commands quietly lose their help: every one of them answered with the
+ * root listing and the test stayed green. Each is now checked for its own
+ * usage line and for a flag or argument only it has.
+ */
+const LOCAL_HELP: [string[], RegExp][] = [
+  [['auth', 'login'], /--no-open/],
+  [['auth', 'status'], /--verify/],
+  [['auth', 'refresh'], /--auth-host/],
+  [['auth', 'logout'], /--client-id/],
+  [['config', 'get'], /--show-secret/],
+  [['config', 'set'], /<key> <value>/],
+  [['config', 'unset'], /access_token/]
+];
+
+for (const [path, own] of LOCAL_HELP) {
+  test(`${path.join(' ')} documents itself, not the root listing`, async () => {
+    const result = await runCli([...path, '--help']);
     assert.equal(result.exitCode, 0);
-    assert.match(result.stdout, /Usage:/);
+    assert.match(result.stdout, new RegExp(`Usage: jinshuju ${path.join(' ')}`));
+    assert.match(result.stdout, own);
+    assert.doesNotMatch(result.stdout, /Run `jinshuju <resource> --help`/);
   });
 }
 

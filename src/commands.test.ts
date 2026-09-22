@@ -1192,6 +1192,71 @@ test('a row index only means something with the subtable column it indexes', asy
   assert.match(result.stderr, /row needs the subtable column/);
 });
 
+test('an import that cannot be polled still hands back the job it started', async () => {
+  let calls = 0;
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      calls += 1;
+      if (request.path.endsWith('/import_files')) return { id: 'file_1' } as T;
+      if (request.path.endsWith('/entry_imports')) return { job_id: 'job_77', status: 'pending' } as T;
+      throw new Error('fetch failed');
+    }
+  };
+
+  const result = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json', '--map', 'field_1=Name', '--wait'],
+    { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /job job_77/);
+  assert.match(result.stderr, /entry import-status --form Kp7mQ2 job_77/);
+  assert.equal(calls, 3);
+});
+
+test('an import that settles as failed names the job too', async () => {
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      if (request.path.endsWith('/import_files')) return { id: 'file_1' } as T;
+      if (request.path.endsWith('/entry_imports')) return { job_id: 'job_88', status: 'pending' } as T;
+      return { job_id: 'job_88', status: 'failed', error_message: 'row 3 is not a date' } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json', '--map', 'field_1=Name', '--wait'],
+    { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /row 3 is not a date/);
+  assert.match(result.stderr, /job job_88/);
+});
+
+test('an edit whose second half is refused says which half was already saved', async () => {
+  const seen: string[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      seen.push(request.path);
+      if (request.path.endsWith('/exam_setting')) return { ok: true } as T;
+      throw new Error('Name has already been taken');
+    }
+  };
+
+  const result = await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"name":"改名","exam_setting":{"limited_time":45}}'],
+    { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /exam_setting was saved/);
+  assert.match(result.stderr, /\(name\) was refused/);
+  assert.match(result.stderr, /Name has already been taken/);
+  // The settings went first, as the design says; the point is what is said after.
+  assert.equal(seen[0], '/api/v1/forms/Kp7mQ2/exam_setting');
+});
+
+test('form theme set no longer says images cannot be set while offering to set them', async () => {
+  const help = await cli(['form', 'theme', 'set', '--help'], { env: {} });
+
+  assert.match(help.stdout, /--wallpaper/);
+  assert.doesNotMatch(help.stdout, /not settable/);
+});
+
 test('table create names the column types a table actually takes', async () => {
   const help = await cli(['table', 'create', '--help'], { env: {} });
 
