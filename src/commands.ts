@@ -990,14 +990,38 @@ function parseColumnMapping(input: string): Record<string, string | number> {
     : { field_api_code, column_label: column };
 }
 
-/** `field_5=/path/a.png`, or `field_5.sub_1=/path/a.png` for a table column. */
-function parseAttachment(input: string): { field: string; dimension?: string; file: string } {
+type Attachment = { field: string; row: number; dimension?: string; file: string };
+
+const ATTACH_SHAPE = "--attach must be '<api-code>=<file>', or '<api-code>.<row>.<sub>=<file>' for a subtable column";
+
+/**
+ * `field_5=/path/a.png`, or `field_5.0.field_2=/path/a.png` for one row of a
+ * subtable column.
+ *
+ * A subtable answer is a list of rows, so the file belongs in one of them and
+ * the row has to be named. Without a row it is the first, which is what a
+ * subtable filled in one go almost always has.
+ *
+ * The row is a dot and not a bracket because zsh reads `field_5[0]` as a
+ * pattern and refuses the command before the CLI sees it — a syntax that needs
+ * quoting to be typed at all is the wrong one to hand somebody. `[0]` is still
+ * accepted, for anyone who quotes it or arrives from another tool.
+ */
+function parseAttachment(input: string): Attachment {
   const at = input.indexOf('=');
-  if (at <= 0) throw new UsageError(`--attach must be '<api-code>[.<sub>]=<file>', got ${JSON.stringify(input)}`);
-  const [field, dimension] = input.slice(0, at).split('.');
+  if (at <= 0) throw new UsageError(`${ATTACH_SHAPE}, got ${JSON.stringify(input)}`);
+
   const file = input.slice(at + 1);
-  if (!field || !file) throw new UsageError(`--attach must be '<api-code>[.<sub>]=<file>', got ${JSON.stringify(input)}`);
-  return dimension === undefined ? { field, file } : { field, dimension, file };
+  const target = /^([A-Za-z0-9_]+)(?:\[(\d+)\]|\.(\d+))?(?:\.([A-Za-z0-9_]+))?$/.exec(input.slice(0, at));
+  if (!target || !file) throw new UsageError(`${ATTACH_SHAPE}, got ${JSON.stringify(input)}`);
+
+  const [, field, bracketed, dotted, dimension] = target as unknown as
+    [string, string, string | undefined, string | undefined, string | undefined];
+  const row = bracketed ?? dotted;
+  if (row !== undefined && dimension === undefined) {
+    throw new UsageError(`a row needs the subtable column it is a row of: ${field}.${row}.<sub>=<file>`);
+  }
+  return { field, row: row === undefined ? 0 : Number(row), dimension, file };
 }
 
 interface ImportJob {
@@ -1039,8 +1063,17 @@ const BATCH_OPTION: OptionSpec = {
   name: '--batch', type: 'json', placeholder: '<json|@file|->', description: 'Several rows in one request'
 };
 
-function attachments(input: CommandInput): { field: string; dimension?: string; file: string }[] {
+function attachments(input: CommandInput): Attachment[] {
   return ((input.options.attach as string[] | undefined) ?? []).map(parseAttachment);
+}
+
+function isRecord(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** An attachment slot holds a list, so a second file joins the first. */
+function append(existing: unknown, id: string): string[] {
+  return Array.isArray(existing) ? [...(existing as string[]), id] : [id];
 }
 
 function batchRows(input: CommandInput): unknown[] | undefined {
@@ -1096,6 +1129,13 @@ const ENTRY: readonly Command[] = [
           if (Array.isArray(value) ? value.length > 0 : value !== undefined) {
             throw new UsageError(`--${flag} cannot be combined with --view: the view carries its own filter and sort`);
           }
+        }
+        // The view decides its own columns and the endpoint takes no field
+        // list, so --fields here asked for something that was never going to
+        // happen. Refusing beats accepting it and answering every field.
+        if (input.options.fields !== undefined) {
+          throw new UsageError('--fields cannot be combined with --view: the view decides its own columns. ' +
+            'Change them with `view edit --columns`, or read the form without --view.');
         }
         return {
           method: 'GET',
@@ -1307,7 +1347,7 @@ const ENTRY: readonly Command[] = [
       'writes them in one request.',
     options: [
       ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
-      { name: '--attach', type: 'string', repeatable: true, placeholder: '<api-code>[.<sub>]=<file>', description: 'Upload a file and fill this attachment field with it, repeatable' }
+      { name: '--attach', type: 'string', repeatable: true, placeholder: '<api-code>[.<row>.<sub>]=<file>', description: 'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>' }
     ],
     request: (input) => {
       const batch = batchRows(input);
@@ -1324,7 +1364,7 @@ const ENTRY: readonly Command[] = [
       const body = { ...((input.options.json as Record<string, unknown> | undefined) ?? {}) };
       const watching = progress();
       try {
-      for (const { field, dimension, file } of attached) {
+      for (const { field, row, dimension, file } of attached) {
         watching.step(`uploading ${basename(file)}…`);
         const uploaded = await client.request<{ id: string }>(
           upload(`${API}/forms/${token}/entry_attachments`, file,
@@ -1332,9 +1372,20 @@ const ENTRY: readonly Command[] = [
         );
         // A field holds a list of attachments, so each upload appends rather
         // than replacing what an earlier --attach for the same field put there.
-        const key = dimension === undefined ? field : `${field}.${dimension}`;
-        const existing = body[key];
-        body[key] = Array.isArray(existing) ? [...existing, uploaded.id] : [uploaded.id];
+        if (dimension === undefined) {
+          body[field] = append(body[field], uploaded.id);
+          continue;
+        }
+        // A subtable column is a list of rows and the file lives inside one of
+        // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
+        // at the top level named no field the form has, so the server dropped it
+        // and answered with an entry created — without the file just uploaded.
+        const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
+        while (rows.length <= row) rows.push({});
+        const cells = { ...(isRecord(rows[row]) ? rows[row] as Record<string, unknown> : {}) };
+        cells[dimension] = append(cells[dimension], uploaded.id);
+        rows[row] = cells;
+        body[field] = rows;
       }
       return await client.request({ method: 'POST', path: `${container}/entries`, body });
       } finally {
@@ -1343,6 +1394,8 @@ const ENTRY: readonly Command[] = [
     },
     examples: [
       'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
+      'jinshuju entry create --form Kp7mQ2 --json @entry.json --attach field_5=./id-card.jpg',
+      'jinshuju entry create --form Kp7mQ2 --json \'{"field_2":[{"field_1":"高铁票"}]}\' --attach field_2.0.field_2=./invoice.pdf',
       'jinshuju entry create --form Kp7mQ2 --batch @entries.json'
     ]
   },

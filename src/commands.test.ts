@@ -1078,6 +1078,120 @@ test('an unknown flag still ends the search for the command, so it is refused by
   assert.match(result.stderr, /does not take --label/);
 });
 
+test('a list of values is a cell, so a field asked for by name is in the table', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        data: [
+          { token: 'QaG4hl', serial_number: 2, field_1: '李四', field_6: ['爬坡', '夜骑'] },
+          { token: 'rgFDq1', serial_number: 1, field_1: '张三', field_6: [] }
+        ]
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--fields', 'field_1,field_6', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /field_1\s+field_6/);
+  assert.match(result.stdout, /李四\s+爬坡, 夜骑/);
+  assert.doesNotMatch(result.stdout, /\["爬坡"/);
+});
+
+test('a column that is an empty list in every row is not a column', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return { data: [{ token: 'QaG4hl', name: '报名表', tags: [] }] } as T;
+    }
+  };
+
+  const result = await cli(['form', 'list', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.doesNotMatch(result.stdout, /tags/);
+});
+
+test('a row the width would leave blank buys back the column that explains it', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        total: 2,
+        forms: [
+          { form_token: 'Kp7mQ2', name: 'CLI 审计 · 骑行社报名表', matched: 2, serial_numbers: [1, 4] },
+          { form_token: 'Zz9wQ1', unavailable: 'not readable by this credential' }
+        ]
+      } as T;
+    }
+  };
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  const narrow = await cli(['entry', 'search', '西安', '--output', 'text'], { env, client, width: 60 });
+
+  assert.equal(narrow.exitCode, 0);
+  // A search names which rows matched, not just how many.
+  assert.match(narrow.stdout, /1, 4/);
+  // And a form it could not read keeps the reason, however narrow the terminal.
+  assert.match(narrow.stdout, /not readable by this credential/);
+});
+
+test('--fields is refused with --view, rather than accepted and dropped', async () => {
+  const mock = createMockClient();
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--fields', 'field_1'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /--fields cannot be combined with --view/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('an attachment for a subtable column lands in a row of it, not in a dotted key', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      return { id: `att_${requests.length}` } as T;
+    }
+  };
+
+  const result = await cli([
+    'entry', 'create', '--form', 'Kp7mQ2',
+    '--json', '{"field_1":"张三","field_2":[{"field_1":"高铁票"}]}',
+    '--attach', 'field_2.0.field_2=package.json',
+    '--attach', 'field_2[1].field_2=package.json'
+  ], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 0);
+  const created = requests[requests.length - 1];
+  assert.equal(created.path, '/api/v1/forms/Kp7mQ2/entries');
+  assert.deepEqual(created.body, {
+    field_1: '张三',
+    field_2: [
+      { field_1: '高铁票', field_2: ['att_1'] },
+      { field_2: ['att_2'] }
+    ]
+  });
+  // The shape that made this worth fixing: a key no field answers to.
+  assert.equal(JSON.stringify(created.body).includes('field_2.field_2'), false);
+});
+
+test('a row index only means something with the subtable column it indexes', async () => {
+  const result = await cli(['entry', 'create', '--form', 'Kp7mQ2', '--json', '{}', '--attach', 'field_5.2=package.json'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /row needs the subtable column/);
+});
+
 test('table create names the column types a table actually takes', async () => {
   const help = await cli(['table', 'create', '--help'], { env: {} });
 
