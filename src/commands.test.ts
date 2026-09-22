@@ -1049,6 +1049,43 @@ test('entry import-status reads one job under its form', async () => {
   assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entry_imports/job_1');
 });
 
+test('a global flag may come before the command, as a shell alias makes it', async () => {
+  const mock = createMockClient();
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  // What `alias jsjl='jsj --config <path>'` expands to.
+  const aliased = await runCli(['--config', NO_CONFIG, 'form', 'list'], { env, client: mock.client });
+  assert.equal(aliased.exitCode, 0);
+  assert.equal(mock.requests[0].path.startsWith('/api/v1/forms'), true);
+
+  const before = await cli(['--output', 'json', 'form', 'list'], { env, client: createMockClient().client });
+  assert.equal(before.exitCode, 0);
+  assert.doesNotMatch(before.stderr, /Unknown command/);
+
+  // --help ahead of the command names that command, rather than falling back to
+  // the root listing.
+  const help = await cli(['--help', 'entry', 'list'], { env });
+  assert.match(help.stdout, /Usage: jinshuju entry list/);
+});
+
+test('an unknown flag still ends the search for the command, so it is refused by name', async () => {
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--label'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: createMockClient().client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /does not take --label/);
+});
+
+test('table create names the column types a table actually takes', async () => {
+  const help = await cli(['table', 'create', '--help'], { env: {} });
+
+  assert.match(help.stdout, /TextArea/);
+  assert.match(help.stdout, /BooleanField/);
+  assert.match(help.stdout, /no TextField/);
+});
+
 test('-V prints the version and -v no longer does', async () => {
   const version = await cli(['-V']);
   const old = await cli(['-v']);
