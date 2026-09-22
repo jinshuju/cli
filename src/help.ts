@@ -66,6 +66,8 @@ export function commandHelp(command: Command): string {
   const width = Math.max(...options.map((option) => flagLabel(option).length)) + 4;
   parts.push('', 'Flags:', ...options.map((option) => `  ${flagLabel(option).padEnd(width)}${option.description}`));
 
+  if (command.payload?.length) parts.push('', 'Payload:', ...command.payload.map((line) => `  ${line}`));
+
   if (command.examples?.length) parts.push('', 'Examples:', ...command.examples.map((example) => `  ${example}`));
 
   return `${parts.join('\n')}\n`;

@@ -62,6 +62,12 @@ export interface Command {
   readonly description?: string;
   readonly args?: readonly ArgSpec[];
   readonly options?: readonly OptionSpec[];
+  /**
+   * What `--json` expects, shown in help. A flag named `<json>` says nothing
+   * about what goes in the file, and a caller with nothing to copy from cannot
+   * guess it — so the commands that take a payload show one.
+   */
+  readonly payload?: readonly string[];
   readonly examples?: readonly string[];
   readonly request?: (input: CommandInput) => HttpRequest;
   /**
@@ -189,6 +195,33 @@ function overriding(payload: Record<string, unknown>, flags: Record<string, unkn
 function one(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
 }
+
+/**
+ * The shape behind `--json` on a form, shown rather than described: `fields` is
+ * the part nothing else hints at, and one choice field carries more of the
+ * grammar than a paragraph would. What `type` may be, and what each type takes
+ * beyond this, is `field types`.
+ */
+const FORM_PAYLOAD: readonly string[] = [
+  '{',
+  '  "name": "Event signup",',
+  '  "description": "optional",',
+  '  "fields": [',
+  '    { "type": "TextField",   "label": "Name",   "required": true },',
+  '    { "type": "RadioButton", "label": "Ticket", "choices": [',
+  '        { "label": "Standard" }, { "label": "VIP" } ] }',
+  '  ]',
+  '}',
+  '',
+  'Field types: jinshuju field types   |   A real one: jinshuju form get <token> --output json'
+];
+
+/** One field, or a list of them — the same objects `fields` holds above. */
+const FIELD_PAYLOAD: readonly string[] = [
+  '{ "type": "TextField", "label": "Notes", "required": false }',
+  '',
+  'Field types: jinshuju field types'
+];
 
 const YES_OPTION: OptionSpec = { name: '--yes', type: 'boolean', description: 'Confirm the deletion' };
 
@@ -524,9 +557,11 @@ const FORM: readonly Command[] = [
     path: ['form', 'create'],
     summary: 'Create a form',
     description:
-      'Field types use the API v1 names (TextField, MobileField, RadioButton). Do not pass api_code: ' +
-      'the backend generates it. The scene decides what kind of form it is — an exam scores its ' +
-      'answers, a reservation holds slots — and the card layout refuses the field types it cannot show.',
+      'Field types use the API v1 names. Run `jinshuju field types` for the full list and what each ' +
+      'one accepts. Do not pass api_code: the backend generates it. The scene decides what kind of ' +
+      'form it is — an exam scores its answers, a reservation holds slots — and the card layout ' +
+      'refuses the field types it cannot show.',
+    payload: FORM_PAYLOAD,
     options: [
       JSON_OPTION,
       { name: '--type', type: 'string', choices: Object.keys(FORM_TYPES), placeholder: '<type>', description: 'normal, exam or evaluation. An exam or evaluation also takes its own settings block in the payload' },
@@ -781,7 +816,34 @@ function requiredOption(input: CommandInput, key: string): string {
   return value;
 }
 
+const KIND_OPTION: OptionSpec = {
+  name: '--kind',
+  type: 'string',
+  choices: ['form', 'table'],
+  placeholder: '<kind>',
+  description: 'Which container the types are for (default form)'
+};
+
 const FIELD: readonly Command[] = [
+  {
+    path: ['field', 'types'],
+    summary: 'List the field types a form or table can hold',
+    description:
+      'What to put in `type` when adding a field, and what each type accepts. `takes_choices` says whether the field carries choices; `flags` are the booleans the payload may set on it; `settings` are the keys that type understands beyond the common ones. A table holds far fewer types than a form.',
+    args: [{ name: 'type', required: false, description: 'One type name, e.g. RadioButton' }],
+    options: [KIND_OPTION],
+    request: (input) => ({
+      method: 'GET',
+      path: input.args.type ? `${API}/field_types/${input.args.type}` : `${API}/field_types`,
+      query: { kind: input.options.kind as string | undefined }
+    }),
+    select: (body) => (Array.isArray((body as { data?: unknown }).data) ? body : { data: [body] }),
+    examples: [
+      'jinshuju field types',
+      'jinshuju field types --kind table',
+      'jinshuju field types RadioButton'
+    ]
+  },
   {
     path: ['field', 'list'],
     summary: 'List the fields of a form or table',
@@ -795,6 +857,7 @@ const FIELD: readonly Command[] = [
     summary: 'Add fields to a form or table',
     description: 'One field object, or a list of them. Do not pass api_code: the backend generates it.',
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    payload: FIELD_PAYLOAD,
     request: (input) => ({
       method: 'PATCH',
       path: containerPath(input),
