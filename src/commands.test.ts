@@ -870,6 +870,20 @@ test('entry import sends the file, then the mapping that refers to it', async ()
   });
 });
 
+test('entry import declares the media type of the file it uploads', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const file = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'roster.xlsx');
+  writeFileSync(file, 'not really a workbook');
+  const mock = uploadingClient({ '/api/v1/forms/Kp7mQ2/import_files': { id: 'att_1' } });
+
+  const result = await cli(['entry', 'import', '--form', 'Kp7mQ2', file, '--map', 'field_1=姓名'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(result.exitCode, 0);
+  const part = (mock.requests[0].form as FormData).get('file') as File;
+  assert.equal(part.type, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(part.name, 'roster.xlsx');
+});
+
 test('entry import needs a mapping, and names a file it cannot read', async () => {
   const noMap = await cli(['entry', 'import', '--form', 'Kp7mQ2', 'package.json'],
     { env: WRITE_ENV, client: uploadingClient({}).client });
