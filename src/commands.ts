@@ -74,6 +74,13 @@ export interface Command {
    * form because that is where fields live, but a caller asked for the fields.
    */
   readonly select?: (body: unknown) => unknown;
+  /**
+   * Reshapes the response for reading, and only for reading: `--output json`
+   * answers what the API answered. A command needs this when its payload is
+   * built for indexing rather than for looking at, and no generic renderer
+   * could know how to put it back together.
+   */
+  readonly render?: (body: unknown) => unknown;
 }
 
 export interface Resource {
@@ -240,6 +247,58 @@ function selectFields(body: unknown): Record<string, unknown>[] {
   const fields = (body as { fields?: Record<string, Record<string, unknown>>[] } | undefined)?.fields ?? [];
   return fields.flatMap((entry) =>
     Object.entries(entry).map(([api_code, attributes]) => ({ api_code, ...attributes })));
+}
+
+/**
+ * `entry aggregate` answers a table taken apart: `columns` says what each
+ * column is, `rows` holds one positional array per row and no names at all.
+ * Nothing generic can put the two back together — a renderer given the rows
+ * alone sees arrays of mixed things and prints them as JSON — so they are
+ * zipped here, into the rows-of-objects every other listing already is.
+ *
+ * Only for reading. `--output json` keeps the positional shape: it is the one a
+ * script can index by position without knowing what the labels say, and the
+ * headings below are Chinese as often as not.
+ */
+function aggregateTable(body: unknown): unknown {
+  const { columns, rows, ...rest } = (body ?? {}) as { columns?: unknown; rows?: unknown };
+  if (!Array.isArray(columns) || !Array.isArray(rows)) return body;
+
+  const headings = uniqueHeadings(columns.map(headingOf));
+  return {
+    ...rest,
+    rows: rows.map((row) => {
+      const cells = Array.isArray(row) ? row : [row];
+      return Object.fromEntries(headings.map((heading, index) => [heading, cellOf(cells[index])]));
+    })
+  };
+}
+
+/** `count(姓名)`, because `姓名` alone does not say what was done to it. */
+function headingOf(column: unknown, index: number): string {
+  const { label, field, func } = (column ?? {}) as { label?: string; field?: string; func?: string };
+  const name = label || field || `column_${index + 1}`;
+  return func ? `${func}(${name})` : name;
+}
+
+/** A dimension cell is the choice it grouped by; a metric cell is the number. */
+function cellOf(cell: unknown): unknown {
+  if (cell === null || typeof cell !== 'object' || Array.isArray(cell)) return cell;
+  const { label } = cell as { label?: unknown };
+  return label ?? JSON.stringify(cell);
+}
+
+/**
+ * Two columns heading the same object would leave one of them silently
+ * overwriting the other, so a repeat is numbered rather than lost.
+ */
+function uniqueHeadings(headings: string[]): string[] {
+  const seen = new Map<string, number>();
+  return headings.map((heading) => {
+    const count = (seen.get(heading) ?? 0) + 1;
+    seen.set(heading, count);
+    return count === 1 ? heading : `${heading} (${count})`;
+  });
 }
 
 function payload(input: CommandInput): unknown {
@@ -1196,6 +1255,7 @@ const ENTRY: readonly Command[] = [
         }
       };
     },
+    render: aggregateTable,
     examples: [
       'jinshuju entry aggregate --form Kp7mQ2 --metric avg:field_3',
       'jinshuju entry aggregate --form Kp7mQ2 --metric count:field_1 --by created_at:month',

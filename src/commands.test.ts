@@ -465,6 +465,58 @@ test('entry aggregate turns --metric and --by into the JSON the API reads', asyn
   assert.equal(query.get('limit'), '5');
 });
 
+test('entry aggregate reads as a table, while --output json keeps the shape a script indexes', async () => {
+  const body = {
+    columns: [
+      { kind: 'dimension', field: 'field_5', label: '车型' },
+      { kind: 'metric', func: 'count', field: 'field_1', label: '姓名' }
+    ],
+    rows: [
+      [{ api_code: 'H4Xs', label: '公路车' }, 2],
+      [{ api_code: '6SU7', label: '山地车' }, 1]
+    ],
+    matched_entries: 3
+  };
+  const client = { async request<T>(): Promise<T> { return body as T; } };
+  const args = ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'count:field_1', '--by', 'field_5'];
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  const asText = await cli([...args, '--output', 'text'], { env, client });
+  assert.equal(asText.exitCode, 0);
+  assert.match(asText.stdout, /^ {2}车型\s+count\(姓名\)\s*$/m);
+  assert.match(asText.stdout, /^ {2}公路车\s+2\s*$/m);
+  assert.match(asText.stdout, /^matched_entries: 3$/m);
+  // The point of the change: no JSON left where a table belongs.
+  assert.doesNotMatch(asText.stdout, /"api_code"/);
+
+  const asJson = await cli([...args, '--output', 'json'], { env, client });
+  assert.equal(asJson.exitCode, 0);
+  assert.deepEqual(JSON.parse(asJson.stdout), body);
+});
+
+test('an aggregate naming one column twice numbers the repeat instead of dropping it', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        columns: [
+          { kind: 'metric', func: 'count', field: 'field_1', label: '姓名' },
+          { kind: 'metric', func: 'count', field: 'field_1', label: '姓名' }
+        ],
+        rows: [[2, 3]]
+      } as T;
+    }
+  };
+
+  const result = await cli(
+    ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'count:field_1', '--output', 'text'],
+    { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }, client }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /count\(姓名\)\s+count\(姓名\) \(2\)/);
+  assert.match(result.stdout, /^ {2}2\s+3\s*$/m);
+});
+
 test('entry aggregate needs a metric, and names the buckets a dimension may take', async () => {
   const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
   const noMetric = await cli(['entry', 'aggregate', '--form', 'Kp7mQ2'], { env, client: createMockClient().client });
