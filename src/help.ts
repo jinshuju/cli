@@ -4,8 +4,8 @@ import { GLOBAL_OPTIONS, optionKey, type OptionSpec } from './options.js';
 /**
  * Help is rendered from the command table, so a command cannot be reachable
  * without appearing here, and a flag cannot be accepted without being
- * described. The root help follows the shape in the design's basis (D19291):
- * one line per resource, then the global options.
+ * described. The root help lists one line per resource, then the global
+ * options.
  */
 
 export function rootHelp(commands: readonly Command[] = COMMANDS): string {

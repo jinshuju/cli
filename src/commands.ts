@@ -13,8 +13,8 @@ import type { HttpClient } from './http.js';
 /**
  * Every command the CLI has, as data.
  *
- * The shape follows the command design (D19293): `jinshuju <resource> <verb>
- * [args] [flags]`, resources kept at one level, the parent given by a flag —
+ * The shape is `jinshuju <resource> <verb> [args] [flags]`: resources kept at
+ * one level, the parent given by a flag —
  * `entry list --form <token>`, not `form entry list <token>`. Help, argument
  * checking and dispatch all read this table, so a command cannot be reachable
  * without its help, nor accept a flag it never described.

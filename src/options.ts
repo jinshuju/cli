@@ -3,9 +3,6 @@ import { readFileSync } from 'node:fs';
 /**
  * The shared option grammar, written once here because every resource uses it:
  * container, filter, sort, pagination, JSON input and output format.
- *
- * Follows the command design (D19293). Where that document and its basis
- * (D19291) disagree — the cursor flag — the design document wins: `--next`.
  */
 
 export type OptionType = 'string' | 'integer' | 'boolean' | 'json' | 'list';

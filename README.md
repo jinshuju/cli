@@ -1,90 +1,101 @@
 # @jinshuju/cli
 
-金数据开放 API v1 命令行工具。
+Command-line interface for the Jinshuju Open API v1.
 
-## 安装
+## Install
 
 ```bash
 npm install -g @jinshuju/cli
 ```
 
-安装后提供两个等价入口：
+Two equivalent entry points are installed:
 
 ```bash
 jinshuju --help
 jsj --help
 ```
 
-## 本地开发时用它
+## Working on the CLI itself
 
 ```bash
 npm install
-npm link          # 之后 jinshuju / jsj 直接可用
+npm link          # jinshuju / jsj now resolve to your checkout
 ```
 
-`npm link` 之后如果提示 `permission denied`，说明 `dist/cli-bin.js` 丢了可执行位——
-`npm run build` 会重建它。
+If `npm link` leaves you with `permission denied`, `dist/cli-bin.js` has lost
+its execute bit — `npm run build` restores it.
 
-## 认证
+## Authentication
 
-支持三种凭证：访问令牌（Personal / Account Access Token）、API Key + Secret、浏览器登录。
+Three kinds of credential are supported: an access token (personal or account),
+an API key and secret pair, and an interactive browser login.
 
-写入配置文件（`~/.jinshuju/config.json`，权限 600）：
+Write them to the config file (`~/.jinshuju/config.json`, mode 600):
 
 ```bash
-jinshuju config set access_token xxx     # 访问令牌
-jinshuju config set api_key xxx          # 或 API Key / Secret
+jinshuju config set access_token xxx     # access token
+jinshuju config set api_key xxx          # or API key / secret
 jinshuju config set api_secret xxx
 ```
 
-也可以用环境变量，适合 CI 和脚本：
+Environment variables work just as well, which suits CI and scripts:
 
 ```bash
 export JINSHUJU_ACCESS_TOKEN=xxx
-# 或
+# or
 export JINSHUJU_API_KEY=xxx
 export JINSHUJU_API_SECRET=xxx
 ```
 
-三种凭证的**优先级**：访问令牌 > API Key / Secret > 浏览器登录（`jinshuju auth login`）。
-显式配置的凭证压过存下来的登录态——设了令牌却用上周的登录，是不该发生的意外。
-当前用的是哪个、从哪来，看 `jinshuju auth status`：
+The **precedence** is access token, then API key and secret, then a stored
+browser login (`jinshuju auth login`). An explicitly configured credential
+always beats a stored session: setting a token and then acting as last week's
+login is a surprise nobody wants. `jinshuju auth status` reports which
+credential is in use and where it came from:
 
 ```
 $ jinshuju auth status
 Authenticated with an access token (from env).
 ```
 
-访问令牌在 `config get` 里和其他密钥一样默认打码，`--show-secret` 才完整显示。
+Access tokens are masked in `config get` like any other secret; pass
+`--show-secret` for the full value.
 
-## 创建表单
+## Creating forms
 
-字段 `type` 使用 API v1 类型名，创建字段时不要传 `api_code`，后端会生成。
+Field types use the API v1 type names. Do not supply `api_code` when creating a
+field — the server assigns it.
 
 ```bash
 jinshuju form create --json @form.json --scene registry --layout card --folder Fd2xK8
-jinshuju form create --json @exam.json --type exam        # 载荷里可带 exam_setting
+jinshuju form create --json @exam.json --type exam        # the payload may carry exam_setting
 jinshuju form edit Kp7mQ2 --json '{"exam_setting":{"limited_time":45}}'
 
 jinshuju form create --json '{
-  "name": "活动报名表",
+  "name": "Event signup",
   "fields": [
-    { "type": "TextField", "label": "姓名", "required": true },
-    { "type": "MobileField", "label": "手机号", "required": true }
+    { "type": "TextField", "label": "Name", "required": true },
+    { "type": "MobileField", "label": "Mobile", "required": true }
   ]
 }'
 ```
 
-`--type exam` / `--type evaluation` 同时决定场景和它专属的设置块。那个设置块有自己的端点，
-所以带它的载荷是两次请求——而且**通用的表单更新根本不认这个键**（它只读 name、description、
-setting、fields、field_rules），不分派的话 `exam_setting` 会被静默丢掉。
+`--type exam` and `--type evaluation` select both the scene and the settings
+block that belongs to it. That settings block has an endpoint of its own, so a
+payload carrying it becomes two requests — and the general form update does not
+recognise the key at all (it reads only `name`, `description`, `setting`,
+`fields` and `field_rules`), so without the dispatch `exam_setting` would be
+dropped in silence.
 
-设置块总是先发：它是可能因「这不是考试表单」被拒的那一半，先发才能保证被拒时其余改动一律没发生。
+The settings block is always sent first. It is the half that can be rejected —
+"this is not an exam form" — and sending it first is what guarantees a rejection
+leaves every other change unsent.
 
-## 读数据
+## Reading data
 
-`entry`、`view`、`field`、`comment` 都是一级资源，归属用 `--form` / `--table` 表达
-（两者互斥，都对应 API 的 `form_token`）。
+`entry`, `view`, `field` and `comment` are all top-level resources; the
+container is given by `--form` or `--table` (mutually exclusive, both mapping to
+the API's `form_token`).
 
 ```bash
 jinshuju entry list --form Kp7mQ2
@@ -93,7 +104,7 @@ jinshuju entry get 1 --form Kp7mQ2
 jinshuju entry list --form Kp7mQ2 --view aB3dE9
 ```
 
-筛选、排序、翻页：
+Filtering, sorting and paging:
 
 ```bash
 jinshuju entry list --form Kp7mQ2 --filter 'field_3 gte 80'
@@ -103,18 +114,22 @@ jinshuju entry list --form Kp7mQ2 --limit 10
 jinshuju entry list --form Kp7mQ2 --all
 ```
 
-`--limit`只能往小了要：列表的默认页大小同时也是上限（多数是 50），超了按上限算。
+`--limit` can only ask for less: a listing's default page size is also its
+maximum (50 in most cases), and anything larger is capped.
 
-`--filter` 可重复，多个条件为 AND。表达不了的条件用 `--filters <json|@file>`。
-游标是不透明字符串，把上次响应里的 `next` 原样传回即可。
+`--filter` is repeatable and the conditions are AND-combined. For conditions it
+cannot express, use `--filters <json|@file>`. Cursors are opaque strings — pass
+the `next` value from the previous response back verbatim.
 
-## 数据分析
+## Analysis
 
-不用把数据拉回来自己算——计数、聚合、画像都在服务端做，返回体的大小只取决于问了几个指标、分了几组。
+There is no need to pull rows out and count them yourself. Counts, aggregates
+and profiles are computed server-side, and the size of the response depends only
+on how many metrics you asked for and how many groups came back.
 
 ```bash
 jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'
-jinshuju entry count --form Kp7mQ2 --form Vn4xR8            # 容器可重复，最多 10 个
+jinshuju entry count --form Kp7mQ2 --form Vn4xR8            # repeatable, up to 10 containers
 
 jinshuju entry aggregate --form Kp7mQ2 --metric avg:field_3
 jinshuju entry aggregate --form Kp7mQ2 --metric count:field_1 --by created_at:month --limit 12
@@ -123,18 +138,23 @@ jinshuju entry summary --form Kp7mQ2
 jinshuju entry summary --form Kp7mQ2 --fields field_3,field_7 --no-overview
 ```
 
-`--metric <func>:<field>` 可重复，1–20 个；`--by <field>[:day|week|month]` 最多 2 个，日期维度必须带分桶。
-某个字段支持哪些函数是字段自己说的，看 `form get` 里的 `analytics.agg_funcs`。
-多容器计数不接受 `--keyword`，`--filter` 只能用 `created_at` / `updated_at` / `creator_id`——
-一个 api_code 在每张表上都是不同的字段，跨表比较没有意义。
+`--metric <func>:<field>` is repeatable, 1–20 of them; `--by <field>[:day|week|month]`
+takes at most 2, and a date dimension must name a bucket. Which functions a
+field accepts is the field's own answer — read `analytics.agg_funcs` from
+`form get`.
 
-## 创建 entry
+A multi-container count takes no `--keyword`, and its `--filter` is limited to
+`created_at`, `updated_at` and `creator_id`: the same api_code names a different
+field in every container, so comparing across them would mean nothing.
 
-payload 的键是字段 `api_code`，不是字段名。`--json` 支持内联、`@文件` 和 `-`（stdin）。
+## Creating entries
+
+Payload keys are field `api_code`s, not field labels. `--json` accepts inline
+JSON, `@file`, and `-` for stdin.
 
 ```bash
 jinshuju entry create --form Kp7mQ2 --json '{
-  "field_1": "张三",
+  "field_1": "Alice",
   "field_2": "13800138000"
 }'
 
@@ -142,128 +162,147 @@ jinshuju entry create --form Kp7mQ2 --json @entry.json
 cat entry.json | jinshuju entry create --form Kp7mQ2 --json -
 ```
 
-## 写
+## Writing
 
-每条写命令都只发一次请求，payload 的键是字段 `api_code`。
+Apart from the settings-block dispatch described above, every write command
+issues exactly one request, and payload keys are field `api_code`s.
 
 ```bash
-jinshuju folder create 台账 --kind table          # 文件夹分 form / table，表格进不了表单夹
-jinshuju form edit Kp7mQ2 --json '{"name":"2026 活动报名"}'
-jinshuju form copy Kp7mQ2 --name 副本
-jinshuju form move Kp7mQ2 --folder Fd2xK8         # 不带 --folder 就是移出文件夹
+jinshuju folder create Ledgers --kind table       # folders are form or table; a table cannot go in a form folder
+jinshuju form edit Kp7mQ2 --json '{"name":"2026 signups"}'
+jinshuju form copy Kp7mQ2 --name Copy
+jinshuju form move Kp7mQ2 --folder Fd2xK8         # without --folder, moves it out of its folder
 jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"
 jinshuju table create --json @table.json --folder Nf7mDC
-jinshuju table edit Vn4xR8 --json '{"name":"2026 台账"}'
+jinshuju table edit Vn4xR8 --json '{"name":"2026 ledger"}'
 ```
 
-字段的增删改都落在容器的一次 PATCH 上：
+Adding, changing and removing fields all land on a single PATCH of the
+container:
 
 ```bash
-jinshuju field add --form Kp7mQ2 --json '{"type":"TextField","label":"备注"}'
+jinshuju field add --form Kp7mQ2 --json '{"type":"TextField","label":"Notes"}'
 jinshuju field update --form Kp7mQ2 field_3 --json '{"required":true}'
-jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"丙"}]}'
+jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"Third"}]}'
 jinshuju field remove --form Kp7mQ2 field_9 --yes
 ```
 
-数据与视图：
+Data and views:
 
 ```bash
 jinshuju entry create --form Kp7mQ2 --batch @entries.json
-jinshuju entry update --form Kp7mQ2 12 --json '{"field_2":99}'          # 合并
-jinshuju entry update --form Kp7mQ2 12 --replace --json '{"field_1":"李四"}'  # 整条覆盖，没给的清空
-jinshuju entry update --form Kp7mQ2 --batch @rows.json                  # [{serial_number, entry}]
+jinshuju entry update --form Kp7mQ2 12 --json '{"field_2":99}'                 # merge
+jinshuju entry update --form Kp7mQ2 12 --replace --json '{"field_1":"Bob"}'    # replace; omitted fields are cleared
+jinshuju entry update --form Kp7mQ2 --batch @rows.json                         # [{serial_number, entry}]
 jinshuju entry delete --form Kp7mQ2 12 --yes
 
-jinshuju view create --form Kp7mQ2 高分 --filter 'field_3 gte 80' --sort created_at:desc
-jinshuju comment create --form Kp7mQ2 --entry 12 "已联系，等回复"
+jinshuju view create --form Kp7mQ2 "High scores" --filter 'field_3 gte 80' --sort created_at:desc
+jinshuju comment create --form Kp7mQ2 --entry 12 "Contacted, awaiting reply"
 jinshuju opensearch edit Qy7nR3 --disable
 ```
 
-删除一律要 `--yes`。这个 CLI 不交互——stdin 留给 `--json -`——所以确认是个 flag，
-不给就不删，而不是抛一个没人回答的问题。
+Deletion always requires `--yes`. This CLI is non-interactive — stdin belongs to
+`--json -` — so confirmation is a flag: without it nothing is deleted, rather
+than a prompt nobody is there to answer.
 
-## 跨表单
+## Searching across containers
 
 ```bash
-jinshuju entry search 某某公司                        # 我能读到的所有表单和表格，最多 10 个
+jinshuju entry search "Acme Corp"                     # every form and table you can read, up to 10
 jinshuju entry search 13800138000 --form Kp7mQ2 --form Vn4xR8
-jinshuju entry search 报修 --scope-filter 'entries_count gt 100'   # 筛「搜哪些表单」，不筛数据
+jinshuju entry search repair --scope-filter 'entries_count gt 100'   # picks which forms to search, not which rows
 
-jinshuju entry stats --from 2026-09-01               # 每张表单这段时间收到多少条
+jinshuju entry stats --from 2026-09-01                # how much each form received in the period
 jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10
 ```
 
-搜不到的表单会被**留在结果里并注明原因**，而不是当成「没匹配」丢掉——「没搜」和「没有」不是一回事。
-`entry stats` 和 `entry count` 口径不同：前者是「来了多少」（导入按运行那天记，删除不扣减），
-后者是「现在还剩多少」。
+A form that could not be searched stays in the result **with the reason**,
+rather than being dropped as if it had matched nothing — "not searched" and
+"nothing there" are different answers.
 
-## 我填写的
+`entry stats` and `entry count` measure different things: the former is how much
+arrived (an import counts on the day it ran, and deletions are not subtracted),
+the latter is how much is there now.
+
+## Your own submissions
 
 ```bash
-jinshuju form list --mine                      # 我填过哪些表单（不是我拥有的）
-jinshuju entry list --form Kp7mQ2 --mine       # 我在这张表单里提交过什么
-jinshuju entry search 某某公司 --mine           # 我提交过的数据里有没有它
+jinshuju form list --mine                      # forms you filled in, not forms you own
+jinshuju entry list --form Kp7mQ2 --mine       # what you submitted to this form
+jinshuju entry search "Acme Corp" --mine        # search your own submissions
 ```
 
-范围钉死在自己的提交上，读不到别人的，也不需要对那张表单有任何权限。
-只在 owner 视角成立的 flag（`--sort` / `--view` / `--scope-filter` 等）跟 `--mine` 一起给会被拒绝。
+The scope is pinned to your own submissions: you cannot read anyone else's, and
+you need no permission on the form itself. Flags that only make sense from an
+owner's point of view (`--sort`, `--view`, `--scope-filter` and the like) are
+rejected when combined with `--mine`.
 
-## 传文件
+## Working with files
 
-三条要传文件的命令。CLI 直接用自己的凭证上传，不需要先去换一张票据。
+Three commands take a file. The CLI uploads with its own credential; there is no
+ticket to fetch first.
 
 ```bash
-jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --map field_2=手机号
+jinshuju entry import --form Kp7mQ2 ./signups.xlsx --map field_1=Name --map field_2=Mobile
 jinshuju entry import --table Vn4xR8 ./rows.csv --map field_1=1 --map field_2=2 --header-row 2 --unique field_1
 
-jinshuju entry create --form Kp7mQ2 --json '{"field_1":"张三"}' --attach field_5=./身份证.jpg
+jinshuju entry create --form Kp7mQ2 --json '{"field_1":"Alice"}' --attach field_5=./id-card.jpg
 jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
 ```
 
 ```bash
-jinshuju entry import --form Kp7mQ2 ./报名.xlsx --map field_1=姓名 --wait   # 等它写完，失败则退出码非 0
-jinshuju entry import-status --form Kp7mQ2 <job-id>                        # 事后查
+jinshuju entry import --form Kp7mQ2 ./signups.xlsx --map field_1=Name --wait   # wait for it; non-zero exit on failure
+jinshuju entry import-status --form Kp7mQ2 <job-id>                            # or look it up later
 ```
 
-`--map` 左边是字段 api_code，右边是**列名或列序号**（纯数字按序号）。
-导入前该查的都会先查——文件、套餐允许的大小、表头行、列映射——所以被拒的导入一行都没写，
-报错里还会带上表格真实的列布局。通过之后行是后台写的：命令返回代表**已启动**，不代表已完成。
+`--map` takes a field api_code on the left and a **column name or column
+number** on the right (a bare number is read as a position). Everything knowable
+up front is checked before the import starts — the file, the size your plan
+allows, the header row, the column mapping — so a rejected import has written
+nothing, and the error names the sheet's actual layout. Once accepted, the rows
+are written in the background: the command returning means **started**, not
+finished.
 
-所以有 `--wait`：它等到写完，报告写了多少、跳过多少、拒了多少，**失败时退出码非 0**。
-不加 `--wait` 的话导入失败是看不见的——命令成功返回，行却一条都没写。事后也可以用
-`entry import-status` 拿 job id 查。
+That is what `--wait` is for. It waits for the job to settle, reports how many
+rows were written, skipped and rejected, and **exits non-zero on failure**.
+Without it a failed import is invisible — the command succeeds and not a single
+row is written. After the fact, `entry import-status` answers the same question
+from a job id.
 
-## 进度显示
+## Progress
 
-耗时的命令（`--all` 翻页、上传、`--wait` 等待）会显示进度。进度**只写 stderr，且只在 stderr
-是终端时才写**——所以 `--output json | jq` 拿到的字节和没有进度时完全一样，管道和 agent
-那边一个多余字符都不会有。
+Long-running commands (`--all` paging, uploads, `--wait`) report progress.
+Progress is written **to stderr, and only when stderr is a terminal**, so
+`--output json | jq` receives exactly the same bytes it would without it: a pipe,
+or an agent on the other end, never sees a stray character.
 
-## 删字段之前
+## Before removing a field
 
 ```bash
 jinshuju field check --form Kp7mQ2 field_3 field_7:choice_1
 jinshuju field preview-convert --form Kp7mQ2 field_1 --to RadioButton
 ```
 
-`field check` 回答「这个字段/选项底下有没有数据」——删了就连数据一起没了，删之前先问一句。
-`preview-convert` 报告类型转换会保留多少、清掉多少。
+`field check` answers whether a field or a choice has data under it — removing
+it takes that data along, so it is worth asking first. `preview-convert` reports
+how much a type conversion would keep and how much it would clear.
 
-## 其他
+## Odds and ends
 
 ```bash
-jinshuju form list --name 报名 --name 问卷       # 多个关键词是「任意匹配」，不是拼成一个词
-jinshuju entry list --form Kp7mQ2 --labels       # 每个值带上字段名，省一次读表单
-jinshuju table move Vn4xR8 --folder Nf7mDC       # 表格只能进 kind=table 的文件夹
-jinshuju table create --json @t.json --with-default-entries   # 播几行空行，跟界面上建表一样
+jinshuju form list --name signup --name survey   # several keywords match any, not one joined phrase
+jinshuju entry list --form Kp7mQ2 --labels       # carry the field label with each value, saving a form read
+jinshuju table move Vn4xR8 --folder Nf7mDC       # a table only goes into a kind=table folder
+jinshuju table create --json @t.json --with-default-entries   # seed a few blank rows, as the web UI does
 ```
 
-## Token 格式
+## Token format
 
-表单、表格、视图的 token 都是**六位大小写字母加数字**，例如 `Kp7mQ2`、`Vn4xR8`、`aB3dE9`。
-文档和 `--help` 里的示例统一用这个形状。
+Form, table and view tokens are **six characters of mixed-case letters and
+digits**, for example `Kp7mQ2`, `Vn4xR8`, `aB3dE9`. Examples here and in
+`--help` use that shape throughout.
 
-## 开发
+## Development
 
 ```bash
 npm install
