@@ -15,6 +15,16 @@ jinshuju --help
 jsj --help
 ```
 
+## 本地开发时用它
+
+```bash
+npm install
+npm link          # 之后 jinshuju / jsj 直接可用
+```
+
+`npm link` 之后如果提示 `permission denied`，说明 `dist/cli-bin.js` 丢了可执行位——
+`npm run build` 会重建它。
+
 ## 认证
 
 支持三种凭证：访问令牌（Personal / Account Access Token）、API Key + Secret、浏览器登录。
