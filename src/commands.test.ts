@@ -105,6 +105,200 @@ test('text output for API commands prints a human-readable response instead of J
   assert.doesNotMatch(result.stdout, /Entries fetched/);
 });
 
+test('form get renders its fields as a table in text output', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        name: '活动报名表',
+        token: 'Kp7mQ2',
+        fields: [
+          { field_1: { label: '序号', type: 'number', private: false, validation: {} } },
+          { field_2: { label: '会员等级', type: 'single_choice', private: false, choices: [{ name: '金卡' }] } }
+        ]
+      } as T;
+    }
+  };
+
+  const result = await cli(['form', 'get', 'Kp7mQ2', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /name: 活动报名表/);
+  assert.match(result.stdout, /fields:\n/);
+  assert.match(result.stdout, /api_code\s+label\s+type/);
+  assert.match(result.stdout, /field_1\s+序号\s+number/);
+  assert.match(result.stdout, /field_2\s+会员等级\s+single_choice/);
+  assert.doesNotMatch(result.stdout, /"label"/);
+});
+
+test('nested objects are indented instead of dumped as JSON, and long strings are clipped', async () => {
+  const richText = `<figure>${'x'.repeat(400)}</figure>`;
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        token: 'Kp7mQ2',
+        setting: {
+          success_message: '提交成功',
+          success_message_rich_text: richText,
+          success_redirect_fields: [],
+          fill_frequency: { fill_type: 'unlimited', cycles_per_period: 1 }
+        }
+      } as T;
+    }
+  };
+
+  const result = await cli(['form', 'get', 'Kp7mQ2', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^setting:$/m);
+  assert.match(result.stdout, /^ {2}success_message: 提交成功$/m);
+  assert.match(result.stdout, /^ {2}success_redirect_fields: \(empty\)$/m);
+  assert.match(result.stdout, /^ {2}fill_frequency:$/m);
+  assert.match(result.stdout, /^ {4}fill_type: unlimited$/m);
+  assert.doesNotMatch(result.stdout, /"fill_type"/);
+  assert.match(result.stdout, new RegExp(`… \\(${richText.length} chars\\)`));
+  assert.equal(result.stdout.includes(richText), false);
+});
+
+test('table columns line up when cells hold full-width characters', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        data: [
+          { token: 'BaLZpn', name: '报名表' },
+          { token: 'Cx9Kq2', name: 'feedback' }
+        ]
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  const lines = result.stdout.trimEnd().split('\n');
+  assert.equal(result.exitCode, 0);
+  // 报名表 is three characters and eight terminal cells wide, same as feedback.
+  assert.equal(lines[3], 'BaLZpn  报名表  ');
+  assert.equal(lines[4], 'Cx9Kq2  feedback');
+});
+
+test('--labels heads each column with the field label instead of losing the column', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        data: [
+          {
+            token: 'qGJ3LC',
+            serial_number: 1,
+            field_1: { label: '姓名', value: '张春明' },
+            field_2: { label: '手机号', value: '13800138000' }
+          }
+        ]
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--labels', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /token\s+serial_number\s+姓名\s+手机号/);
+  assert.match(result.stdout, /qGJ3LC\s+1\s+张春明\s+13800138000/);
+  // The pair itself never reaches the page: the label is the heading, the value the cell.
+  assert.doesNotMatch(result.stdout, /"label"/);
+});
+
+test('a summary keeps its buckets, by giving up the table for the rows that carry one', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        fields: [
+          {
+            api_code: 'field_4',
+            label: '骑行水平',
+            kind: 'choice',
+            answered: 3,
+            buckets: [
+              { label: '新手', count: 1, ratio: 0.3333 },
+              { label: '老炮', count: 2, ratio: 0.6667 }
+            ]
+          }
+        ],
+        tz: 'Asia/Shanghai'
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^ {2}label: 骑行水平$/m);
+  assert.match(result.stdout, /^ {2}buckets:$/m);
+  assert.match(result.stdout, /^ {4}label\s+count\s+ratio\s*$/m);
+  assert.match(result.stdout, /^ {4}新手\s+1\s+0\.3333$/m);
+  assert.match(result.stdout, /^tz: Asia\/Shanghai$/m);
+});
+
+test('an empty bucket list is no reason to give up the table', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        fields: [
+          { api_code: 'field_4', label: '骑行水平', answered: 0, buckets: [] },
+          { api_code: 'field_6', label: '交通方式', answered: 0, buckets: [] }
+        ]
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--output', 'text'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^ {2}api_code\s+label\s+answered$/m);
+  assert.match(result.stdout, /^ {2}field_4\s+骑行水平\s+0\s*$/m);
+});
+
+test('a listing spends its width on the values, and on timestamps only if they still fit', async () => {
+  const rows = [
+    {
+      token: 'BaLZpn',
+      serial_number: 1,
+      created_at: '2026-09-22',
+      updated_at: '2026-09-22',
+      field_1: '张三',
+      field_2: '13800138000'
+    }
+  ];
+  const client = { async request<T>(): Promise<T> { return { data: rows } as T; } };
+  const args = ['entry', 'list', '--form', 'Kp7mQ2', '--output', 'text'];
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  const wide = await cli(args, { env, client, width: 200 });
+  assert.equal(wide.exitCode, 0);
+  // Payload order puts the timestamps third; the reader wants them last.
+  assert.match(wide.stdout, /token\s+serial_number\s+field_1\s+field_2\s+created_at\s+updated_at/);
+
+  const narrow = await cli(args, { env, client, width: 40 });
+  assert.equal(narrow.exitCode, 0);
+  assert.match(narrow.stdout, /token\s+serial_number\s+field_1\n/);
+  assert.doesNotMatch(narrow.stdout, /created_at/);
+});
+
 test('API command errors are returned as CLI errors instead of uncaught promise rejections', async () => {
   const result = await cli(['form', 'list'], { env: {} });
 
