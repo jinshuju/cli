@@ -520,7 +520,8 @@ async function runRemote(
 
   const result = await client.request({ method: request.method, path: withQuery(request.path, request.query), body: request.body });
   const selected = command.select ? command.select(result) : result;
-  return ok(output === 'json' ? json(selected) : text(selected, width));
+  if (output === 'json') return ok(json(selected));
+  return ok(text(command.render ? command.render(selected) : selected, width));
 }
 
 /**
