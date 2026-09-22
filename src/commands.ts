@@ -209,9 +209,12 @@ const FORM_PAYLOAD: readonly string[] = [
   '  "fields": [',
   '    { "type": "TextField",   "label": "Name",   "required": true },',
   '    { "type": "RadioButton", "label": "Ticket", "choices": [',
-  '        { "label": "Standard" }, { "label": "VIP" } ] }',
+  '        { "name": "Standard" }, { "name": "VIP" } ] }',
   '  ]',
   '}',
+  '',
+  'A choice carries "name". The "value" it reads back with is the code the',
+  'backend assigns, not what you sent.',
   '',
   'Field types: jinshuju field types   |   A real one: jinshuju form get <token> --output json'
 ];
@@ -543,7 +546,9 @@ const FORM: readonly Command[] = [
     description:
       'The form carries its setting already. --include adds the blocks that are separate reads ' +
       'otherwise, so asking for a form and its rules is one round trip. analytics says which ' +
-      'statistics each field takes, which is what the analysis reads validate against.',
+      'statistics each field takes, which is what the analysis reads validate against. `fields` ' +
+      'comes back as a list of one-key objects keyed by api_code, not a flat list — `field list` ' +
+      'answers the same fields flattened, with api_code on each.',
     args: [{ name: 'form', required: true, description: 'Form token, six letters and digits, e.g. Kp7mQ2' }],
     options: [INCLUDE_OPTION],
     request: (input) => ({

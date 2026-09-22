@@ -88,3 +88,20 @@ test('a command that takes no payload shows no payload section', async () => {
 
   assert.doesNotMatch(result.stdout, /Payload:/);
 });
+
+// A payload example is prose as far as the compiler is concerned: nothing runs
+// it, so a broken one ships. The example shipped with `label` on a choice, which
+// the API refuses — the key is `name`. Parsing it back is the cheapest guard
+// that it is at least still a well-formed payload.
+for (const command of COMMANDS.filter((entry) => entry.payload?.length)) {
+  test(`${command.path.join(' ')} shows a payload example that is valid JSON`, () => {
+    const json = command.payload!.slice(0, command.payload!.indexOf('')).join('\n');
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+
+    for (const field of (parsed.fields as Record<string, unknown>[] | undefined) ?? [parsed]) {
+      for (const choice of (field.choices as Record<string, unknown>[] | undefined) ?? []) {
+        assert.ok('name' in choice, `a choice is keyed ${JSON.stringify(Object.keys(choice))}, but the API reads "name"`);
+      }
+    }
+  });
+}
