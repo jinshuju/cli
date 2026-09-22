@@ -257,6 +257,15 @@ const LEADING_COLUMNS = ['token', 'api_code', 'serial_number', 'id', 'name', 'ti
  */
 const TRAILING_COLUMNS = ['created_at', 'updated_at'];
 
+/**
+ * A column that names the row rather than saying anything about it. The listed
+ * ones plus whatever ends in `_token` or `_id`, because a search answers with
+ * `form_token` and a row showing only that has told the reader nothing.
+ */
+function identifies(column: string): boolean {
+  return LEADING_COLUMNS.includes(column) || /(^|_)(token|id)$/.test(column);
+}
+
 export function terminalWidth(stream: NodeJS.WriteStream = process.stdout): number {
   return stream.isTTY && stream.columns > 0 ? stream.columns : PIPED_WIDTH;
 }
@@ -275,14 +284,16 @@ function text(value: unknown, width: number): string {
 
 function renderObject(value: Record<string, unknown>, width: number): string {
   const listKey = ['data', 'items', 'forms', 'entries', 'views'].find((key) => Array.isArray(value[key]));
-  const scalarLines = Object.entries(value)
-    .filter(([key]) => key !== listKey)
-    .filter(([, fieldValue]) => !Array.isArray(fieldValue) && (fieldValue === null || typeof fieldValue !== 'object'))
-    .map(([key, fieldValue]) => `${key}: ${formatCell(fieldValue)}`);
 
   if (listKey) {
+    // Everything beside the listing is rendered, not just its scalars. Filtering
+    // to scalars here was another way for a payload to lose a key on the way to
+    // the page — the warnings an import answers with, say.
+    const heading = Object.entries(value)
+      .filter(([key]) => key !== listKey)
+      .map(([key, fieldValue]) => renderEntry(key, fieldValue, width));
     const listText = renderList(value[listKey] as unknown[], width);
-    return [...scalarLines, `${listKey}:`, listText].filter(Boolean).join('\n');
+    return [...heading, `${listKey}:`, listText].filter(Boolean).join('\n');
   }
 
   const entries = Object.entries(value);
@@ -335,6 +346,21 @@ function renderList(values: unknown[], width: number): string {
     used = next;
   }
 
+  // A row that says nothing but its own name says nothing at all — and the
+  // column that would have explained it is exactly the one a narrow terminal
+  // drops. `entry search` keeps a form it could not read *with the reason*, and
+  // the budget must not be what throws that reason away. A row left with only
+  // its identity buys back one column, whatever the width says.
+  const told = (row: Record<string, unknown>, column: string): boolean =>
+    !identifies(column) && formatCell(row[column]) !== '';
+  for (const row of rows) {
+    if (columns.some((column) => told(row, column))) continue;
+    const rescued = candidates.find((column) => !columns.includes(column) && told(row, column));
+    if (!rescued) continue;
+    columns.push(rescued);
+    widths.push(Math.max(displayWidth(heading(rescued)), ...rows.map((other) => displayWidth(formatCell(other[rescued])))));
+  }
+
   const header = columns.map((column, index) => pad(heading(column), widths[index])).join('  ');
   const separator = widths.map((columnWidth) => '-'.repeat(columnWidth)).join('  ');
   const body = rows.map((row) => columns.map((column, index) => pad(formatCell(row[column]), widths[index])).join('  '));
@@ -347,12 +373,12 @@ function renderList(values: unknown[], width: number): string {
  */
 function candidateColumns(rows: Record<string, unknown>[]): string[] {
   const present = (key: string): boolean =>
-    rows.some((row) => Object.prototype.hasOwnProperty.call(row, key) && isScalar(row[key]));
+    rows.some((row) => Object.prototype.hasOwnProperty.call(row, key) && isCell(row[key]));
 
   const seen = new Set<string>(LEADING_COLUMNS.filter(present));
   for (const row of rows) {
     for (const [key, value] of Object.entries(row)) {
-      if (isScalar(value) && !TRAILING_COLUMNS.includes(key)) seen.add(key);
+      if (isCell(value) && !TRAILING_COLUMNS.includes(key)) seen.add(key);
     }
   }
   for (const key of TRAILING_COLUMNS.filter(present)) seen.add(key);
@@ -431,6 +457,21 @@ function isScalar(value: unknown): boolean {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
+/**
+ * Whether a value earns its key a column. A list of values does: a
+ * multiple-choice answer is a list, and so is the `serial_numbers` a search
+ * answers with. Treating those as unprintable dropped the column — which meant
+ * `--fields field_6` left out field_6, and `entry search` said how many rows
+ * matched without ever saying which.
+ *
+ * An empty list earns nothing, though. A column that is `[]` in every row is a
+ * heading with a blank under it for as far as the table goes.
+ */
+function isCell(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0 && value.every(isScalar);
+  return isScalar(value);
+}
+
 function formatField(value: unknown): string {
   if (isScalar(value)) return formatCell(value);
   return json(value);
@@ -440,6 +481,7 @@ function formatCell(value: unknown): string {
   if (value === undefined || value === null) return '';
   if (typeof value === 'string') return clip(value);
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value) && value.every(isScalar)) return clip(value.map(formatCell).join(', '));
   return clip(JSON.stringify(value));
 }
 
