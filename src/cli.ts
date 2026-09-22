@@ -9,7 +9,7 @@ import { COMMANDS, findCommand, type Command, type QueryValues } from './command
 import { commandHelp, helpFor, rootHelp, unknownCommandHelp } from './help.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
 import {
-  GLOBAL_OPTIONS, UsageError, optionKey, readJsonInput, type OptionSpec, type OutputFormat
+  GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, optionKey, readJsonInput, type OptionSpec, type OutputFormat
 } from './options.js';
 
 export type CliResult = { exitCode: number; stdout: string; stderr: string };
@@ -36,19 +36,6 @@ type LocalOptions = {
   verify: boolean;
   showSecret: boolean;
 };
-
-/** Options the local commands accept on top of the global ones. */
-const LOCAL_OPTIONS: readonly OptionSpec[] = [
-  { name: '--api-key', type: 'string', placeholder: '<key>', description: 'Override API key' },
-  { name: '--api-secret', type: 'string', placeholder: '<secret>', description: 'Override API secret' },
-  { name: '--host', type: 'string', placeholder: '<url>', description: 'API host' },
-  { name: '--auth-host', type: 'string', placeholder: '<url>', description: 'OAuth host' },
-  { name: '--client-id', type: 'string', placeholder: '<id>', description: 'OAuth public client id' },
-  { name: '--scopes', type: 'string', placeholder: '<scopes>', description: 'Space-separated OAuth scopes' },
-  { name: '--no-open', type: 'boolean', description: 'Print the login URL instead of opening a browser' },
-  { name: '--verify', type: 'boolean', description: 'Verify the credentials with a lightweight call' },
-  { name: '--show-secret', type: 'boolean', description: 'Show secrets unmasked' }
-];
 
 type RawArgs = { words: string[]; flags: Record<string, unknown> };
 

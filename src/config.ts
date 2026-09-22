@@ -150,8 +150,11 @@ export function maskSecret(value: string | undefined): string | undefined {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
+/** Every key the config file holds, in the order help should list them. */
+export const CONFIG_KEYS: readonly ConfigKey[] = ['access_token', 'api_key', 'api_secret', 'host', 'auth_host', 'client_id'];
+
 export function assertConfigKey(value: string): asserts value is ConfigKey {
-  if (!['access_token', 'api_key', 'api_secret', 'host', 'auth_host', 'client_id'].includes(value)) {
-    throw new Error('Config key must be access_token, api_key, api_secret, host, auth_host, or client_id');
+  if (!(CONFIG_KEYS as readonly string[]).includes(value)) {
+    throw new Error(`Config key must be one of ${CONFIG_KEYS.join(', ')}`);
   }
 }
