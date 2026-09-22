@@ -70,3 +70,21 @@ test('package bin points to executable wrapper, not library module', () => {
   assert.equal(pkg.bin.jinshuju, './dist/cli-bin.js');
   assert.equal(pkg.bin.jsj, './dist/cli-bin.js');
 });
+
+// A flag named `<json>` says nothing about what goes in it. Every command that
+// declares a payload has to show it, and show the way to the field types — the
+// part of the shape no example can carry.
+for (const command of COMMANDS.filter((entry) => entry.payload?.length)) {
+  test(`${command.path.join(' ')} --help shows the payload it expects`, async () => {
+    const result = await runCli([...command.path, '--help']);
+
+    assert.match(result.stdout, /Payload:/);
+    assert.match(result.stdout, /jinshuju field types/);
+  });
+}
+
+test('a command that takes no payload shows no payload section', async () => {
+  const result = await runCli(['form', 'list', '--help']);
+
+  assert.doesNotMatch(result.stdout, /Payload:/);
+});

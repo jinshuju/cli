@@ -1315,3 +1315,25 @@ test('a flag left out never erases what the payload said', async () => {
   assert.equal((overridden.requests[0].body as Record<string, unknown>).scene, 'survey');
   assert.equal((themed.requests[0].body as Record<string, unknown>).primary_color, '#112233');
 });
+
+/**
+ * The gap this closes: `--json <json|@file|->` says nothing about what goes in
+ * the file. A caller with no form to copy from has to be told, and the type
+ * names are the part it cannot guess — there are dozens.
+ */
+test('field types reads the catalogue, for a form by default and for a table when asked', async () => {
+  const { requests, client } = createMockClient();
+
+  await cli(['field', 'types'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  await cli(['field', 'types', '--kind', 'table'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  await cli(['field', 'types', 'RadioButton'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+
+  assert.deepEqual(
+    requests.map((request) => `${request.method} ${request.path}`),
+    [
+      'GET /api/v1/field_types',
+      'GET /api/v1/field_types?kind=table',
+      'GET /api/v1/field_types/RadioButton'
+    ]
+  );
+});
