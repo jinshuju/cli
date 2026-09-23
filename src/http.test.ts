@@ -37,10 +37,12 @@ function serve(answers: Record<string, Answer>): Promise<{ url: string; close: (
 }
 
 function clientFor(host: string) {
-  return new JinshujuHttpClient(loadConfig({
-    configPath: NO_CONFIG,
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret', JINSHUJU_HOST: host }
-  }));
+  return new JinshujuHttpClient(
+    loadConfig({
+      configPath: NO_CONFIG,
+      env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret', JINSHUJU_HOST: host }
+    })
+  );
 }
 
 async function failure(host: string, path: string): Promise<Error & { status?: number; body?: unknown }> {
@@ -52,8 +54,9 @@ async function failure(host: string, path: string): Promise<Error & { status?: n
   throw new Error(`${path} was expected to fail`);
 }
 
-const HTML_500 = '<!DOCTYPE html><html><head><title>Action Controller: Exception caught</title></head>'
-  + '<body><h1>NoMethodError</h1><p>undefined method `abort?\' for nil</p></body></html>';
+const HTML_500 =
+  '<!DOCTYPE html><html><head><title>Action Controller: Exception caught</title></head>' +
+  "<body><h1>NoMethodError</h1><p>undefined method `abort?' for nil</p></body></html>";
 
 test('a server that states a reason has it repeated, and nothing added to it', async () => {
   const server = await serve({

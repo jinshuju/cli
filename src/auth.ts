@@ -2,7 +2,15 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { execFile } from 'node:child_process';
 
-import { clearOAuthConfig, defaultScopes, loadConfig, saveOAuthConfig, type LoadConfigOptions, type LoadedConfig, type OAuthConfig } from './config.js';
+import {
+  clearOAuthConfig,
+  defaultScopes,
+  loadConfig,
+  saveOAuthConfig,
+  type LoadConfigOptions,
+  type LoadedConfig,
+  type OAuthConfig
+} from './config.js';
 
 export type TokenResponse = {
   access_token: string;
@@ -59,8 +67,15 @@ export function buildAuthorizationUrl(params: {
   return url.toString();
 }
 
-export async function loginWithOAuth(options: OAuthLoginOptions = {}, opener: BrowserOpener = openUrl): Promise<OAuthLoginResult> {
-  const config = loadConfig({ configPath: options.configPath, env: options.env, cli: { host: options.host, authHost: options.authHost, clientId: options.clientId } });
+export async function loginWithOAuth(
+  options: OAuthLoginOptions = {},
+  opener: BrowserOpener = openUrl
+): Promise<OAuthLoginResult> {
+  const config = loadConfig({
+    configPath: options.configPath,
+    env: options.env,
+    cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
+  });
   const clientId = options.clientId ?? config.clientId;
   if (!clientId) throw new Error('Missing OAuth client id. Set JINSHUJU_OAUTH_CLIENT_ID or config client_id.');
 
@@ -113,7 +128,13 @@ export function shouldRefresh(auth: OAuthConfig, skewMs = 60_000): boolean {
   return Date.parse(auth.expires_at) - skewMs <= Date.now();
 }
 
-async function exchangeAuthorizationCode(authHost: string, clientId: string, redirectUri: string, code: string, codeVerifier: string): Promise<TokenResponse> {
+async function exchangeAuthorizationCode(
+  authHost: string,
+  clientId: string,
+  redirectUri: string,
+  code: string,
+  codeVerifier: string
+): Promise<TokenResponse> {
   return tokenRequest(authHost, {
     grant_type: 'authorization_code',
     client_id: clientId,
@@ -139,7 +160,12 @@ async function tokenRequest(authHost: string, params: Record<string, string>): P
   return body as TokenResponse;
 }
 
-function toOAuthConfig(config: LoadedConfig, clientId: string, token: TokenResponse, previous?: OAuthConfig): OAuthConfig {
+function toOAuthConfig(
+  config: LoadedConfig,
+  clientId: string,
+  token: TokenResponse,
+  previous?: OAuthConfig
+): OAuthConfig {
   return {
     type: 'oauth',
     auth_host: previous?.auth_host ?? config.authHost,
@@ -151,7 +177,11 @@ function toOAuthConfig(config: LoadedConfig, clientId: string, token: TokenRespo
   };
 }
 
-function listenForOAuthCallback(expectedState: string, port = 0, timeoutMs = 120_000): Promise<{ redirectUri: string; code: Promise<string> }> {
+function listenForOAuthCallback(
+  expectedState: string,
+  port = 0,
+  timeoutMs = 120_000
+): Promise<{ redirectUri: string; code: Promise<string> }> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -178,7 +208,9 @@ function listenForOAuthCallback(expectedState: string, port = 0, timeoutMs = 120
         callbackReject(new Error('Missing OAuth code'));
         return;
       }
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Jinshuju CLI login complete. You can close this tab.');
+      res
+        .writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
+        .end('Jinshuju CLI login complete. You can close this tab.');
       callbackResolve(code);
     });
 

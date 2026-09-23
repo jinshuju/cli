@@ -1,7 +1,25 @@
 import {
-  CONTAINER_LIST_OPTIONS, CONTAINER_OPTIONS, FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, LIMIT_OPTION, LOCAL_OPTIONS,
-  MINE_OPTION, PAGINATION_OPTIONS, SORT_OPTION, TIME_BUCKETS, UsageError, parseDimension, parseFilter, parseMetric, parseSort,
-  resolveContainer, resolveContainers, type FilterCondition, type OptionSpec, type SortRule
+  CONTAINER_LIST_OPTIONS,
+  CONTAINER_OPTIONS,
+  FILTER_OPTION,
+  FILTERS_OPTION,
+  JSON_OPTION,
+  LIMIT_OPTION,
+  LOCAL_OPTIONS,
+  MINE_OPTION,
+  PAGINATION_OPTIONS,
+  SORT_OPTION,
+  TIME_BUCKETS,
+  UsageError,
+  parseDimension,
+  parseFilter,
+  parseMetric,
+  parseSort,
+  resolveContainer,
+  resolveContainers,
+  type FilterCondition,
+  type OptionSpec,
+  type SortRule
 } from './options.js';
 import { CONFIG_KEYS } from './config.js';
 import { readFileSync } from 'node:fs';
@@ -229,7 +247,10 @@ const FIELD_PAYLOAD: readonly string[] = [
 const YES_OPTION: OptionSpec = { name: '--yes', type: 'boolean', description: 'Confirm the deletion' };
 
 const FOLDER_OPTION: OptionSpec = {
-  name: '--folder', type: 'string', placeholder: '<token>', description: 'Folder token; empty moves it out of any folder'
+  name: '--folder',
+  type: 'string',
+  placeholder: '<token>',
+  description: 'Folder token; empty moves it out of any folder'
 };
 
 /**
@@ -283,7 +304,8 @@ const MAX_COUNTED_CONTAINERS = 10;
 function selectFields(body: unknown): Record<string, unknown>[] {
   const fields = (body as { fields?: Record<string, Record<string, unknown>>[] } | undefined)?.fields ?? [];
   return fields.flatMap((entry) =>
-    Object.entries(entry).map(([api_code, attributes]) => ({ api_code, ...attributes })));
+    Object.entries(entry).map(([api_code, attributes]) => ({ api_code, ...attributes }))
+  );
 }
 
 /**
@@ -373,7 +395,13 @@ const FOLDER: readonly Command[] = [
     description: 'A folder holds one kind. A table refuses a form folder, so say which when it is not forms.',
     args: [{ name: 'name', required: true, description: 'Folder name' }],
     options: [
-      { name: '--kind', type: 'string', choices: ['form', 'table'], placeholder: '<kind>', description: 'What the folder holds (default form)' }
+      {
+        name: '--kind',
+        type: 'string',
+        choices: ['form', 'table'],
+        placeholder: '<kind>',
+        description: 'What the folder holds (default form)'
+      }
     ],
     request: (input) => ({
       method: 'POST',
@@ -434,26 +462,45 @@ async function uploadImage(client: HttpClient, file: string, imageType: string):
   const watching = progress();
   watching.step(`uploading ${basename(file)}…`);
   try {
-  const uploaded = await client.request<{ attachment_id: string }>(
-    upload(`${API}/form_image_attachments`, file, { image_type: imageType })
-  );
-  return uploaded.attachment_id;
+    const uploaded = await client.request<{ attachment_id: string }>(
+      upload(`${API}/form_image_attachments`, file, { image_type: imageType })
+    );
+    return uploaded.attachment_id;
   } finally {
     watching.done();
   }
 }
 
 /** The scenes a form can be created for, as the API names them. */
-const FORM_SCENES = ['survey', 'registry', 'vote', 'exam', 'reservation',
-  'customer_acquisition', 'evaluation', 'online_payment'] as const;
+const FORM_SCENES = [
+  'survey',
+  'registry',
+  'vote',
+  'exam',
+  'reservation',
+  'customer_acquisition',
+  'evaluation',
+  'online_payment'
+] as const;
 
 /**
  * The field types a table column may be, which is a third of what a form takes.
  * Worth naming in the help rather than leaving to a rejected create: the absence
  * of TextField is the one nobody guesses.
  */
-const TABLE_FIELD_TYPES = ['TextArea', 'RadioButton', 'CheckBox', 'BooleanField', 'MobileField',
-  'NumberField', 'DateTimeField', 'EmailField', 'LinkField', 'AttachmentField', 'FormulaField'] as const;
+const TABLE_FIELD_TYPES = [
+  'TextArea',
+  'RadioButton',
+  'CheckBox',
+  'BooleanField',
+  'MobileField',
+  'NumberField',
+  'DateTimeField',
+  'EmailField',
+  'LinkField',
+  'AttachmentField',
+  'FormulaField'
+] as const;
 
 /**
  * A form's type picks both the scene it is created in and the settings block
@@ -489,7 +536,10 @@ function sceneFor(input: CommandInput): string | undefined {
   return implied ?? scene;
 }
 
-function createFormBody(input: CommandInput): { body: Record<string, unknown>; settings?: { key: string; path: string; value: unknown } } {
+function createFormBody(input: CommandInput): {
+  body: Record<string, unknown>;
+  settings?: { key: string; path: string; value: unknown };
+} {
   const payloadBody = { ...(validateCreateFormPayload(payload(input)) as Record<string, unknown>) };
   const settings = settingsBlock(payloadBody);
   if (settings) delete payloadBody[settings.key];
@@ -508,13 +558,21 @@ const FORM: readonly Command[] = [
   {
     path: ['form', 'list'],
     summary: 'List forms',
-    description:
-      'Filters act on the form itself: form_name, created_at, last_entry_created_at, entries_count.',
+    description: 'Filters act on the form itself: form_name, created_at, last_entry_created_at, entries_count.',
     options: [
-      { name: '--name', type: 'string', repeatable: true, placeholder: '<kw>', description: 'Match forms whose name contains the keyword, repeatable' },
+      {
+        name: '--name',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<kw>',
+        description: 'Match forms whose name contains the keyword, repeatable'
+      },
       { name: '--with-transactions', type: 'boolean', description: "Carry each payment form's collected totals" },
       MINE_OPTION,
-      FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
+      FILTER_OPTION,
+      FILTERS_OPTION,
+      SORT_OPTION,
+      ...PAGINATION_OPTIONS
     ],
     request: (input) => {
       if (input.options.mine) {
@@ -522,20 +580,20 @@ const FORM: readonly Command[] = [
         return { method: 'GET', path: `${API}/my/forms`, query: paging(input) };
       }
       return {
-      method: 'GET',
-      path: `${API}/forms`,
-      query: {
-        q: keywords(input.options.name),
-        include_transactions: input.options.with_transactions ? 'true' : undefined,
-        filters: filters(input),
-        sort: sort(input, 'field'),
-        ...paging(input)
-      }
+        method: 'GET',
+        path: `${API}/forms`,
+        query: {
+          q: keywords(input.options.name),
+          include_transactions: input.options.with_transactions ? 'true' : undefined,
+          filters: filters(input),
+          sort: sort(input, 'field'),
+          ...paging(input)
+        }
       };
     },
     paginate: LISTING,
     examples: [
-      "jinshuju form list --name 报名",
+      'jinshuju form list --name 报名',
       'jinshuju form list --sort entries_count:desc --limit 10',
       'jinshuju form list --mine'
     ]
@@ -569,9 +627,28 @@ const FORM: readonly Command[] = [
     payload: FORM_PAYLOAD,
     options: [
       JSON_OPTION,
-      { name: '--type', type: 'string', choices: Object.keys(FORM_TYPES), placeholder: '<type>', description: 'normal, exam or evaluation. An exam or evaluation also takes its own settings block in the payload' },
-      { name: '--scene', type: 'string', choices: FORM_SCENES, placeholder: '<scene>', description: `What the form is for: ${FORM_SCENES.join(', ')}` },
-      { name: '--layout', type: 'string', choices: ['classic', 'card'], placeholder: '<layout>', description: 'classic shows every field at once, card one page at a time' },
+      {
+        name: '--type',
+        type: 'string',
+        choices: Object.keys(FORM_TYPES),
+        placeholder: '<type>',
+        description:
+          'normal, exam or evaluation. An exam or evaluation also takes its own settings block in the payload'
+      },
+      {
+        name: '--scene',
+        type: 'string',
+        choices: FORM_SCENES,
+        placeholder: '<scene>',
+        description: `What the form is for: ${FORM_SCENES.join(', ')}`
+      },
+      {
+        name: '--layout',
+        type: 'string',
+        choices: ['classic', 'card'],
+        placeholder: '<layout>',
+        description: 'classic shows every field at once, card one page at a time'
+      },
       FOLDER_OPTION
     ],
     request: (input) => ({
@@ -585,12 +662,19 @@ const FORM: readonly Command[] = [
 
       const form = await client.request<{ token: string }>({ method: 'POST', path: `${API}/forms`, body });
       try {
-        await client.request({ method: 'PATCH', path: `${API}/forms/${form.token}/${settings.path}`, body: settings.value });
+        await client.request({
+          method: 'PATCH',
+          path: `${API}/forms/${form.token}/${settings.path}`,
+          body: settings.value
+        });
       } catch (error) {
         // The form exists; saying so beats an error that reads as though
         // nothing happened and inviting a second one to be created.
-        throw new Error(`form ${form.token} was created, but its ${settings.key} was refused: ` +
-          `${(error as Error).message}. Fix it and apply with \`form edit\`.`);
+        throw new Error(
+          `form ${form.token} was created, but its ${settings.key} was refused: ` +
+            `${(error as Error).message}. Fix it and apply with \`form edit\`.`,
+          { cause: error }
+        );
       }
       return client.request({ method: 'GET', path: `${API}/forms/${form.token}` });
     },
@@ -618,8 +702,13 @@ const FORM: readonly Command[] = [
       // The settings go first: they are the half that can be refused for what
       // the form is, so leading with them is what keeps a refusal from landing
       // after the rest was already written.
-      await client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}/${settings.path}`, body: settings.value });
-      if (Object.keys(body).length === 0) return client.request({ method: 'GET', path: `${API}/forms/${input.args.form}` });
+      await client.request({
+        method: 'PATCH',
+        path: `${API}/forms/${input.args.form}/${settings.path}`,
+        body: settings.value
+      });
+      if (Object.keys(body).length === 0)
+        return client.request({ method: 'GET', path: `${API}/forms/${input.args.form}` });
 
       try {
         return await client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
@@ -628,8 +717,11 @@ const FORM: readonly Command[] = [
         // fails first. When the second one fails the first has landed, and an
         // error that reads as though nothing happened would invite the whole
         // edit to be sent again.
-        throw new Error(`${settings.key} was saved, but the rest of the edit (${Object.keys(body).join(', ')}) ` +
-          `was refused: ${(error as Error).message}. Re-send only what failed.`);
+        throw new Error(
+          `${settings.key} was saved, but the rest of the edit (${Object.keys(body).join(', ')}) ` +
+            `was refused: ${(error as Error).message}. Re-send only what failed.`,
+          { cause: error }
+        );
       }
     },
     examples: [
@@ -674,7 +766,12 @@ const FORM: readonly Command[] = [
     options: [
       { name: '--primary-color', type: 'string', placeholder: '<hex>', description: 'Primary colour, e.g. #1F6FEB' },
       { name: '--secondary-color', type: 'string', placeholder: '<hex>', description: 'Secondary colour' },
-      { name: '--wallpaper', type: 'string', placeholder: '<file>', description: 'Image file to use as the background' },
+      {
+        name: '--wallpaper',
+        type: 'string',
+        placeholder: '<file>',
+        description: 'Image file to use as the background'
+      },
       { name: '--header', type: 'string', placeholder: '<file>', description: 'Image file to use as the header' },
       JSON_OPTION
     ],
@@ -687,11 +784,11 @@ const FORM: readonly Command[] = [
       const body = themeBody(input) as Record<string, Record<string, unknown>>;
       if (wallpaper) {
         const image = await uploadImage(client, wallpaper, 'wallpaper');
-        body.wallpaper = { ...(body.wallpaper ?? {}), background_image_attachment_id: image };
+        body.wallpaper = { ...body.wallpaper, background_image_attachment_id: image };
       }
       if (header) {
         const image = await uploadImage(client, header, 'header');
-        body.header = { ...(body.header ?? {}), header_image_attachment_id: image };
+        body.header = { ...body.header, header_image_attachment_id: image };
       }
       return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body });
     },
@@ -731,8 +828,17 @@ const TABLE: readonly Command[] = [
     path: ['table', 'list'],
     summary: 'List tables',
     options: [
-      { name: '--name', type: 'string', repeatable: true, placeholder: '<kw>', description: 'Match tables whose name contains the keyword' },
-      FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
+      {
+        name: '--name',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<kw>',
+        description: 'Match tables whose name contains the keyword'
+      },
+      FILTER_OPTION,
+      FILTERS_OPTION,
+      SORT_OPTION,
+      ...PAGINATION_OPTIONS
     ],
     request: (input) => ({
       method: 'GET',
@@ -757,8 +863,13 @@ const TABLE: readonly Command[] = [
       `${TABLE_FIELD_TYPES.join(', ')}. There is no TextField — a single line of text is a ` +
       'TextArea here. Do not pass api_code: the backend generates it.',
     options: [
-      JSON_OPTION, FOLDER_OPTION,
-      { name: '--with-default-entries', type: 'boolean', description: 'Seed a few blank rows, as the UI does. Leave it off when rows follow' }
+      JSON_OPTION,
+      FOLDER_OPTION,
+      {
+        name: '--with-default-entries',
+        type: 'boolean',
+        description: 'Seed a few blank rows, as the UI does. Leave it off when rows follow'
+      }
     ],
     request: (input) => ({
       method: 'POST',
@@ -798,7 +909,8 @@ const TABLE: readonly Command[] = [
 /** `field_7:choice_1` into the target the check endpoint reads. */
 function parseCheckTarget(target: string): Record<string, unknown> {
   const [field_api_code, choice_value] = target.split(':');
-  if (!field_api_code) throw new UsageError(`a check target must be '<api-code>[:<choice>]', got ${JSON.stringify(target)}`);
+  if (!field_api_code)
+    throw new UsageError(`a check target must be '<api-code>[:<choice>]', got ${JSON.stringify(target)}`);
   return choice_value === undefined ? { field_api_code } : { field_api_code, choice_value };
 }
 
@@ -843,11 +955,7 @@ const FIELD: readonly Command[] = [
       query: { kind: input.options.kind as string | undefined }
     }),
     select: (body) => (Array.isArray((body as { data?: unknown }).data) ? body : { data: [body] }),
-    examples: [
-      'jinshuju field types',
-      'jinshuju field types --kind table',
-      'jinshuju field types RadioButton'
-    ]
+    examples: ['jinshuju field types', 'jinshuju field types --kind table', 'jinshuju field types RadioButton']
   },
   {
     path: ['field', 'list'],
@@ -879,7 +987,9 @@ const FIELD: readonly Command[] = [
     request: (input) => ({
       method: 'PATCH',
       path: containerPath(input),
-      body: { fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] } }
+      body: {
+        fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] }
+      }
     }),
     examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
   },
@@ -920,7 +1030,7 @@ const FIELD: readonly Command[] = [
   },
   {
     path: ['field', 'preview-convert'],
-    summary: 'Preview what changing a field\'s type would do to its data',
+    summary: "Preview what changing a field's type would do to its data",
     description:
       'The conversion happens in place, so the only thing at stake is the data: this reports how ' +
       'many values are kept and how many are cleared. supported=false means the edit would refuse it.',
@@ -928,17 +1038,25 @@ const FIELD: readonly Command[] = [
     options: [
       ...CONTAINER_OPTIONS,
       { name: '--to', type: 'string', placeholder: '<type>', description: 'Target field type, e.g. RadioButton' },
-      { name: '--precision', type: 'string', placeholder: '<precision>', description: 'For a DateTimeField target, the precision the edit will use' },
+      {
+        name: '--precision',
+        type: 'string',
+        placeholder: '<precision>',
+        description: 'For a DateTimeField target, the precision the edit will use'
+      },
       JSON_OPTION
     ],
     request: (input) => {
-      const inline = input.options.json === undefined
-        ? [{
-            field_api_code: input.args['api-code'],
-            target_type: requiredOption(input, 'to'),
-            target_precision: input.options.precision
-          }]
-        : one(input.options.json);
+      const inline =
+        input.options.json === undefined
+          ? [
+              {
+                field_api_code: input.args['api-code'],
+                target_type: requiredOption(input, 'to'),
+                target_precision: input.options.precision
+              }
+            ]
+          : one(input.options.json);
       return {
         method: 'GET',
         path: `${containerPath(input)}/fields/preview_convert`,
@@ -950,8 +1068,7 @@ const FIELD: readonly Command[] = [
   {
     path: ['field', 'remove'],
     summary: 'Remove a field',
-    description:
-      'Removing a field that still holds answers deletes those answers with it, and cannot be undone.',
+    description: 'Removing a field that still holds answers deletes those answers with it, and cannot be undone.',
     args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
     options: [...CONTAINER_OPTIONS, YES_OPTION],
     request: (input) => {
@@ -964,9 +1081,18 @@ const FIELD: readonly Command[] = [
 
 /** What `view create` and `view edit` both take, beyond the name. */
 const VIEW_OPTIONS: readonly OptionSpec[] = [
-  { name: '--type', type: 'string', choices: ['grid', 'kanban', 'stats'], placeholder: '<type>', description: 'View type' },
+  {
+    name: '--type',
+    type: 'string',
+    choices: ['grid', 'kanban', 'stats'],
+    placeholder: '<type>',
+    description: 'View type'
+  },
   { name: '--columns', type: 'list', placeholder: '<api-code,...>', description: 'Columns to show, in this order' },
-  FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, JSON_OPTION
+  FILTER_OPTION,
+  FILTERS_OPTION,
+  SORT_OPTION,
+  JSON_OPTION
 ];
 
 function viewBody(input: CommandInput): Record<string, unknown> {
@@ -1112,8 +1238,13 @@ function parseAttachment(input: string): Attachment {
   const target = /^([A-Za-z0-9_]+)(?:\[(\d+)\]|\.(\d+))?(?:\.([A-Za-z0-9_]+))?$/.exec(input.slice(0, at));
   if (!target || !file) throw new UsageError(`${ATTACH_SHAPE}, got ${JSON.stringify(input)}`);
 
-  const [, field, bracketed, dotted, dimension] = target as unknown as
-    [string, string, string | undefined, string | undefined, string | undefined];
+  const [, field, bracketed, dotted, dimension] = target as unknown as [
+    string,
+    string,
+    string | undefined,
+    string | undefined,
+    string | undefined
+  ];
   const row = bracketed ?? dotted;
   if (row !== undefined && dimension === undefined) {
     throw new UsageError(`a row needs the subtable column it is a row of: ${field}.${row}.<sub>=<file>`);
@@ -1138,20 +1269,28 @@ const IMPORT_POLL_MS = 1000;
  * the alternative — answering 0 for an import that wrote nothing — is how a
  * caller comes to believe data is there when it is not.
  */
-async function awaitImport(client: HttpClient, token: string, jobId: string, watching: { step(m: string): void }): Promise<ImportJob> {
+async function awaitImport(
+  client: HttpClient,
+  token: string,
+  jobId: string,
+  watching: { step(m: string): void }
+): Promise<ImportJob> {
   // Every way out of this loop but the good one carries the job id. The rows are
   // already being written by the time the first poll happens, so an error that
   // drops the id leaves the caller unable to ask how it went and tempted to
   // import the file a second time.
   const recoverable = (reason: string): Error =>
-    new Error(`${reason}. The import is job ${jobId} and may still be running: ` +
-      `jinshuju entry import-status --form ${token} ${jobId}`);
+    new Error(
+      `${reason}. The import is job ${jobId} and may still be running: ` +
+        `jinshuju entry import-status --form ${token} ${jobId}`
+    );
 
   for (;;) {
     let job: ImportJob;
     try {
       job = await client.request<ImportJob>({
-        method: 'GET', path: `${API}/forms/${token}/entry_imports/${jobId}`
+        method: 'GET',
+        path: `${API}/forms/${token}/entry_imports/${jobId}`
       });
     } catch (error) {
       throw recoverable(`the import started, but asking how it is going failed: ${(error as Error).message}`);
@@ -1170,7 +1309,10 @@ async function awaitImport(client: HttpClient, token: string, jobId: string, wat
 }
 
 const BATCH_OPTION: OptionSpec = {
-  name: '--batch', type: 'json', placeholder: '<json|@file|->', description: 'Several rows in one request'
+  name: '--batch',
+  type: 'json',
+  placeholder: '<json|@file|->',
+  description: 'Several rows in one request'
 };
 
 function attachments(input: CommandInput): Attachment[] {
@@ -1214,7 +1356,12 @@ const ENTRY: readonly Command[] = [
       { name: '--view', type: 'string', placeholder: '<view>', description: 'Read the entries of this view' },
       { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
       { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' },
-      LABELS_OPTION, MINE_OPTION, FILTER_OPTION, FILTERS_OPTION, SORT_OPTION, ...PAGINATION_OPTIONS
+      LABELS_OPTION,
+      MINE_OPTION,
+      FILTER_OPTION,
+      FILTERS_OPTION,
+      SORT_OPTION,
+      ...PAGINATION_OPTIONS
     ],
     request: (input) => {
       if (input.options.mine) {
@@ -1244,8 +1391,10 @@ const ENTRY: readonly Command[] = [
         // list, so --fields here asked for something that was never going to
         // happen. Refusing beats accepting it and answering every field.
         if (input.options.fields !== undefined) {
-          throw new UsageError('--fields cannot be combined with --view: the view decides its own columns. ' +
-            'Change them with `view edit --columns`, or read the form without --view.');
+          throw new UsageError(
+            '--fields cannot be combined with --view: the view decides its own columns. ' +
+              'Change them with `view edit --columns`, or read the form without --view.'
+          );
         }
         return {
           method: 'GET',
@@ -1284,13 +1433,18 @@ const ENTRY: readonly Command[] = [
     options: [
       ...CONTAINER_LIST_OPTIONS,
       { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
-      FILTER_OPTION, FILTERS_OPTION
+      FILTER_OPTION,
+      FILTERS_OPTION
     ],
     request: (input) => {
       const { tokens, kind } = resolveContainers(input.options, MAX_COUNTED_CONTAINERS);
       const query = { filters: filters(input), keyword: input.options.keyword as string | undefined };
       if (tokens.length === 1) {
-        return { method: 'GET', path: `${API}/${kind === 'table' ? 'tables' : 'forms'}/${tokens[0]}/entries/count`, query };
+        return {
+          method: 'GET',
+          path: `${API}/${kind === 'table' ? 'tables' : 'forms'}/${tokens[0]}/entries/count`,
+          query
+        };
       }
       return { method: 'GET', path: `${API}/entries/count`, query: { ...query, form_tokens: tokens.join(',') } };
     },
@@ -1369,9 +1523,25 @@ const ENTRY: readonly Command[] = [
       'smallest window; both ends are inclusive and days are cut in the reported time zone.',
     options: [
       { name: '--from', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'First day to count, inclusive' },
-      { name: '--to', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'Last day to count, inclusive. Defaults to today' },
-      { name: '--kind', type: 'string', choices: ['form', 'table'], placeholder: '<kind>', description: 'Count only forms, or only tables' },
-      { name: '--limit', type: 'integer', placeholder: '<n>', description: 'How many forms to list, most submissions first (default 100, max 100)' }
+      {
+        name: '--to',
+        type: 'string',
+        placeholder: '<YYYY-MM-DD>',
+        description: 'Last day to count, inclusive. Defaults to today'
+      },
+      {
+        name: '--kind',
+        type: 'string',
+        choices: ['form', 'table'],
+        placeholder: '<kind>',
+        description: 'Count only forms, or only tables'
+      },
+      {
+        name: '--limit',
+        type: 'integer',
+        placeholder: '<n>',
+        description: 'How many forms to list, most submissions first (default 100, max 100)'
+      }
     ],
     request: (input) => ({
       method: 'GET',
@@ -1393,13 +1563,31 @@ const ENTRY: readonly Command[] = [
     summary: 'Compute statistics over the entries matching a filter',
     description:
       'The response is as big as the metrics and groups asked for, never as big as the data. Which ' +
-      'functions a field takes is the field\'s own answer: read analytics.agg_funcs from `form get`.',
+      "functions a field takes is the field's own answer: read analytics.agg_funcs from `form get`.",
     options: [
       ...CONTAINER_OPTIONS,
-      { name: '--metric', type: 'string', repeatable: true, placeholder: '<func>:<field>', description: 'Statistic to compute, repeatable, 1 to 20. e.g. avg:field_3' },
-      { name: '--by', type: 'string', repeatable: true, placeholder: `<field>[:${TIME_BUCKETS.join('|')}]`, description: 'Group by this field, repeatable, at most 2. A date field needs a bucket' },
-      { name: '--limit', type: 'integer', placeholder: '<n>', description: 'How many groups, ranked by the first metric (default 20, max 200)' },
-      FILTER_OPTION, FILTERS_OPTION
+      {
+        name: '--metric',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<func>:<field>',
+        description: 'Statistic to compute, repeatable, 1 to 20. e.g. avg:field_3'
+      },
+      {
+        name: '--by',
+        type: 'string',
+        repeatable: true,
+        placeholder: `<field>[:${TIME_BUCKETS.join('|')}]`,
+        description: 'Group by this field, repeatable, at most 2. A date field needs a bucket'
+      },
+      {
+        name: '--limit',
+        type: 'integer',
+        placeholder: '<n>',
+        description: 'How many groups, ranked by the first metric (default 20, max 200)'
+      },
+      FILTER_OPTION,
+      FILTERS_OPTION
     ],
     request: (input) => {
       const metrics = (input.options.metric as string[] | undefined) ?? [];
@@ -1431,9 +1619,15 @@ const ENTRY: readonly Command[] = [
       'spread, dates by range. Submission metadata is left out — it describes the submitting, not the answer.',
     options: [
       ...CONTAINER_OPTIONS,
-      { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Profile only these fields, at most 60' },
+      {
+        name: '--fields',
+        type: 'list',
+        placeholder: '<api-code,...>',
+        description: 'Profile only these fields, at most 60'
+      },
       { name: '--no-overview', type: 'boolean', description: 'Leave out the form-level totals' },
-      FILTER_OPTION, FILTERS_OPTION
+      FILTER_OPTION,
+      FILTERS_OPTION
     ],
     request: (input) => ({
       method: 'GET',
@@ -1456,8 +1650,17 @@ const ENTRY: readonly Command[] = [
       'The payload is keyed by field api_code, not by field label. --batch takes a list of them and ' +
       'writes them in one request.',
     options: [
-      ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
-      { name: '--attach', type: 'string', repeatable: true, placeholder: '<api-code>[.<row>.<sub>]=<file>', description: 'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>' }
+      ...CONTAINER_OPTIONS,
+      JSON_OPTION,
+      BATCH_OPTION,
+      {
+        name: '--attach',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<api-code>[.<row>.<sub>]=<file>',
+        description:
+          'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>'
+      }
     ],
     request: (input) => {
       const batch = batchRows(input);
@@ -1471,33 +1674,38 @@ const ENTRY: readonly Command[] = [
 
       const container = containerPath(input);
       const { token } = resolveContainer(input.options);
-      const body = { ...((input.options.json as Record<string, unknown> | undefined) ?? {}) };
+      const body = { ...(input.options.json as Record<string, unknown> | undefined) };
       const watching = progress();
       try {
-      for (const { field, row, dimension, file } of attached) {
-        watching.step(`uploading ${basename(file)}…`);
-        const uploaded = await client.request<{ id: string }>(
-          upload(`${API}/forms/${token}/entry_attachments`, file,
-            dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension })
-        );
-        // A field holds a list of attachments, so each upload appends rather
-        // than replacing what an earlier --attach for the same field put there.
-        if (dimension === undefined) {
-          body[field] = append(body[field], uploaded.id);
-          continue;
+        for (const { field, row, dimension, file } of attached) {
+          watching.step(`uploading ${basename(file)}…`);
+          const uploaded = await client.request<{ id: string }>(
+            upload(
+              `${API}/forms/${token}/entry_attachments`,
+              file,
+              dimension === undefined
+                ? { field_api_code: field }
+                : { field_api_code: field, dimension_api_code: dimension }
+            )
+          );
+          // A field holds a list of attachments, so each upload appends rather
+          // than replacing what an earlier --attach for the same field put there.
+          if (dimension === undefined) {
+            body[field] = append(body[field], uploaded.id);
+            continue;
+          }
+          // A subtable column is a list of rows and the file lives inside one of
+          // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
+          // at the top level named no field the form has, so the server dropped it
+          // and answered with an entry created — without the file just uploaded.
+          const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
+          while (rows.length <= row) rows.push({});
+          const cells = { ...(isRecord(rows[row]) ? (rows[row] as Record<string, unknown>) : {}) };
+          cells[dimension] = append(cells[dimension], uploaded.id);
+          rows[row] = cells;
+          body[field] = rows;
         }
-        // A subtable column is a list of rows and the file lives inside one of
-        // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
-        // at the top level named no field the form has, so the server dropped it
-        // and answered with an entry created — without the file just uploaded.
-        const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
-        while (rows.length <= row) rows.push({});
-        const cells = { ...(isRecord(rows[row]) ? rows[row] as Record<string, unknown> : {}) };
-        cells[dimension] = append(cells[dimension], uploaded.id);
-        rows[row] = cells;
-        body[field] = rows;
-      }
-      return await client.request({ method: 'POST', path: `${container}/entries`, body });
+        return await client.request({ method: 'POST', path: `${container}/entries`, body });
       } finally {
         watching.done();
       }
@@ -1518,8 +1726,14 @@ const ENTRY: readonly Command[] = [
       'always merges.',
     args: [{ name: 'serial', required: false, description: 'Entry serial number; leave out with --batch' }],
     options: [
-      ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
-      { name: '--replace', type: 'boolean', description: 'Write the entry as given, clearing fields the payload leaves out' }
+      ...CONTAINER_OPTIONS,
+      JSON_OPTION,
+      BATCH_OPTION,
+      {
+        name: '--replace',
+        type: 'boolean',
+        description: 'Write the entry as given, clearing fields the payload leaves out'
+      }
     ],
     request: (input) => {
       const batch = batchRows(input);
@@ -1547,15 +1761,35 @@ const ENTRY: readonly Command[] = [
       'Two requests underneath: the file goes up, then the mapping says which column feeds which ' +
       'field. Everything knowable up front — the file, the size your plan allows, the header row, ' +
       'the mapping — is checked before any row is written, so a refused import has changed nothing ' +
-      'and the message names the sheet\'s real layout. Once accepted the rows are written in the ' +
+      "and the message names the sheet's real layout. Once accepted the rows are written in the " +
       'background: the answer means started, not finished.',
     args: [{ name: 'file', required: true, description: 'Path to an .xlsx, .xls or .csv file' }],
     options: [
       ...CONTAINER_OPTIONS,
-      { name: '--map', type: 'string', repeatable: true, placeholder: '<api-code>=<column>', description: 'Which column feeds which field. A number is a column index, anything else a header label' },
-      { name: '--header-row', type: 'integer', placeholder: '<n>', description: 'Which row holds the headers, when it is not the first' },
-      { name: '--unique', type: 'string', placeholder: '<api-code>', description: 'Treat this field as the key: a row matching an existing one updates it' },
-      { name: '--wait', type: 'boolean', description: 'Wait for the rows to be written and report what the import did, failing if it failed' }
+      {
+        name: '--map',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<api-code>=<column>',
+        description: 'Which column feeds which field. A number is a column index, anything else a header label'
+      },
+      {
+        name: '--header-row',
+        type: 'integer',
+        placeholder: '<n>',
+        description: 'Which row holds the headers, when it is not the first'
+      },
+      {
+        name: '--unique',
+        type: 'string',
+        placeholder: '<api-code>',
+        description: 'Treat this field as the key: a row matching an existing one updates it'
+      },
+      {
+        name: '--wait',
+        type: 'boolean',
+        description: 'Wait for the rows to be written and report what the import did, failing if it failed'
+      }
     ],
     run: async (input, client) => {
       const { token } = resolveContainer(input.options);
@@ -1637,7 +1871,10 @@ const ENTRY: readonly Command[] = [
 
 /** A comment lives under its entry, so every verb needs the entry as well. */
 const ENTRY_OPTION: OptionSpec = {
-  name: '--entry', type: 'string', placeholder: '<serial>', description: 'Entry serial number'
+  name: '--entry',
+  type: 'string',
+  placeholder: '<serial>',
+  description: 'Entry serial number'
 };
 
 function commentsPath(input: CommandInput): string {
@@ -1665,7 +1902,8 @@ const COMMENT: readonly Command[] = [
     summary: 'Comment on an entry',
     args: [{ name: 'content', required: true, description: 'Comment text' }],
     options: [
-      ...CONTAINER_OPTIONS, ENTRY_OPTION,
+      ...CONTAINER_OPTIONS,
+      ENTRY_OPTION,
       { name: '--reply-to', type: 'string', placeholder: '<comment-id>', description: 'Reply under this comment' }
     ],
     request: (input) => ({
@@ -1811,13 +2049,14 @@ const LOCAL: readonly Command[] = [
   {
     path: ['auth', 'refresh'],
     summary: 'Renew the stored browser session',
-    description: 'Only an OAuth session can be refreshed; a token that stopped working has to be replaced by whoever issued it.',
+    description:
+      'Only an OAuth session can be refreshed; a token that stopped working has to be replaced by whoever issued it.',
     options: local('--auth-host', '--client-id')
   },
   {
     path: ['auth', 'logout'],
     summary: 'Revoke the stored browser session and forget it',
-    description: 'Leaves an access token or API key pair in the config alone: those are not this command\'s to drop.',
+    description: "Leaves an access token or API key pair in the config alone: those are not this command's to drop.",
     options: local('--auth-host', '--client-id')
   },
   {
@@ -1849,7 +2088,16 @@ const LOCAL: readonly Command[] = [
 ];
 
 export const COMMANDS: readonly Command[] = [
-  ...LOCAL, ...ACCOUNT, ...FOLDER, ...FORM, ...TABLE, ...FIELD, ...VIEW, ...ENTRY, ...COMMENT, ...OPENSEARCH
+  ...LOCAL,
+  ...ACCOUNT,
+  ...FOLDER,
+  ...FORM,
+  ...TABLE,
+  ...FIELD,
+  ...VIEW,
+  ...ENTRY,
+  ...COMMENT,
+  ...OPENSEARCH
 ];
 
 /** The command whose path the words begin with, longest match first. */

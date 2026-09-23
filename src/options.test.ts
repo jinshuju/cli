@@ -6,8 +6,11 @@ import { UsageError, parseFilter, parseSort, readJsonInput, resolveContainer } f
 // The three examples the command design gives for --filter, verbatim.
 test('--filter accepts the forms the design documents', () => {
   assert.deepEqual(parseFilter('field_3 gte 80'), { field: 'field_3', operator: 'gte', value: '80' });
-  assert.deepEqual(parseFilter('created_at within_last 30d'),
-    { field: 'created_at', operator: 'within_last', value: { unit: 'day', n: 30 } });
+  assert.deepEqual(parseFilter('created_at within_last 30d'), {
+    field: 'created_at',
+    operator: 'within_last',
+    value: { unit: 'day', n: 30 }
+  });
   assert.deepEqual(parseFilter('field_4 between 1,10'), { field: 'field_4', operator: 'between', value: ['1', '10'] });
 });
 
@@ -41,8 +44,14 @@ test('--sort takes field:order and defaults to asc', () => {
 });
 
 test('--json reads inline, a file and stdin', () => {
-  assert.deepEqual(readJsonInput('{"a":1}', () => ''), { a: 1 });
-  assert.deepEqual(readJsonInput('-', () => '{"b":2}'), { b: 2 });
+  assert.deepEqual(
+    readJsonInput('{"a":1}', () => ''),
+    { a: 1 }
+  );
+  assert.deepEqual(
+    readJsonInput('-', () => '{"b":2}'),
+    { b: 2 }
+  );
   assert.throws(() => readJsonInput('@/nope/missing.json', () => ''), UsageError);
   assert.throws(() => readJsonInput('{oops', () => ''), UsageError);
 });

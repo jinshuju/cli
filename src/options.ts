@@ -25,7 +25,13 @@ export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
 /** Accepted by every command. */
 export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
-  { name: '--output', type: 'string', choices: OUTPUT_FORMATS, placeholder: '<format>', description: 'Output format: text, json' },
+  {
+    name: '--output',
+    type: 'string',
+    choices: OUTPUT_FORMATS,
+    placeholder: '<format>',
+    description: 'Output format: text, json'
+  },
   { name: '--config', type: 'string', placeholder: '<path>', description: 'Config file path' },
   { name: '--help', short: '-h', type: 'boolean', description: 'Show help' },
   // -V rather than -v: nearly every CLI reads -v as verbose, and a flag that
@@ -54,8 +60,18 @@ export const LOCAL_OPTIONS: readonly OptionSpec[] = [
 
 /** The data container a command acts on. Mutually exclusive; both map to form_token. */
 export const CONTAINER_OPTIONS: readonly OptionSpec[] = [
-  { name: '--form', type: 'string', placeholder: '<token>', description: 'Form token, six letters and digits, e.g. Kp7mQ2' },
-  { name: '--table', type: 'string', placeholder: '<token>', description: 'Table token, six letters and digits, e.g. Vn4xR8' }
+  {
+    name: '--form',
+    type: 'string',
+    placeholder: '<token>',
+    description: 'Form token, six letters and digits, e.g. Kp7mQ2'
+  },
+  {
+    name: '--table',
+    type: 'string',
+    placeholder: '<token>',
+    description: 'Table token, six letters and digits, e.g. Vn4xR8'
+  }
 ];
 
 /**
@@ -63,8 +79,20 @@ export const CONTAINER_OPTIONS: readonly OptionSpec[] = [
  * once. Still one kind per call: `--form` and `--table` stay mutually exclusive.
  */
 export const CONTAINER_LIST_OPTIONS: readonly OptionSpec[] = [
-  { name: '--form', type: 'string', repeatable: true, placeholder: '<token>', description: 'Form token, repeatable, e.g. Kp7mQ2' },
-  { name: '--table', type: 'string', repeatable: true, placeholder: '<token>', description: 'Table token, repeatable, e.g. Vn4xR8' }
+  {
+    name: '--form',
+    type: 'string',
+    repeatable: true,
+    placeholder: '<token>',
+    description: 'Form token, repeatable, e.g. Kp7mQ2'
+  },
+  {
+    name: '--table',
+    type: 'string',
+    repeatable: true,
+    placeholder: '<token>',
+    description: 'Table token, repeatable, e.g. Vn4xR8'
+  }
 ];
 
 export const FILTER_OPTION: OptionSpec = {
@@ -93,12 +121,20 @@ export const SORT_OPTION: OptionSpec = {
 
 /** Asks for a smaller page; a listing's default is also its cap. */
 export const LIMIT_OPTION: OptionSpec = {
-  name: '--limit', type: 'integer', placeholder: '<n>', description: 'Rows per page, up to the listing default'
+  name: '--limit',
+  type: 'integer',
+  placeholder: '<n>',
+  description: 'Rows per page, up to the listing default'
 };
 
 export const PAGINATION_OPTIONS: readonly OptionSpec[] = [
   LIMIT_OPTION,
-  { name: '--next', type: 'string', placeholder: '<cursor>', description: 'Cursor from the previous response, passed back verbatim' },
+  {
+    name: '--next',
+    type: 'string',
+    placeholder: '<cursor>',
+    description: 'Cursor from the previous response, passed back verbatim'
+  },
   { name: '--all', type: 'boolean', description: 'Follow the cursor and return every page' }
 ];
 
@@ -160,7 +196,9 @@ export function parseFilter(input: string): FilterCondition {
   if (PAIR_OPERATORS.has(operator)) {
     const parts = splitList(raw);
     if (parts.length !== 2) {
-      throw new UsageError(`--filter operator '${operator}' needs two values separated by a comma, got ${JSON.stringify(raw)}`);
+      throw new UsageError(
+        `--filter operator '${operator}' needs two values separated by a comma, got ${JSON.stringify(raw)}`
+      );
     }
     return { field, operator, value: parts };
   }
