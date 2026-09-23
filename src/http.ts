@@ -1,6 +1,8 @@
 import { loadConfig, type LoadedConfig } from './config.js';
 import { refreshOAuthToken, shouldRefresh } from './auth.js';
-import { AuthError } from './errors.js';
+import { AuthError, HttpError, TransportError } from './errors.js';
+
+export { HttpError, TransportError } from './errors.js';
 import { VERSION } from './version.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -42,30 +44,6 @@ export function withQuery(path: string, query?: QueryValues): string {
   }
   const search = params.toString();
   return search ? `${path}?${search}` : path;
-}
-
-/** A response the server sent and refused with. `status` and `body` are what it said. */
-export class HttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly body: unknown
-  ) {
-    super(message);
-    this.name = 'HttpError';
-  }
-}
-
-/** No response at all: the connection failed, or the request ran out of time. */
-export class TransportError extends Error {
-  constructor(
-    message: string,
-    readonly timedOut: boolean,
-    cause?: unknown
-  ) {
-    super(message, { cause });
-    this.name = 'TransportError';
-  }
 }
 
 export type HttpClientOptions = {

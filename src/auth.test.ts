@@ -5,7 +5,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildAuthorizationUrl, createPkcePair, loginWithOAuth } from './auth.js';
+import { buildAuthorizationUrl, createPkcePair, loginWithOAuth, refreshOAuthToken } from './auth.js';
+import { loadConfig, saveOAuthConfig } from './config.js';
+import { AuthError } from './errors.js';
 
 function listenOnce(
   handler: (req: IncomingMessage, res: ServerResponse) => void
@@ -101,4 +103,29 @@ test('loginWithOAuth validates callback state, exchanges token, and stores OAuth
   assert.equal(saved.auth.refresh_token, 'new-refresh');
   authServer.close();
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('a token endpoint that answers HTML is reported as its status, not as a parse error', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'jsj-oauth-html-'));
+  const configPath = join(dir, 'config.json');
+  const authServer = await listenOnce((_req, res) => {
+    res.writeHead(502, { 'Content-Type': 'text/html' });
+    res.end('<html><body><h1>502 Bad Gateway</h1></body></html>');
+  });
+  saveOAuthConfig(configPath, {
+    type: 'oauth',
+    auth_host: authServer.url,
+    client_id: 'cli',
+    access_token: 'old',
+    refresh_token: 'refresh'
+  });
+
+  const error = await refreshOAuthToken(loadConfig({ configPath, env: {} })).catch((e: Error) => e);
+  authServer.close();
+  rmSync(dir, { recursive: true, force: true });
+
+  assert.ok(error instanceof AuthError);
+  assert.match(error.message, /^502 /);
+  assert.match(error.message, /not JSON/);
+  assert.doesNotMatch(error.message, /Unexpected token/);
 });

@@ -2,7 +2,7 @@ import { bindArgs, bindOptions, leadingWords, readStdin, splitArgs } from './arg
 import { findCommand, type Command } from './commands.js';
 import { defaultConfigPath, loadConfig } from './config.js';
 import { helpFor, rootHelp } from './help.js';
-import { JinshujuHttpClient, type HttpClient, type HttpRequest } from './http.js';
+import { HttpError, JinshujuHttpClient, type HttpClient, type HttpRequest } from './http.js';
 import { runLocal } from './local.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
 import { progress, type Progress } from './progress.js';
@@ -88,6 +88,12 @@ async function runRemote(
 }
 
 /**
+ * More pages than any listing has. A cursor that never runs out would
+ * otherwise read forever; stopping here says so instead, with what was read.
+ */
+const MAX_PAGES = 10_000;
+
+/**
  * Every page of a listing. A cursor is opaque: it goes back exactly as it came.
  */
 async function readAllPages(
@@ -109,6 +115,16 @@ async function readAllPages(
     watching.step(`read ${page} page${page === 1 ? '' : 's'}, ${rows.length} rows…`);
     const next = body?.[paginate.cursor];
     if (next === undefined || next === null || next === '') break;
+    // A server answering the cursor it was just given would be read forever.
+    if (String(next) === cursor) {
+      throw new HttpError(
+        `the server answered page ${page} with the cursor it was asked for; stopping rather than looping`,
+        200,
+        body
+      );
+    }
+    if (page >= MAX_PAGES)
+      throw new Error(`stopped after ${MAX_PAGES} pages and ${rows.length} rows; the listing has no end`);
     cursor = String(next);
   }
   watching.done();

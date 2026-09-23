@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -66,12 +66,38 @@ export type RawConfig = Partial<Record<ConfigKey, string>> & { auth?: OAuthConfi
 
 function readConfigFile(configPath: string): RawConfig {
   if (!existsSync(configPath)) return {};
-  return JSON.parse(readFileSync(configPath, 'utf8')) as RawConfig;
+  const text = readFileSync(configPath, 'utf8');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new UsageError(
+      `${configPath} is not valid JSON: ${(error as Error).message}. Fix it, or remove it and log in again.`,
+      {
+        cause: error
+      }
+    );
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new UsageError(
+      `${configPath} should hold a JSON object, not ${Array.isArray(parsed) ? 'a list' : String(parsed)}`
+    );
+  }
+  return parsed as RawConfig;
 }
 
+/**
+ * Written whole or not at all: the file goes down beside its target and is
+ * renamed over it, so a crash mid-write, or two commands refreshing a token at
+ * once, cannot leave half a file behind. The mode is set every time, because
+ * the mode on writeFileSync only applies to a file that did not exist yet.
+ */
 function writeConfigFile(configPath: string, config: RawConfig): void {
   mkdirSync(dirname(configPath), { recursive: true });
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  const draft = `${configPath}.${process.pid}.tmp`;
+  writeFileSync(draft, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(draft, 0o600);
+  renameSync(draft, configPath);
 }
 
 function pickValue(
