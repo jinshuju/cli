@@ -359,6 +359,8 @@ digits**, for example `Kp7mQ2`, `Vn4xR8`, `aB3dE9`. Examples here and in
 
 ## Development
 
+How the code is organised, and why, is in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ```bash
 npm install
 npm test
