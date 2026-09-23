@@ -2,6 +2,15 @@
   "name": "@jinshuju/cli",
   "version": "0.1.0",
   "description": "Command line interface for Jinshuju Open API v1",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jinshuju/cli.git"
+  },
+  "homepage": "https://github.com/jinshuju/cli#readme",
+  "bugs": {
+    "url": "https://github.com/jinshuju/cli/issues"
+  },
   "type": "module",
   "bin": {
     "jinshuju": "./dist/cli-bin.js",
@@ -24,7 +33,14 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
     "@types/node": "^22.10.0",
+    "conventional-changelog-conventionalcommits": "^8.0.0",
+    "semantic-release": "^24.2.0",
     "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   }
 }

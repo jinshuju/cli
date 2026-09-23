@@ -1,0 +1,81 @@
+name: Release
+
+# Merging to main releases: the version is derived from the commits, the tag and
+# GitHub Release are created from them, and the package goes to npm. The release
+# commit carries [skip ci] so it does not start this over.
+#
+# Commit subjects here carry a ticket before the type (`#T17067 fix: ...`), which
+# the default conventional-commits parser does not recognise — it would find no
+# releasable commits and quietly release nothing. The header pattern in
+# .releaserc.json is what makes them readable, so keep the two in step.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# The release commit, the tag and the GitHub Release all need write.
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+# Two merges landing together must not race for the same version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # semantic-release reads the whole history to work out what changed.
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # The same gate CI runs. A release that skipped it could publish a package
+      # whose binaries do not start.
+      - name: Verify package contents and CLI bins
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          packed_tgz="$(npm pack --json | node -e "let s = ''; process.stdin.on('data', d => s += d).on('end', () => process.stdout.write(JSON.parse(s)[0].filename))")"
+          prefix="$(mktemp -d)"
+
+          npm install -g "./${packed_tgz}" --prefix "${prefix}"
+
+          test -x "${prefix}/bin/jinshuju"
+          test -x "${prefix}/bin/jsj"
+          test -f "${prefix}/lib/node_modules/@jinshuju/cli/dist/cli-bin.js"
+
+          "${prefix}/bin/jinshuju" --help
+          "${prefix}/bin/jsj" --help
+
+      - name: Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
