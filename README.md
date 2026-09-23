@@ -298,16 +298,17 @@ or an agent on the other end, never sees a stray character.
 The exit code says what kind of failure it was, so a script can branch without
 parsing anything:
 
-| code | meaning                                                             |
-| ---- | ------------------------------------------------------------------- |
-| 0    | done                                                                |
-| 1    | something unexpected; please report it                              |
-| 2    | usage: a flag, argument, input file or unknown command              |
-| 3    | authentication: no credential, or one the server refused (401, 403) |
-| 4    | not found (404)                                                     |
-| 5    | refused by the API: validation, conflict, quota (other 4xx)         |
-| 6    | the server failed (5xx)                                             |
-| 7    | transport: the connection failed or timed out                       |
+| code | meaning                                                                  |
+| ---- | ------------------------------------------------------------------------ |
+| 0    | done                                                                     |
+| 1    | something unexpected; please report it                                   |
+| 2    | usage: a flag, argument, input file or unknown command                   |
+| 3    | authentication: no credential, or one the server refused (401, 403)      |
+| 4    | not found (404)                                                          |
+| 5    | refused by the API: validation, conflict, quota (other 4xx)              |
+| 6    | the server failed (5xx)                                                  |
+| 7    | transport: the connection failed or timed out                            |
+| 8    | rate limited: wait and retry; the message and `retry_after` say how long |
 
 With `--output json`, stderr carries the same as JSON, plus the status and body
 the server answered with:

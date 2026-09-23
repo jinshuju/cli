@@ -35,7 +35,8 @@ export function fail(error: unknown, output: OutputFormat): CliResult {
     const { exitCode, ...envelope } = sorted;
     return { exitCode, stdout: '', stderr: `${json({ error: envelope })}\n` };
   }
-  return { exitCode: sorted.exitCode, stdout: '', stderr: `Error: ${sorted.message}\n` };
+  const wait = sorted.retry_after === undefined ? '' : ` Retry after ${sorted.retry_after}s.`;
+  return { exitCode: sorted.exitCode, stdout: '', stderr: `Error: ${sorted.message}${wait}\n` };
 }
 
 /** An unknown command is a usage error, and in text mode the help is the message. */

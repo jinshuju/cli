@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -212,8 +212,11 @@ test('table columns line up when cells hold full-width characters', async () => 
   const lines = result.stdout.trimEnd().split('\n');
   assert.equal(result.exitCode, 0);
   // 报名表 is three characters and eight terminal cells wide, same as feedback.
-  assert.equal(lines[3], 'BaLZpn  报名表  ');
-  assert.equal(lines[4], 'Cx9Kq2  feedback');
+  // Found by content, not by line number: what precedes the rows is the
+  // response envelope, and asserting its height tests the wrong thing.
+  const row = (token: string) => lines.find((line) => line.startsWith(token));
+  assert.equal(row('BaLZpn'), 'BaLZpn  报名表  ');
+  assert.equal(row('Cx9Kq2'), 'Cx9Kq2  feedback');
 });
 
 test('--labels heads each column with the field label instead of losing the column', async () => {
@@ -1739,4 +1742,271 @@ test('a list is essential only to the command that says so; elsewhere it is deta
   assert.equal(result.exitCode, 0);
   assert.match(result.stdout, /token\s+name/);
   assert.doesNotMatch(result.stdout, /buckets:/);
+});
+
+// --- what an agent had to guess at (from a session driven by help alone) ------
+
+// A field patch answers with the whole container, so adding one field to a form
+// of twenty-five used to answer with all twenty-five and leave the caller
+// hunting for the api_code it had just created.
+test('a field write answers with the field it touched, not the whole form', async () => {
+  const form = {
+    fields: [
+      { field_1: { label: '甲', type: 'single_line_text' } },
+      { field_2: { label: '乙', type: 'single_line_text' } },
+      { field_3: { label: '新增字段', type: 'number' } }
+    ]
+  };
+  const client = {
+    async request<T>(): Promise<T> {
+      return form as T;
+    }
+  };
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+
+  const added = await cli(
+    ['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"NumberField","label":"新增字段"}', '--output', 'json'],
+    { client, env }
+  );
+  assert.deepEqual(
+    JSON.parse(added.stdout).data.map((field: { api_code: string }) => field.api_code),
+    ['field_3']
+  );
+
+  const updated = await cli(
+    ['field', 'update', '--form', 'Kp7mQ2', 'field_2', '--json', '{"required":true}', '--output', 'json'],
+    { client, env }
+  );
+  assert.deepEqual(
+    JSON.parse(updated.stdout).data.map((field: { api_code: string }) => field.api_code),
+    ['field_2']
+  );
+});
+
+// Naming the field twice used to drop the argument silently, and the server
+// answered about a field named nothing.
+test('preview-convert refuses a field named both ways', async () => {
+  const result = await cli(
+    ['field', 'preview-convert', '--form', 'Kp7mQ2', 'field_1', '--json', '{"field_api_code":"field_1"}'],
+    { client: createMockClient().client, env: { JINSHUJU_ACCESS_TOKEN: 't' } }
+  );
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /not both/);
+});
+
+// `field list <token>` is how `form get <token>` reads, and the refusal used to
+// stop at "takes no argument".
+test('a stray token is answered with the flag that takes it', async () => {
+  const token = await cli(['field', 'list', 'wiuEAD'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.match(token.stderr, /--form wiuEAD/);
+
+  const word = await cli(['field', 'list', 'hello'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.doesNotMatch(word.stderr, /Did you mean/);
+});
+
+/**
+ * A listing of fifty types and one type read for its shape want opposite things
+ * from `structure`: its values are sentences, which turn a table into a wall.
+ */
+test('field types lists the structure keys, and spells them out for one type', async () => {
+  const rows = [
+    { type: 'TextField', read_as: 'single_line_text', scope: 'normal', flags: ['required'], settings: [] },
+    {
+      type: 'TableField',
+      read_as: 'table',
+      scope: 'normal',
+      flags: ['required'],
+      settings: [],
+      structure: {
+        dimensions: 'Columns: [{label, type}], and a table with none is an empty grid.',
+        init_row_length: 'Rows the grid starts with.'
+      }
+    },
+    {
+      type: 'SingleSelect',
+      read_as: 'single_choice',
+      scope: 'exam',
+      flags: ['required'],
+      settings: [],
+      structure: { answers: 'The correct answer.' }
+    }
+  ];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      return (request.path.endsWith('/field_types') ? { data: rows } : rows[1]) as T;
+    }
+  };
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+
+  const listed = await cli(['field', 'types'], { client, env });
+  assert.match(listed.stdout, /dimensions, init_row_length/);
+  assert.doesNotMatch(listed.stdout, /empty grid/);
+
+  const one = await cli(['field', 'types', 'TableField'], { client, env });
+  assert.match(one.stdout, /dimensions: Columns/);
+  assert.match(one.stdout, /empty grid/);
+});
+
+// Scorable question types were listed beside ordinary ones, which is how a
+// caller ends up asking for SingleSelect on a survey.
+test('field types narrows to one scope', async () => {
+  const rows = [
+    { type: 'TextField', scope: 'normal', flags: [], settings: [] },
+    { type: 'SingleSelect', scope: 'exam', flags: [], settings: [] }
+  ];
+  const client = {
+    async request<T>(): Promise<T> {
+      return { data: rows } as T;
+    }
+  };
+
+  const exam = await cli(['field', 'types', '--scope', 'exam', '--output', 'json'], {
+    client,
+    env: { JINSHUJU_ACCESS_TOKEN: 't' }
+  });
+
+  assert.deepEqual(
+    JSON.parse(exam.stdout).data.map((row: { type: string }) => row.type),
+    ['SingleSelect']
+  );
+});
+
+/**
+ * An agent that cannot tell "wait" from "you wrote it wrong" has to treat both
+ * as fatal. Rate limiting is the one failure that is neither the caller's fault
+ * nor permanent, so it gets its own code — and the server already says how long
+ * to wait, which text output had been dropping.
+ */
+test('rate limiting exits differently from a bad request, and carries retry_after', async () => {
+  const failing = (status: number, body: Record<string, unknown>) => ({
+    async request(): Promise<never> {
+      throw new HttpError(String(body.error_description ?? body.error ?? status), status, body);
+    }
+  });
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+  const limited = { error: 'rate_limit_exceeded', retry_after: 3420, limit: 100, remaining: 0 };
+
+  const text = await cli(['form', 'list'], { client: failing(429, limited), env });
+  assert.equal(text.exitCode, 8);
+  assert.match(text.stderr, /Retry after 3420s/);
+
+  const structured = await cli(['form', 'list', '--output', 'json'], { client: failing(429, limited), env });
+  assert.equal(structured.exitCode, 8);
+  assert.equal(structured.stdout, '');
+  assert.equal(JSON.parse(structured.stderr).error.kind, 'rate_limited');
+  assert.equal(JSON.parse(structured.stderr).error.retry_after, 3420);
+
+  const wrong = await cli(['form', 'list', '--output', 'json'], {
+    client: failing(400, { error_description: 'nope' }),
+    env
+  });
+  assert.equal(wrong.exitCode, 5);
+  assert.equal(JSON.parse(wrong.stderr).error.status, 400);
+});
+
+/**
+ * With two accounts configured, nothing in `auth status` said which was in play
+ * — swapping the token changed not one character of the output, and finding out
+ * meant a separate `account get`. The call --verify already spends answers it.
+ */
+test('auth status --verify says whose credential it is', async () => {
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      assert.equal(request.path, '/api/v1/billing_account');
+      return { id: 'acc_1', name: '西安金数据', plan: { name: '企业高级版' } } as T;
+    }
+  };
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+
+  const verified = await cli(['auth', 'status', '--verify'], { client, env });
+  assert.match(verified.stdout, /Account: 西安金数据 \(企业高级版\)/);
+
+  const structured = await cli(['auth', 'status', '--verify', '--output', 'json'], { client, env });
+  assert.equal(JSON.parse(structured.stdout).account.name, '西安金数据');
+
+  // Without --verify it stays offline: no request, and no account named.
+  const offline = await cli(['auth', 'status'], { env });
+  assert.doesNotMatch(offline.stdout, /Account:/);
+});
+
+/**
+ * An attachment could only be added while creating the entry, so an entry that
+ * arrived without one — imported, or written before the file existed — had no
+ * way to gain one. `--attach` reported "must reference an attachment field" on
+ * update, which was the flag not being there at all.
+ */
+test('entry update uploads and patches, the way create does', async () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'receipt.pdf');
+  writeFileSync(file, 'not really a pdf');
+
+  const mock = createMockClient();
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      mock.requests.push(request);
+      return (request.path.endsWith('/entry_attachments') ? { id: 'att_9' } : { ok: true }) as T;
+    }
+  };
+
+  const result = await cli(['entry', 'update', '--form', 'Kp7mQ2', '12', '--attach', `field_5=${file}`], {
+    client,
+    env: { JINSHUJU_ACCESS_TOKEN: 't' }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entry_attachments');
+  assert.equal(mock.requests[1].method, 'PATCH');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/entries/12');
+  assert.deepEqual((mock.requests[1].body as Record<string, unknown>).field_5, ['att_9']);
+});
+
+test('attaching to an entry needs to know which entry', async () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'receipt.pdf');
+  writeFileSync(file, 'x');
+
+  const result = await cli(['entry', 'update', '--form', 'Kp7mQ2', '--attach', `field_5=${file}`], {
+    client: createMockClient().client,
+    env: { JINSHUJU_ACCESS_TOKEN: 't' }
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /<serial> is required to attach/);
+});
+
+// A response that is nothing but a listing printed `data:` above it, which is
+// the JSON envelope showing through. Beside a total or a cursor it still earns
+// its line.
+test('a bare listing is printed without its envelope key; one with company keeps it', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+  const bare = { data: [{ token: 'Kp7mQ2', name: 'a' }] };
+  const wrapped = { total: 1, data: [{ token: 'Kp7mQ2', name: 'a' }] };
+  const answering = (body: unknown) => ({
+    async request<T>(): Promise<T> {
+      return body as T;
+    }
+  });
+
+  const plain = await cli(['form', 'list'], { client: answering(bare), env });
+  assert.doesNotMatch(plain.stdout, /^data:$/m);
+  assert.match(plain.stdout, /^token\s+name/);
+
+  const framed = await cli(['form', 'list'], { client: answering(wrapped), env });
+  assert.match(framed.stdout, /^total: 1$/m);
+  assert.match(framed.stdout, /^data:$/m);
+});
+
+test('help mentions jsj, the exit codes, and what a resource does not have', async () => {
+  const root = await cli(['--help'], { env: {} });
+  assert.match(root.stdout, /`jsj` is the same command/);
+  assert.match(root.stdout, /Exit codes: 0 ok/);
+  assert.match(root.stdout, /8 rate limited/);
+
+  const form = await cli(['form', '--help'], { env: {} });
+  assert.match(form.stdout, /There is no delete, on purpose/);
+
+  const auth = await cli(['auth', '--help'], { env: {} });
+  assert.match(auth.stdout, /config set access_token/);
+
+  const filter = await cli(['entry', 'list', '--help'], { env: {} });
+  assert.match(filter.stdout, /Operators: eq ne gte gt lte lt like not_like/);
 });

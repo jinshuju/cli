@@ -48,7 +48,11 @@ const FORM_PAYLOAD: readonly string[] = [
   'A choice carries "name". The "value" it reads back with is the code the',
   'backend assigns, not what you sent.',
   '',
-  'Field types: jinshuju field types   |   A real one: jinshuju form get <token> --output json'
+  'Reading a form back does not give you something you can send again: a field',
+  'written as "TextField" reads as "single_line_text". `field types` lists the',
+  'names to write, and `field types <Type>` describes one.',
+  '',
+  'Field types: jinshuju field types'
 ];
 
 /**

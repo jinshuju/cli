@@ -51,8 +51,11 @@ export interface Command {
   /**
    * Narrows the response to what the command is about. `field list` asks for a
    * form because that is where fields live, but a caller asked for the fields.
+   * It gets the input too, because what a write touched is known from what was
+   * sent: a field patch answers with the whole form, and only the caller's
+   * api_code says which row of it the caller meant.
    */
-  readonly select?: (body: unknown) => unknown;
+  readonly select?: (body: unknown, input: CommandInput) => unknown;
   /**
    * Reshapes the response for reading, and only for reading: `--output json`
    * answers what the API answered. A command needs this when its payload is
@@ -71,4 +74,10 @@ export interface Command {
 export interface Resource {
   readonly name: string;
   readonly summary: string;
+  /**
+   * Shown under the resource's verbs. For what a caller will look for here and
+   * not find: a missing verb is indistinguishable from a verb named something
+   * else unless the help says which it is.
+   */
+  readonly note?: string;
 }

@@ -123,6 +123,15 @@ function parseColumnMapping(input: string): Record<string, string | number> {
 
 type Attachment = { field: string; row: number; dimension?: string; file: string };
 
+const ATTACH_OPTION: OptionSpec = {
+  name: '--attach',
+  type: 'string',
+  repeatable: true,
+  placeholder: '<api-code>[.<row>.<sub>]=<file>',
+  description:
+    'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>'
+};
+
 const ATTACH_SHAPE = "--attach must be '<api-code>=<file>', or '<api-code>.<row>.<sub>=<file>' for a subtable column";
 
 /**
@@ -251,6 +260,54 @@ const BATCH_OPTION: OptionSpec = {
   placeholder: '<json|@file|->',
   description: 'Several rows in one request'
 };
+
+/**
+ * Uploads each file and puts its id where the payload wants it.
+ *
+ * Shared by creating an entry and updating one: the files go up the same way
+ * either way, and an attachment field that could only be filled at creation
+ * left an entry with no way to gain one afterwards.
+ */
+async function withUploads(
+  input: CommandInput,
+  client: HttpClient,
+  attached: readonly Attachment[]
+): Promise<Record<string, unknown>> {
+  const { token } = resolveContainer(input.options);
+  const body = { ...(input.options.json as Record<string, unknown> | undefined) };
+  const watching = progress();
+  try {
+    for (const { field, row, dimension, file } of attached) {
+      watching.step(`uploading ${basename(file)}…`);
+      const uploaded = await client.request<{ id: string }>(
+        upload(
+          `${API}/forms/${token}/entry_attachments`,
+          file,
+          dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension }
+        )
+      );
+      // A field holds a list of attachments, so each upload appends rather
+      // than replacing what an earlier --attach for the same field put there.
+      if (dimension === undefined) {
+        body[field] = append(body[field], uploaded.id);
+        continue;
+      }
+      // A subtable column is a list of rows and the file lives inside one of
+      // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
+      // at the top level named no field the form has, so the server dropped it
+      // and answered with an entry created — without the file just uploaded.
+      const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
+      while (rows.length <= row) rows.push({});
+      const cells = { ...(isRecord(rows[row]) ? (rows[row] as Record<string, unknown>) : {}) };
+      cells[dimension] = append(cells[dimension], uploaded.id);
+      rows[row] = cells;
+      body[field] = rows;
+    }
+    return body;
+  } finally {
+    watching.done();
+  }
+}
 
 function attachments(input: CommandInput): Attachment[] {
   return ((input.options.attach as string[] | undefined) ?? []).map(parseAttachment);
@@ -579,19 +636,7 @@ export const ENTRY: readonly Command[] = [
     description:
       'The payload is keyed by field api_code, not by field label. --batch takes a list of them and ' +
       'writes them in one request.',
-    options: [
-      ...CONTAINER_OPTIONS,
-      JSON_OPTION,
-      BATCH_OPTION,
-      {
-        name: '--attach',
-        type: 'string',
-        repeatable: true,
-        placeholder: '<api-code>[.<row>.<sub>]=<file>',
-        description:
-          'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>'
-      }
-    ],
+    options: [...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION, ATTACH_OPTION],
     run: async (input, client) => {
       const attached = attachments(input);
       const batch = batchRows(input);
@@ -601,43 +646,8 @@ export const ENTRY: readonly Command[] = [
       }
       if (batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
 
-      const container = containerPath(input);
-      const { token } = resolveContainer(input.options);
-      const body = { ...(input.options.json as Record<string, unknown> | undefined) };
-      const watching = progress();
-      try {
-        for (const { field, row, dimension, file } of attached) {
-          watching.step(`uploading ${basename(file)}…`);
-          const uploaded = await client.request<{ id: string }>(
-            upload(
-              `${API}/forms/${token}/entry_attachments`,
-              file,
-              dimension === undefined
-                ? { field_api_code: field }
-                : { field_api_code: field, dimension_api_code: dimension }
-            )
-          );
-          // A field holds a list of attachments, so each upload appends rather
-          // than replacing what an earlier --attach for the same field put there.
-          if (dimension === undefined) {
-            body[field] = append(body[field], uploaded.id);
-            continue;
-          }
-          // A subtable column is a list of rows and the file lives inside one of
-          // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
-          // at the top level named no field the form has, so the server dropped it
-          // and answered with an entry created — without the file just uploaded.
-          const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
-          while (rows.length <= row) rows.push({});
-          const cells = { ...(isRecord(rows[row]) ? (rows[row] as Record<string, unknown>) : {}) };
-          cells[dimension] = append(cells[dimension], uploaded.id);
-          rows[row] = cells;
-          body[field] = rows;
-        }
-        return await client.request({ method: 'POST', path: `${container}/entries`, body });
-      } finally {
-        watching.done();
-      }
+      const body = await withUploads(input, client, attached);
+      return await client.request({ method: 'POST', path: `${containerPath(input)}/entries`, body });
     },
     examples: [
       'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
@@ -658,25 +668,38 @@ export const ENTRY: readonly Command[] = [
       ...CONTAINER_OPTIONS,
       JSON_OPTION,
       BATCH_OPTION,
+      ATTACH_OPTION,
       {
         name: '--replace',
         type: 'boolean',
         description: 'Write the entry as given, clearing fields the payload leaves out'
       }
     ],
-    request: (input) => {
+    // An attachment could only be added while creating the entry, so an entry
+    // that arrived without one had no way to gain one. The upload happens first
+    // and its id joins the patch, exactly as it does on create.
+    run: async (input, client) => {
       const batch = batchRows(input);
+      const attached = attachments(input);
       if (batch) {
         if (input.args.serial) throw new UsageError('--batch carries its own serial numbers, so <serial> is not taken');
         if (input.options.replace) throw new UsageError('--replace cannot be combined with --batch');
-        return { method: 'PATCH', path: batchPath(input), body: { entries: batch } };
+        if (attached.length > 0) throw new UsageError('--attach cannot be combined with --batch');
+        return client.request({ method: 'PATCH', path: batchPath(input), body: { entries: batch } });
       }
-      if (!input.args.serial) throw new UsageError('<serial> is required, or pass --batch');
-      return {
+      if (!input.args.serial) {
+        throw new UsageError(
+          attached.length > 0
+            ? '<serial> is required to attach a file to an entry'
+            : '<serial> is required, or pass --batch'
+        );
+      }
+      const body = attached.length > 0 ? await withUploads(input, client, attached) : payload(input);
+      return client.request({
         method: input.options.replace ? 'PUT' : 'PATCH',
         path: `${containerPath(input)}/entries/${input.args.serial}`,
-        body: payload(input)
-      };
+        body
+      });
     },
     examples: [
       'jinshuju entry update --form Kp7mQ2 12 --json \'{"field_1":"李四"}\'',

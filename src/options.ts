@@ -103,7 +103,9 @@ export const FILTER_OPTION: OptionSpec = {
   repeatable: true,
   placeholder: "'<field> <op> [value]'",
   description:
-    "Filter condition, repeatable, AND-combined. e.g. 'field_3 gte 80', 'created_at within_last 30d', 'field_4 between 1,10'"
+    'Filter condition, repeatable, AND-combined. Operators: eq ne gte gt lte lt like not_like ' +
+    'any_in none_in between not_between null not_null match within_last. ' +
+    "e.g. 'field_3 gte 80', 'created_at within_last 30d', 'field_4 between 1,10'"
 };
 
 export const FILTERS_OPTION: OptionSpec = {

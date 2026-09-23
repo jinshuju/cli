@@ -45,7 +45,15 @@ export class RefusedError extends Error {
  * code says it without parsing anything; `--output json` also says it in
  * words, alongside the status and body the server answered with.
  */
-export type ErrorKind = 'unexpected' | 'usage' | 'auth' | 'not_found' | 'refused' | 'server' | 'transport';
+export type ErrorKind =
+  | 'unexpected'
+  | 'usage'
+  | 'auth'
+  | 'not_found'
+  | 'refused'
+  | 'server'
+  | 'transport'
+  | 'rate_limited';
 
 export const EXIT_CODES: Readonly<Record<ErrorKind, number>> = {
   unexpected: 1,
@@ -54,7 +62,9 @@ export const EXIT_CODES: Readonly<Record<ErrorKind, number>> = {
   not_found: 4,
   refused: 5,
   server: 6,
-  transport: 7
+  transport: 7,
+  // Neither the caller's fault nor permanent: it wants waiting, not a corrected request.
+  rate_limited: 8
 };
 
 export type ClassifiedError = {
@@ -63,15 +73,24 @@ export type ClassifiedError = {
   message: string;
   status?: number;
   body?: unknown;
+  /** Seconds the server asked for before trying again, when it said. */
+  retry_after?: number;
 };
 
 function kindOfStatus(status: number): ErrorKind {
+  if (status === 429) return 'rate_limited';
   if (status === 401 || status === 403) return 'auth';
   if (status === 404) return 'not_found';
   if (status >= 500) return 'server';
   if (status >= 400) return 'refused';
   // A 2xx that reached here carried a body nobody could read.
   return 'server';
+}
+
+/** A rate limit's body carries how long to wait; it is the one number worth lifting out. */
+function retryAfterIn(body: unknown): number | undefined {
+  const value = (body as { retry_after?: unknown } | null)?.retry_after;
+  return typeof value === 'number' ? value : undefined;
 }
 
 /**
@@ -87,7 +106,15 @@ export function classify(error: unknown): ClassifiedError {
   if (error instanceof TransportError) return { kind: 'transport', exitCode: EXIT_CODES.transport, message };
   if (error instanceof HttpError) {
     const kind = kindOfStatus(error.status);
-    return { kind, exitCode: EXIT_CODES[kind], message, status: error.status, body: error.body };
+    const retry_after = retryAfterIn(error.body);
+    return {
+      kind,
+      exitCode: EXIT_CODES[kind],
+      message,
+      status: error.status,
+      body: error.body,
+      ...(retry_after === undefined ? {} : { retry_after })
+    };
   }
   const cause = (error as { cause?: unknown } | null)?.cause;
   if (cause instanceof Error && cause !== error) {
