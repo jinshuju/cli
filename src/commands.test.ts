@@ -1482,3 +1482,69 @@ test('a structured error goes to stderr, leaving stdout empty', async () => {
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /rate_limit_exceeded/);
 });
+
+/**
+ * With two accounts configured, nothing in `auth status` said which was in play
+ * — swapping the token changed not one character of the output, and finding out
+ * meant a separate `account get`. The call --verify already spends answers it.
+ */
+test('auth status --verify says whose credential it is', async () => {
+  const client = {
+    async request<T>(request: { path: string }): Promise<T> {
+      assert.equal(request.path, '/api/v1/billing_account');
+      return { id: 'acc_1', name: '西安金数据', plan: { name: '企业高级版' } } as T;
+    }
+  };
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+
+  const verified = await cli(['auth', 'status', '--verify'], { client, env });
+  assert.match(verified.stdout, /Account: 西安金数据 \(企业高级版\)/);
+
+  const structured = await cli(['auth', 'status', '--verify', '--output', 'json'], { client, env });
+  assert.equal(JSON.parse(structured.stdout).account.name, '西安金数据');
+
+  // Without --verify it stays offline: no request, and no account named.
+  const offline = await cli(['auth', 'status'], { env });
+  assert.doesNotMatch(offline.stdout, /Account:/);
+});
+
+/**
+ * An attachment could only be added while creating the entry, so an entry that
+ * arrived without one — imported, or written before the file existed — had no
+ * way to gain one. `--attach` reported "must reference an attachment field" on
+ * update, which was the flag not being there at all.
+ */
+test('entry update uploads and patches, the way create does', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const file = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'receipt.pdf');
+  writeFileSync(file, 'not really a pdf');
+
+  const requests: { method: string; path: string; body?: unknown }[] = [];
+  const client = {
+    async request<T>(request: { method: string; path: string; body?: unknown }): Promise<T> {
+      requests.push(request);
+      return (request.path.endsWith('/entry_attachments') ? { id: 'att_9' } : { ok: true }) as T;
+    }
+  };
+
+  const result = await cli(['entry', 'update', '--form', 'Kp7mQ2', '12', '--attach', `field_5=${file}`],
+    { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0].path, '/api/v1/forms/Kp7mQ2/entry_attachments');
+  assert.equal(requests[1].method, 'PATCH');
+  assert.equal(requests[1].path, '/api/v1/forms/Kp7mQ2/entries/12');
+  assert.deepEqual((requests[1].body as Record<string, unknown>).field_5, ['att_9']);
+});
+
+test('attaching to an entry needs to know which entry', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const file = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'receipt.pdf');
+  writeFileSync(file, 'x');
+
+  const result = await cli(['entry', 'update', '--form', 'Kp7mQ2', '--attach', `field_5=${file}`],
+    { client: createMockClient().client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /<serial> is required to attach/);
+});

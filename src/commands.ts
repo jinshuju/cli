@@ -106,7 +106,12 @@ export interface Resource {
 
 /** Resource order in the root help, and the one-liner each gets. */
 export const RESOURCES: readonly Resource[] = [
-  { name: 'auth', summary: 'Manage authentication' },
+  {
+    name: 'auth',
+    summary: 'Manage authentication',
+    note: 'login is the browser flow. To use a token instead: `jinshuju config set access_token <token>`, '
+      + 'or set JINSHUJU_ACCESS_TOKEN. `auth status --verify` says which account the credential belongs to.'
+  },
   { name: 'account', summary: 'Account and members' },
   { name: 'folder', summary: 'Manage folders' },
   {
@@ -1181,6 +1186,14 @@ function parseColumnMapping(input: string): Record<string, string | number> {
 
 type Attachment = { field: string; row: number; dimension?: string; file: string };
 
+const ATTACH_OPTION: OptionSpec = {
+  name: '--attach',
+  type: 'string',
+  repeatable: true,
+  placeholder: '<api-code>[.<row>.<sub>]=<file>',
+  description: 'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>'
+};
+
 const ATTACH_SHAPE = "--attach must be '<api-code>=<file>', or '<api-code>.<row>.<sub>=<file>' for a subtable column";
 
 /**
@@ -1264,6 +1277,52 @@ async function awaitImport(client: HttpClient, token: string, jobId: string, wat
 const BATCH_OPTION: OptionSpec = {
   name: '--batch', type: 'json', placeholder: '<json|@file|->', description: 'Several rows in one request'
 };
+
+
+/**
+ * Uploads each file and puts its id where the payload wants it.
+ *
+ * Shared by creating an entry and updating one: the files go up the same way
+ * either way, and an attachment field that could only be filled at creation
+ * left an entry with no way to gain one afterwards.
+ */
+async function withUploads(
+  input: CommandInput,
+  client: HttpClient,
+  attached: readonly Attachment[]
+): Promise<Record<string, unknown>> {
+  const { token } = resolveContainer(input.options);
+  const body = { ...((input.options.json as Record<string, unknown> | undefined) ?? {}) };
+  const watching = progress();
+  try {
+    for (const { field, row, dimension, file } of attached) {
+      watching.step(`uploading ${basename(file)}…`);
+      const uploaded = await client.request<{ id: string }>(
+        upload(`${API}/forms/${token}/entry_attachments`, file,
+          dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension })
+      );
+      // A field holds a list of attachments, so each upload appends rather
+      // than replacing what an earlier --attach for the same field put there.
+      if (dimension === undefined) {
+        body[field] = append(body[field], uploaded.id);
+        continue;
+      }
+      // A subtable column is a list of rows and the file lives inside one of
+      // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
+      // at the top level named no field the form has, so the server dropped it
+      // and answered with an entry created — without the file just uploaded.
+      const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
+      while (rows.length <= row) rows.push({});
+      const cells = { ...(isRecord(rows[row]) ? rows[row] as Record<string, unknown> : {}) };
+      cells[dimension] = append(cells[dimension], uploaded.id);
+      rows[row] = cells;
+      body[field] = rows;
+    }
+    return body;
+  } finally {
+    watching.done();
+  }
+}
 
 function attachments(input: CommandInput): Attachment[] {
   return ((input.options.attach as string[] | undefined) ?? []).map(parseAttachment);
@@ -1549,7 +1608,7 @@ const ENTRY: readonly Command[] = [
       'writes them in one request.',
     options: [
       ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
-      { name: '--attach', type: 'string', repeatable: true, placeholder: '<api-code>[.<row>.<sub>]=<file>', description: 'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>' }
+      ATTACH_OPTION
     ],
     request: (input) => {
       const batch = batchRows(input);
@@ -1561,38 +1620,8 @@ const ENTRY: readonly Command[] = [
       if (attached.length === 0) return undefined;
       if (input.options.batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
 
-      const container = containerPath(input);
-      const { token } = resolveContainer(input.options);
-      const body = { ...((input.options.json as Record<string, unknown> | undefined) ?? {}) };
-      const watching = progress();
-      try {
-      for (const { field, row, dimension, file } of attached) {
-        watching.step(`uploading ${basename(file)}…`);
-        const uploaded = await client.request<{ id: string }>(
-          upload(`${API}/forms/${token}/entry_attachments`, file,
-            dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension })
-        );
-        // A field holds a list of attachments, so each upload appends rather
-        // than replacing what an earlier --attach for the same field put there.
-        if (dimension === undefined) {
-          body[field] = append(body[field], uploaded.id);
-          continue;
-        }
-        // A subtable column is a list of rows and the file lives inside one of
-        // them: {"field_5": [{"field_2": ["<id>"]}]}. Writing "field_5.field_2"
-        // at the top level named no field the form has, so the server dropped it
-        // and answered with an entry created — without the file just uploaded.
-        const rows = Array.isArray(body[field]) ? [...(body[field] as unknown[])] : [];
-        while (rows.length <= row) rows.push({});
-        const cells = { ...(isRecord(rows[row]) ? rows[row] as Record<string, unknown> : {}) };
-        cells[dimension] = append(cells[dimension], uploaded.id);
-        rows[row] = cells;
-        body[field] = rows;
-      }
-      return await client.request({ method: 'POST', path: `${container}/entries`, body });
-      } finally {
-        watching.done();
-      }
+      const body = await withUploads(input, client, attached);
+      return await client.request({ method: 'POST', path: `${containerPath(input)}/entries`, body });
     },
     examples: [
       'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
@@ -1610,9 +1639,25 @@ const ENTRY: readonly Command[] = [
       'always merges.',
     args: [{ name: 'serial', required: false, description: 'Entry serial number; leave out with --batch' }],
     options: [
-      ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION,
+      ...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION, ATTACH_OPTION,
       { name: '--replace', type: 'boolean', description: 'Write the entry as given, clearing fields the payload leaves out' }
     ],
+    // An attachment could only be added while creating the entry, so an entry
+    // that arrived without one had no way to gain one. The upload happens first
+    // and its id joins the patch, exactly as it does on create.
+    run: async (input, client) => {
+      const attached = attachments(input);
+      if (attached.length === 0) return undefined;
+      if (input.options.batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
+      if (!input.args.serial) throw new UsageError('<serial> is required to attach a file to an entry');
+
+      const body = await withUploads(input, client, attached);
+      return await client.request({
+        method: input.options.replace ? 'PUT' : 'PATCH',
+        path: `${containerPath(input)}/entries/${input.args.serial}`,
+        body
+      });
+    },
     request: (input) => {
       const batch = batchRows(input);
       if (batch) {
@@ -1896,7 +1941,8 @@ const LOCAL: readonly Command[] = [
     summary: 'Show which credential is in use, and where it came from',
     description:
       'The precedence is access token, then API key and secret, then a stored browser login. ' +
-      '--verify spends one lightweight call to confirm the credential still works.',
+      '--verify spends one call to confirm the credential still works, and reports the account it ' +
+      'belongs to — with more than one configured, nothing else here says which is in play.',
     options: local('--verify', '--api-key', '--api-secret', '--host', '--auth-host', '--client-id'),
     examples: ['jinshuju auth status', 'jinshuju auth status --verify']
   },
