@@ -1,3 +1,5 @@
+import { isRecord, isScalar } from './values.js';
+
 /**
  * How a response is put on the page. `--output json` is the payload as the
  * API answered it; text is the same payload laid out for a person: a table
@@ -234,14 +236,6 @@ function hasEssentialList(row: Record<string, unknown>): boolean {
     const value = row[key];
     return Array.isArray(value) && value.length > 0 && value.every(isRecord);
   });
-}
-
-function isRecord(value: unknown): boolean {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isScalar(value: unknown): boolean {
-  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
 /**

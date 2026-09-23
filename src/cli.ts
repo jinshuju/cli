@@ -1,8 +1,8 @@
 import { bindArgs, bindOptions, leadingWords, readStdin, splitArgs } from './args.js';
-import { findCommand, type Command, type QueryValues } from './commands.js';
+import { findCommand, type Command } from './commands.js';
 import { defaultConfigPath, loadConfig } from './config.js';
 import { helpFor, rootHelp } from './help.js';
-import { JinshujuHttpClient, type HttpClient } from './http.js';
+import { JinshujuHttpClient, type HttpClient, type HttpRequest } from './http.js';
 import { runLocal } from './local.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
 import { progress, type Progress } from './progress.js';
@@ -65,12 +65,11 @@ async function runRemote(
       })
     );
 
-  // A command that needs more than one round trip handles itself. Answering
-  // undefined means "this call is the ordinary one", so `entry create` only
-  // takes the long way when a file is actually attached.
+  // A command that needs more than one round trip, or has to decide how many,
+  // runs itself and answers with what should be printed.
   if (command.run) {
     const payload = await command.run(input, client);
-    if (payload !== undefined) return ok(output === 'json' ? json(payload) : text(payload, width));
+    return ok(output === 'json' ? json(payload) : text(payload, width));
   }
 
   const request = command.request?.(input);
@@ -82,11 +81,7 @@ async function runRemote(
     return ok(output === 'json' ? json(payload) : text(payload, width));
   }
 
-  const result = await client.request({
-    method: request.method,
-    path: withQuery(request.path, request.query),
-    body: request.body
-  });
+  const result = await client.request(request);
   const selected = command.select ? command.select(result) : result;
   if (output === 'json') return ok(json(selected));
   return ok(text(command.render ? command.render(selected) : selected, width));
@@ -97,7 +92,7 @@ async function runRemote(
  */
 async function readAllPages(
   client: HttpClient,
-  request: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; query?: QueryValues; body?: unknown },
+  request: HttpRequest,
   paginate: { items: string; cursor: string },
   watching: Progress = { step: () => {}, done: () => {} }
 ): Promise<unknown[]> {
@@ -105,11 +100,9 @@ async function readAllPages(
   let cursor: string | undefined;
   let page = 0;
   for (;;) {
-    const query = { ...request.query, ...(cursor ? { next: cursor } : {}) };
     const body = await client.request<Record<string, unknown>>({
-      method: request.method,
-      path: withQuery(request.path, query),
-      body: request.body
+      ...request,
+      query: { ...request.query, ...(cursor ? { next: cursor } : {}) }
     });
     rows.push(...((body?.[paginate.items] as unknown[] | undefined) ?? []));
     page += 1;
@@ -120,23 +113,4 @@ async function readAllPages(
   }
   watching.done();
   return rows;
-}
-
-/**
- * A list value repeats its parameter as `name[]=a&name[]=b`, which is how Rails
- * reads a list. Joining them with a comma would ask for one keyword containing
- * a comma instead of two keywords.
- */
-function withQuery(path: string, query?: QueryValues): string {
-  const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(query ?? {})) {
-    if (value === undefined) continue;
-    if (typeof value === 'string') {
-      params.set(name, value);
-    } else {
-      for (const item of value) params.append(`${name}[]`, item);
-    }
-  }
-  const search = params.toString();
-  return search ? `${path}?${search}` : path;
 }

@@ -15,6 +15,7 @@ import {
   parseFilter,
   parseMetric,
   parseSort,
+  namedContainers,
   resolveContainer,
   resolveContainers,
   type FilterCondition,
@@ -28,7 +29,8 @@ import { basename, extname } from 'node:path';
 import { RefusedError } from './errors.js';
 import { validateCreateFormPayload } from './payload.js';
 import { progress } from './progress.js';
-import type { HttpClient } from './http.js';
+import type { HttpClient, HttpRequest } from './http.js';
+import { isRecord } from './values.js';
 
 /**
  * Every command the CLI has, as data.
@@ -46,18 +48,6 @@ export interface ArgSpec {
   /** Takes the rest of the words; only the last argument may. */
   readonly variadic?: boolean;
   readonly description: string;
-}
-
-/** A repeated parameter arrives as a list; everything else is one value. */
-export type QueryValues = Record<string, string | readonly string[] | undefined>;
-
-export interface HttpRequest {
-  readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  readonly path: string;
-  readonly query?: QueryValues;
-  readonly body?: unknown;
-  /** A multipart body, for the endpoints that take a file. */
-  readonly form?: FormData;
 }
 
 /** How a listing returns its next page, which is what `--all` follows. */
@@ -88,10 +78,13 @@ export interface Command {
    */
   readonly payload?: readonly string[];
   readonly examples?: readonly string[];
+  /** The one request the command is. Most commands are this and nothing else. */
   readonly request?: (input: CommandInput) => HttpRequest;
   /**
-   * For the commands a single request cannot express: uploading a file and then
-   * acting on it. It gets the client and returns whatever should be printed.
+   * For the commands a single request cannot express, or that have to decide
+   * how many they are: uploading a file and then acting on it. It gets the
+   * client and returns whatever should be printed. A command has one of
+   * `request` and `run`, never both.
    */
   readonly run?: (input: CommandInput, client: HttpClient) => Promise<unknown>;
   readonly paginate?: Pagination;
@@ -652,14 +645,9 @@ const FORM: readonly Command[] = [
       },
       FOLDER_OPTION
     ],
-    request: (input) => ({
-      method: 'POST',
-      path: `${API}/forms`,
-      body: createFormBody(input).body
-    }),
     run: async (input, client) => {
       const { body, settings } = createFormBody(input);
-      if (!settings) return undefined;
+      if (!settings) return client.request({ method: 'POST', path: `${API}/forms`, body });
 
       const form = await client.request<{ token: string }>({ method: 'POST', path: `${API}/forms`, body });
       try {
@@ -693,11 +681,10 @@ const FORM: readonly Command[] = [
       '{add, update, update_choices, remove}. Only what is named changes.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
-    request: (input) => ({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body: payload(input) }),
     run: async (input, client) => {
       const body = { ...(payload(input) as Record<string, unknown>) };
       const settings = settingsBlock(body);
-      if (!settings) return undefined;
+      if (!settings) return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
 
       delete body[settings.key];
       // The settings go first: they are the half that can be refused for what
@@ -776,11 +763,11 @@ const FORM: readonly Command[] = [
       { name: '--header', type: 'string', placeholder: '<file>', description: 'Image file to use as the header' },
       JSON_OPTION
     ],
-    request: (input) => ({ method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body: themeBody(input) }),
     run: async (input, client) => {
       const wallpaper = input.options.wallpaper as string | undefined;
       const header = input.options.header as string | undefined;
-      if (!wallpaper && !header) return undefined;
+      const path = `${API}/forms/${input.args.form}/theme`;
+      if (!wallpaper && !header) return client.request({ method: 'PATCH', path, body: themeBody(input) });
 
       const body = themeBody(input) as Record<string, Record<string, unknown>>;
       if (wallpaper) {
@@ -791,7 +778,7 @@ const FORM: readonly Command[] = [
         const image = await uploadImage(client, header, 'header');
         body.header = { ...body.header, header_image_attachment_id: image };
       }
-      return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}/theme`, body });
+      return client.request({ method: 'PATCH', path, body });
     },
     examples: [
       'jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"',
@@ -1321,10 +1308,6 @@ function attachments(input: CommandInput): Attachment[] {
   return ((input.options.attach as string[] | undefined) ?? []).map(parseAttachment);
 }
 
-function isRecord(value: unknown): boolean {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 /** An attachment slot holds a list, so a second file joins the first. */
 function append(existing: unknown, id: string): string[] {
   return Array.isArray(existing) ? [...(existing as string[]), id] : [id];
@@ -1480,12 +1463,7 @@ const ENTRY: readonly Command[] = [
       MINE_OPTION
     ],
     request: (input) => {
-      const containers = (input.options.form as string[] | undefined) ?? [];
-      const tables = (input.options.table as string[] | undefined) ?? [];
-      if (containers.length > 0 && tables.length > 0) {
-        throw new UsageError('--form and --table are mutually exclusive');
-      }
-      const tokens = containers.length > 0 ? containers : tables;
+      const { tokens } = namedContainers(input.options);
       if (input.options.mine) {
         refuseWithMine(input, ['table', 'scope_filter']);
         return {
@@ -1664,15 +1642,14 @@ const ENTRY: readonly Command[] = [
           'Upload a file into this attachment field, repeatable. A subtable column names the row it fills: field_5.0.field_2=<file>'
       }
     ],
-    request: (input) => {
-      const batch = batchRows(input);
-      if (batch) return { method: 'POST', path: batchPath(input), body: { entries: batch } };
-      return { method: 'POST', path: `${containerPath(input)}/entries`, body: payload(input) };
-    },
     run: async (input, client) => {
       const attached = attachments(input);
-      if (attached.length === 0) return undefined;
-      if (input.options.batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
+      const batch = batchRows(input);
+      if (attached.length === 0) {
+        if (batch) return client.request({ method: 'POST', path: batchPath(input), body: { entries: batch } });
+        return client.request({ method: 'POST', path: `${containerPath(input)}/entries`, body: payload(input) });
+      }
+      if (batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
 
       const container = containerPath(input);
       const { token } = resolveContainer(input.options);
@@ -1893,11 +1870,7 @@ const COMMENT: readonly Command[] = [
       ...CONTAINER_OPTIONS,
       { name: '--entry', type: 'string', placeholder: '<serial>', description: 'Entry serial number' }
     ],
-    request: (input) => {
-      const serial = input.options.entry as string | undefined;
-      if (!serial) throw new UsageError('--entry <serial> is required');
-      return { method: 'GET', path: `${containerPath(input)}/entries/${serial}/comments` };
-    }
+    request: (input) => ({ method: 'GET', path: commentsPath(input) })
   },
   {
     path: ['comment', 'create'],
