@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli, type CliRuntime } from './cli.js';
-import { awaitImport } from './commands.js';
+import { awaitImport } from './commands/entry.js';
 import { HttpError, TransportError, withQuery, type HttpRequest } from './http.js';
 
 /** What the client would have put on the wire: the path with its query. */
