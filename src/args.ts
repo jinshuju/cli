@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import type { Command } from './commands.js';
+import type { Command } from './commands/index.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, optionKey, readJsonInput, type OptionSpec } from './options.js';
 
 /**

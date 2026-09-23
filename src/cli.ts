@@ -1,5 +1,5 @@
 import { bindArgs, bindOptions, leadingWords, readStdin, splitArgs } from './args.js';
-import { findCommand, type Command } from './commands.js';
+import { findCommand, type Command } from './commands/index.js';
 import { defaultConfigPath, loadConfig } from './config.js';
 import { helpFor, rootHelp } from './help.js';
 import { HttpError, JinshujuHttpClient, type HttpClient, type HttpRequest } from './http.js';

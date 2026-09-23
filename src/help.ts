@@ -1,4 +1,4 @@
-import { COMMANDS, RESOURCES, findCommand, type Command } from './commands.js';
+import { COMMANDS, RESOURCES, findCommand, type Command } from './commands/index.js';
 import { GLOBAL_OPTIONS, optionKey, type OptionSpec } from './options.js';
 
 /**

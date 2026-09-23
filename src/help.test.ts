@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { runCli } from './cli.js';
-import { COMMANDS } from './commands.js';
+import { COMMANDS } from './commands/index.js';
 
 // Help is rendered from the command table, so every command in it is covered
 // by walking the table rather than by a list kept in step by hand.
