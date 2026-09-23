@@ -1,5 +1,7 @@
 # @jinshuju/cli
 
+[![npm](https://img.shields.io/npm/v/@jinshuju/cli)](https://www.npmjs.com/package/@jinshuju/cli)
+
 Command-line interface for the Jinshuju Open API v1.
 
 ## Install
