@@ -10,6 +10,11 @@ export type CliRuntime = {
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
   client?: HttpClient;
   stdin?: () => string;
+  /**
+   * Where a streaming command writes as it goes. Without it, what would have
+   * streamed is gathered into the result instead, which is what a test wants.
+   */
+  stdout?: (chunk: string) => void;
   /** How wide a table may be. Defaults to the terminal, or 120 through a pipe. */
   width?: number;
 };
@@ -26,7 +31,7 @@ export function ok(stdout: string): CliResult {
  */
 export function fail(error: unknown, output: OutputFormat): CliResult {
   const sorted = classify(error);
-  if (output === 'json') {
+  if (output !== 'text') {
     const { exitCode, ...envelope } = sorted;
     return { exitCode, stdout: '', stderr: `${json({ error: envelope })}\n` };
   }
@@ -35,11 +40,12 @@ export function fail(error: unknown, output: OutputFormat): CliResult {
 
 /** An unknown command is a usage error, and in text mode the help is the message. */
 export function unknown(words: readonly string[], output: OutputFormat): CliResult {
-  if (output === 'json') return fail(new UsageError(`Unknown command: jinshuju ${words.join(' ')}`), output);
+  if (output !== 'text') return fail(new UsageError(`Unknown command: jinshuju ${words.join(' ')}`), output);
   return { exitCode: EXIT_CODES.usage, stdout: '', stderr: unknownCommandHelp(words) };
 }
 
 /** What `--output` asked for, read before the flags are checked so a failure can honour it. */
 export function outputOf(flags: Record<string, unknown>): OutputFormat {
-  return flags['--output'] === 'json' ? 'json' : 'text';
+  const asked = flags['--output'];
+  return asked === 'json' || asked === 'jsonl' ? asked : 'text';
 }

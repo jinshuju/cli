@@ -1,3 +1,4 @@
+import type { OutputFormat } from './options.js';
 import { isRecord, isScalar } from './values.js';
 
 /**
@@ -48,6 +49,31 @@ export function terminalWidth(stream: NodeJS.WriteStream = process.stdout): numb
 
 export function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+/**
+ * One JSON object per line, which is what `jq -c`, a shell loop and a log
+ * shipper all read without holding the whole answer first. A listing becomes
+ * its rows, one each; anything else is one line.
+ */
+export function jsonl(value: unknown, listKey?: string): string {
+  const rows = listOf(value, listKey);
+  return (rows ?? [value]).map((row) => JSON.stringify(row)).join('\n');
+}
+
+/** The rows a payload carries, when it is a listing. */
+function listOf(value: unknown, listKey?: string): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  if (!isRecord(value)) return undefined;
+  const key = listKey ?? 'data';
+  return Array.isArray(value[key]) ? (value[key] as unknown[]) : undefined;
+}
+
+/** The payload in the format asked for. */
+export function format(value: unknown, output: OutputFormat, width: number, listKey?: string): string {
+  if (output === 'json') return json(value);
+  if (output === 'jsonl') return jsonl(value, listKey);
+  return text(value, width);
 }
 
 export function text(value: unknown, width: number): string {
