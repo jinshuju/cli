@@ -112,3 +112,14 @@ for (const command of COMMANDS.filter((entry) => entry.payload?.length)) {
     }
   });
 }
+
+// `--version` is the one answer a caller cannot check against anything else, so
+// it has to come from the file the release actually bumps. It was a constant,
+// and 0.1.1 shipped reporting 0.1.0.
+test('--version reports the version the package was published as', async () => {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
+  const result = await runCli(['--version']);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stdout.trim(), pkg.version);
+});
