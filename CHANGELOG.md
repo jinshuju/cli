@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/jinshuju/cli/compare/v0.1.2...v0.1.3) (2026-09-23)
+
+
+### Fixes
+
+* **upload:** declare the media type of an uploaded file ([6058737](https://github.com/jinshuju/cli/commit/60587379d48098b752a1514d64237e992607a24d))
+* **upload:** declare the media type of an uploaded file ([ddf44e5](https://github.com/jinshuju/cli/commit/ddf44e52793cf0ede066a63e683b5d135f3d04fe))
+
 ## [0.1.2](https://github.com/jinshuju/cli/compare/v0.1.1...v0.1.2) (2026-09-23)
 
 
