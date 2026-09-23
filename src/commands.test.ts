@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli, type CliRuntime } from './cli.js';
-import type { HttpRequest } from './http.js';
+import { HttpError, TransportError, type HttpRequest } from './http.js';
 
 /**
  * A path with no file behind it, so a test never reads the config of whoever is
@@ -306,7 +306,7 @@ test('a listing spends its width on the values, and on timestamps only if they s
 test('API command errors are returned as CLI errors instead of uncaught promise rejections', async () => {
   const result = await cli(['form', 'list'], { env: {} });
 
-  assert.equal(result.exitCode, 2);
+  assert.equal(result.exitCode, 3);
   assert.match(result.stderr, /Missing authentication/);
 });
 
@@ -1232,7 +1232,7 @@ test('a failed import exits non-zero, rather than reporting success for rows nob
     client
   });
 
-  assert.equal(result.exitCode, 2);
+  assert.equal(result.exitCode, 5);
   assert.match(result.stderr, /import failed: 第 2 行的分数不是数字/);
 });
 
@@ -1416,7 +1416,7 @@ test('an import that cannot be polled still hands back the job it started', asyn
       calls += 1;
       if (request.path.endsWith('/import_files')) return { id: 'file_1' } as T;
       if (request.path.endsWith('/entry_imports')) return { job_id: 'job_77', status: 'pending' } as T;
-      throw new Error('fetch failed');
+      throw new TransportError('could not reach the server: fetch failed', false);
     }
   };
 
@@ -1425,7 +1425,8 @@ test('an import that cannot be polled still hands back the job it started', asyn
     client
   });
 
-  assert.equal(result.exitCode, 2);
+  // The kind of the poll failure is the kind of the command's failure.
+  assert.equal(result.exitCode, 7);
   assert.match(result.stderr, /job job_77/);
   assert.match(result.stderr, /entry import-status --form Kp7mQ2 job_77/);
   assert.equal(calls, 3);
@@ -1445,7 +1446,7 @@ test('an import that settles as failed names the job too', async () => {
     client
   });
 
-  assert.equal(result.exitCode, 2);
+  assert.equal(result.exitCode, 5);
   assert.match(result.stderr, /row 3 is not a date/);
   assert.match(result.stderr, /job job_88/);
 });
@@ -1456,7 +1457,7 @@ test('an edit whose second half is refused says which half was already saved', a
     async request<T>(request: HttpRequest): Promise<T> {
       seen.push(request.path);
       if (request.path.endsWith('/exam_setting')) return { ok: true } as T;
-      throw new Error('Name has already been taken');
+      throw new HttpError('Name has already been taken', 422, { message: 'Name has already been taken' });
     }
   };
 
@@ -1465,7 +1466,8 @@ test('an edit whose second half is refused says which half was already saved', a
     client
   });
 
-  assert.equal(result.exitCode, 2);
+  // A partial failure exits the way its refused half would have.
+  assert.equal(result.exitCode, 5);
   assert.match(result.stderr, /exam_setting was saved/);
   assert.match(result.stderr, /\(name\) was refused/);
   assert.match(result.stderr, /Name has already been taken/);

@@ -25,6 +25,7 @@ import {
   type OptionSpec,
   type OutputFormat
 } from './options.js';
+import { EXIT_CODES, classify } from './errors.js';
 
 export type CliResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -242,8 +243,30 @@ function ok(stdout: string): CliResult {
   return { exitCode: 0, stdout: stdout.endsWith('\n') ? stdout : `${stdout}\n`, stderr: '' };
 }
 
-function fail(message: string, exitCode = 2): CliResult {
-  return { exitCode, stdout: '', stderr: `Error: ${message}\n` };
+/**
+ * A failure, sorted into its kind. The exit code says which kind without
+ * anything being parsed; with `--output json` stderr carries the same in
+ * words, plus whatever status and body the server answered with, so a script
+ * that reads JSON on the way in reads JSON on the way out as well.
+ */
+function fail(error: unknown, output: OutputFormat): CliResult {
+  const sorted = classify(error);
+  if (output === 'json') {
+    const { exitCode, ...envelope } = sorted;
+    return { exitCode, stdout: '', stderr: `${json({ error: envelope })}\n` };
+  }
+  return { exitCode: sorted.exitCode, stdout: '', stderr: `Error: ${sorted.message}\n` };
+}
+
+/** An unknown command is a usage error, and in text mode the help is the message. */
+function unknown(words: readonly string[], output: OutputFormat): CliResult {
+  if (output === 'json') return fail(new UsageError(`Unknown command: jinshuju ${words.join(' ')}`), output);
+  return { exitCode: EXIT_CODES.usage, stdout: '', stderr: unknownCommandHelp(words) };
+}
+
+/** What `--output` asked for, read before the flags are checked so a failure can honour it. */
+function outputOf(flags: Record<string, unknown>): OutputFormat {
+  return flags['--output'] === 'json' ? 'json' : 'text';
 }
 
 const MAX_CELL = 120;
@@ -568,11 +591,11 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
   try {
     if (resource === 'auth' || resource === 'config') return await runLocal(words, flags, runtime, stdin);
 
-    if (!command) return { exitCode: 1, stdout: '', stderr: unknownCommandHelp(words) };
+    if (!command) return unknown(words, outputOf(flags));
 
     return await runRemote(command, words, flags, runtime, stdin);
   } catch (error) {
-    return fail((error as Error).message);
+    return fail(error, outputOf(flags));
   }
 }
 
@@ -712,12 +735,12 @@ async function runLocal(
     case 'config unset':
       return configUnset(words, options);
     default:
-      return { exitCode: 1, stdout: '', stderr: unknownCommandHelp(words) };
+      return unknown(words, options.output);
   }
 }
 
 function requireArg(value: string | undefined, name: string): string {
-  if (!value) throw new Error(`Missing argument <${name}>`);
+  if (!value) throw new UsageError(`Missing argument <${name}>`);
   return value;
 }
 

@@ -278,6 +278,36 @@ Progress is written **to stderr, and only when stderr is a terminal**, so
 `--output json | jq` receives exactly the same bytes it would without it: a pipe,
 or an agent on the other end, never sees a stray character.
 
+## Exit codes
+
+The exit code says what kind of failure it was, so a script can branch without
+parsing anything:
+
+| code | meaning                                                             |
+| ---- | ------------------------------------------------------------------- |
+| 0    | done                                                                |
+| 1    | something unexpected; please report it                              |
+| 2    | usage: a flag, argument, input file or unknown command              |
+| 3    | authentication: no credential, or one the server refused (401, 403) |
+| 4    | not found (404)                                                     |
+| 5    | refused by the API: validation, conflict, quota (other 4xx)         |
+| 6    | the server failed (5xx)                                             |
+| 7    | transport: the connection failed or timed out                       |
+
+With `--output json`, stderr carries the same as JSON, plus the status and body
+the server answered with:
+
+```json
+{
+  "error": {
+    "kind": "not_found",
+    "message": "form cannot be found",
+    "status": 404,
+    "body": { "error_description": "form cannot be found" }
+  }
+}
+```
+
 ## Timeouts and retries
 
 Every request has a deadline of one minute; `JINSHUJU_TIMEOUT_MS` changes it. A

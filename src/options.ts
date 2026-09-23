@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { UsageError } from './errors.js';
+
 /**
  * The shared option grammar, written once here because every resource uses it:
  * container, filter, sort, pagination, JSON input and output format.
@@ -151,7 +153,7 @@ export const MINE_OPTION: OptionSpec = {
   description: 'Switch to what the current user submitted'
 };
 
-export class UsageError extends Error {}
+export { UsageError } from './errors.js';
 
 /** `--api-key` reads back as `api_key`. */
 export function optionKey(spec: OptionSpec): string {
