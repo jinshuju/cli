@@ -145,6 +145,17 @@ function coerceOne(spec: OptionSpec, value: unknown, stdin: () => string): unkno
   return text;
 }
 
+/**
+ * A stray word that looks like a token, on a command whose parent is a flag, is
+ * almost always `field list <token>` written as `form get <token>` reads. Saying
+ * only that the argument is not taken leaves the caller to find that out.
+ */
+function containerHint(command: Command, extra: string): string {
+  const takesContainer = (command.options ?? []).some((option) => option.name === '--form');
+  if (!takesContainer || !/^[A-Za-z0-9]{6}$/.test(extra)) return '';
+  return `. Did you mean --form ${extra}? (a table: --table ${extra})`;
+}
+
 export function bindArgs(command: Command, words: readonly string[]): { args: Record<string, string>; rest: string[] } {
   const positionals = words.slice(command.path.length);
   const specs = command.args ?? [];
@@ -169,7 +180,10 @@ export function bindArgs(command: Command, words: readonly string[]): { args: Re
   if (!specs.some((arg) => arg.variadic)) {
     const extra = positionals.slice(specs.length);
     if (extra.length > 0) {
-      throw new UsageError(`jinshuju ${command.path.join(' ')} takes no argument ${JSON.stringify(extra[0])}`);
+      throw new UsageError(
+        `jinshuju ${command.path.join(' ')} takes no argument ${JSON.stringify(extra[0])}` +
+          containerHint(command, extra[0] as string)
+      );
     }
   }
   return { args, rest };

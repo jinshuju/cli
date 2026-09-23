@@ -35,7 +35,8 @@ export const LOCAL: readonly Command[] = [
     summary: 'Show which credential is in use, and where it came from',
     description:
       'The precedence is access token, then API key and secret, then a stored browser login. ' +
-      '--verify spends one lightweight call to confirm the credential still works.',
+      '--verify spends one call to confirm the credential still works, and reports the account it ' +
+      'belongs to — with more than one configured, nothing else here says which is in play.',
     options: local('--verify', '--api-key', '--api-secret', '--host', '--auth-host', '--client-id'),
     examples: ['jinshuju auth status', 'jinshuju auth status --verify']
   },

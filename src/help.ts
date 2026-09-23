@@ -1,4 +1,5 @@
 import { COMMANDS, RESOURCES, findCommand, type Command } from './commands/index.js';
+import { EXIT_CODES } from './errors.js';
 import { GLOBAL_OPTIONS, optionKey, type OptionSpec } from './options.js';
 
 /**
@@ -25,6 +26,13 @@ export function rootHelp(commands: readonly Command[] = COMMANDS): string {
     ...GLOBAL_OPTIONS.map((option) => `  ${flagLabel(option).padEnd(width + 12)}${option.description}`),
     '',
     'Run `jinshuju <resource> --help` to see its verbs.',
+    '`jsj` is the same command, for typing less.',
+    '',
+    'Exit codes: 0 ok, ' +
+      `${EXIT_CODES.unexpected} unexpected, ${EXIT_CODES.usage} usage, ${EXIT_CODES.auth} authentication, ` +
+      `${EXIT_CODES.not_found} not found, ${EXIT_CODES.refused} refused by the API, ${EXIT_CODES.server} server failure, ` +
+      `${EXIT_CODES.transport} no connection or timed out, ${EXIT_CODES.rate_limited} rate limited (wait and retry; ` +
+      '--output json carries retry_after).',
     ''
   ].join('\n');
 }
@@ -34,12 +42,14 @@ export function resourceHelp(resource: string, commands: readonly Command[] = CO
   const owned = commands.filter((command) => command.path[0] === resource);
   if (owned.length === 0) return rootHelp(commands);
   const width = Math.max(...owned.map((command) => command.path.join(' ').length)) + 4;
+  const note = RESOURCES.find((entry) => entry.name === resource)?.note;
 
   return [
     `Usage: jinshuju ${resource} <verb> [args] [flags]`,
     '',
     'Commands:',
     ...owned.map((command) => `  ${command.path.join(' ').padEnd(width)}${command.summary}`),
+    ...(note ? ['', note] : []),
     '',
     `Run \`jinshuju ${resource} <verb> --help\` for one of them.`,
     ''

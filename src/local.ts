@@ -14,6 +14,7 @@ import { JinshujuHttpClient, type HttpClient } from './http.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
 import { format } from './render.js';
 import { ok, unknown, type CliResult, type CliRuntime } from './result.js';
+import { isRecord } from './values.js';
 
 /**
  * The commands that never reach the API: they read and write the config file,
@@ -164,16 +165,38 @@ async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<C
         }
       : undefined
   };
-  if (options.verify && authenticated) {
-    await createClient(options, runtime).request({ method: 'GET', path: '/api/v1/forms' });
-  }
-  if (options.output !== 'text') return ok(format(payload, options.output, 0));
-  if (mode === 'access_token') return ok(`Authenticated with an access token (from ${config.sources.accessToken}).`);
-  if (mode === 'oauth') return ok('Authenticated with OAuth.');
-  if (mode === 'api_key_secret') return ok('Authenticated with API Key / Secret.');
+  // The call --verify already spends is enough to say *whose* credential this
+  // is, which is the question behind asking. Swapping tokens changes nothing in
+  // this output otherwise, and a caller with two accounts cannot tell which one
+  // it is about to write to.
+  const account = options.verify && authenticated ? await identify(createClient(options, runtime)) : undefined;
+  const full = { ...payload, ...(account ? { account } : {}) };
+
+  if (options.output !== 'text') return ok(format(full, options.output, 0));
+
+  const whose = account ? ` Account: ${account.name}${account.plan ? ` (${account.plan})` : ''}.` : '';
+  if (mode === 'access_token')
+    return ok(`Authenticated with an access token (from ${config.sources.accessToken}).${whose}`);
+  if (mode === 'oauth') return ok(`Authenticated with OAuth.${whose}`);
+  if (mode === 'api_key_secret') return ok(`Authenticated with API Key / Secret.${whose}`);
   return ok(
     'Missing authentication. Run `jinshuju auth login`, or set an access token, or configure API Key / Secret.'
   );
+}
+
+/**
+ * Who the credential belongs to. Reading the account proves the credential works
+ * — which is all --verify used to do with it — and answers the question that
+ * makes anyone ask: with two accounts configured, which one is this?
+ */
+async function identify(client: HttpClient): Promise<{ id?: string; name?: string; plan?: string }> {
+  const body = await client.request<Record<string, unknown>>({ method: 'GET', path: '/api/v1/billing_account' });
+  const plan = isRecord(body.plan) ? body.plan.name : undefined;
+  return {
+    id: typeof body.id === 'string' ? body.id : undefined,
+    name: typeof body.name === 'string' ? body.name : undefined,
+    plan: typeof plan === 'string' ? plan : undefined
+  };
 }
 
 async function authRefresh(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {

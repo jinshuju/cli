@@ -111,6 +111,11 @@ function renderObject(value: Record<string, unknown>, layout: Layout): string {
       .filter(([key]) => key !== listKey)
       .map(([key, fieldValue]) => renderEntry(key, fieldValue, layout));
     const listText = renderList(value[listKey] as unknown[], layout);
+
+    // A response that is nothing but the listing has nothing to separate it
+    // from, and `data:` on its own line is the JSON envelope showing through.
+    if (heading.length === 0) return listText;
+
     return [...heading, `${listKey}:`, listText].filter(Boolean).join('\n');
   }
 

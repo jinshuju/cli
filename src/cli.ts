@@ -96,7 +96,7 @@ async function runRemote(
   }
 
   const result = await client.request(request);
-  const selected = command.select ? command.select(result) : result;
+  const selected = command.select ? command.select(result, input) : result;
   if (output === 'text') return ok(format(command.render ? command.render(selected) : selected, output, width, hints));
   return ok(format(selected, output, width, hints));
 }

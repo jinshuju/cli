@@ -42,6 +42,53 @@ function checks(input: CommandInput, parse: (target: string) => Record<string, u
   return all;
 }
 
+export const FIELD_SCOPES = ['normal', 'exam', 'customized'] as const;
+
+/**
+ * A listing has to stay scannable and one type has to be readable, and those
+ * want opposite things from `structure`: its descriptions are sentences, which
+ * turn a table of fifty rows into a wall. A listing shows which keys a type
+ * takes; naming one type spells them out.
+ */
+function fieldTypesForReading(body: unknown): unknown {
+  const rows = (body as { data?: Record<string, unknown>[] }).data ?? [];
+  if (rows.length !== 1) {
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        structure: Object.keys((row.structure as Record<string, unknown>) ?? {}).join(', ') || undefined
+      }))
+    };
+  }
+  return rows[0];
+}
+
+/**
+ * What a field write touched, out of the whole form it answers with.
+ *
+ * A patch returns the container, so adding one field to a form of twenty-five
+ * answers with all twenty-five and leaves the caller hunting for the api_code it
+ * just created. `update` and `update-choices` name their field, so that row is
+ * the answer; `add` does not get an api_code back to match on, but it does know
+ * the labels it sent, and those name the rows that were not there before.
+ */
+function touchedFields(body: unknown, wanted: (field: Record<string, unknown>) => boolean): unknown {
+  const fields = selectFields(body);
+  const touched = fields.filter(wanted);
+  return { data: touched.length > 0 ? touched : fields };
+}
+
+/** The labels a field payload carries, one object or a list of them. */
+function labelsOf(payload: unknown): Set<string> {
+  const each = Array.isArray(payload) ? payload : [payload];
+  return new Set(
+    each.flatMap((item) => {
+      const label = (item as { label?: unknown } | null)?.label;
+      return typeof label === 'string' ? [label] : [];
+    })
+  );
+}
+
 const KIND_OPTION: OptionSpec = {
   name: '--kind',
   type: 'string',
@@ -55,16 +102,42 @@ export const FIELD: readonly Command[] = [
     path: ['field', 'types'],
     summary: 'List the field types a form or table can hold',
     description:
-      'What to put in `type` when adding a field, and what each type accepts. `takes_choices` says whether the field carries choices; `flags` are the booleans the payload may set on it; `settings` are the keys that type understands beyond the common ones. A table holds far fewer types than a form.',
+      'What to put in `type` when adding a field, and what each type accepts. `structure` is the ' +
+      "part no example can carry: the keys that give a type its shape, like a table's columns or " +
+      "a cascade's nesting. `settings` are the flat keys beside them, `flags` the booleans, and " +
+      '`read_as` the name the same field answers with when read back — which is not the name you ' +
+      'write. Name one type to see its structure described in full. A table holds far fewer types ' +
+      'than a form, and a scorable question type only belongs to a form that scores answers.',
     args: [{ name: 'type', required: false, description: 'One type name, e.g. RadioButton' }],
-    options: [KIND_OPTION],
+    options: [
+      KIND_OPTION,
+      {
+        name: '--scope',
+        type: 'string',
+        choices: FIELD_SCOPES,
+        placeholder: '<scope>',
+        description: `Only types of this scope: ${FIELD_SCOPES.join(', ')}`
+      }
+    ],
     request: (input) => ({
       method: 'GET',
       path: input.args.type ? `${API}/field_types/${input.args.type}` : `${API}/field_types`,
       query: { kind: input.options.kind as string | undefined }
     }),
-    select: (body) => (Array.isArray((body as { data?: unknown }).data) ? body : { data: [body] }),
-    examples: ['jinshuju field types', 'jinshuju field types --kind table', 'jinshuju field types RadioButton']
+    select: (body, input) => {
+      const rows = Array.isArray((body as { data?: unknown }).data)
+        ? (body as { data: Record<string, unknown>[] }).data
+        : [body as Record<string, unknown>];
+      const scope = input.options.scope as string | undefined;
+      return { data: scope ? rows.filter((row) => row.scope === scope) : rows };
+    },
+    render: fieldTypesForReading,
+    examples: [
+      'jinshuju field types',
+      'jinshuju field types --kind table',
+      'jinshuju field types --scope exam',
+      'jinshuju field types CascadeDropDown'
+    ]
   },
   {
     path: ['field', 'list'],
@@ -85,6 +158,10 @@ export const FIELD: readonly Command[] = [
       path: containerPath(input),
       body: { fields: { add: one(payload(input)) } }
     }),
+    select: (body, input) => {
+      const labels = labelsOf(payload(input));
+      return touchedFields(body, (field) => labels.has(String(field.label)));
+    },
     examples: ['jinshuju field add --form Kp7mQ2 --json \'{"type":"TextField","label":"备注"}\'']
   },
   {
@@ -100,6 +177,7 @@ export const FIELD: readonly Command[] = [
         fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] }
       }
     }),
+    select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code']),
     examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
   },
   {
@@ -116,7 +194,8 @@ export const FIELD: readonly Command[] = [
           update_choices: [{ ...(payload(input) as Record<string, unknown>), field_api_code: input.args['api-code'] }]
         }
       }
-    })
+    }),
+    select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code'])
   },
   {
     path: ['field', 'check'],
@@ -142,8 +221,12 @@ export const FIELD: readonly Command[] = [
     summary: "Preview what changing a field's type would do to its data",
     description:
       'The conversion happens in place, so the only thing at stake is the data: this reports how ' +
-      'many values are kept and how many are cleared. supported=false means the edit would refuse it.',
-    args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
+      'many values are kept and how many are cleared. The edit itself is `field update <api-code> ' +
+      '--json \'{"type":"TextArea"}\'`, and supported=false means that call would refuse it. ' +
+      'source_type and target_type are write names (NumberField), not the names a read answers with.',
+    args: [
+      { name: 'api-code', required: false, description: 'Field api_code; omit it only when --json names the field' }
+    ],
     options: [
       ...CONTAINER_OPTIONS,
       { name: '--to', type: 'string', placeholder: '<type>', description: 'Target field type, e.g. RadioButton' },
@@ -156,6 +239,11 @@ export const FIELD: readonly Command[] = [
       JSON_OPTION
     ],
     request: (input) => {
+      // Taking --json used to drop the argument beside it without a word, and
+      // the server answered about a field named nothing. One or the other.
+      if (input.options.json !== undefined && input.args['api-code'] !== undefined) {
+        throw new UsageError('name the field as an argument or through --json, not both');
+      }
       const inline =
         input.options.json === undefined
           ? [

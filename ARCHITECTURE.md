@@ -111,15 +111,16 @@ client's business, which is why `HttpRequest.query` is values and not a string.
 
 Every failure is one of seven kinds, and the exit code is the kind:
 
-| code | kind       | raised as                                                                           |
-| ---- | ---------- | ----------------------------------------------------------------------------------- |
-| 1    | unexpected | any `Error` nothing below claims                                                    |
-| 2    | usage      | `UsageError`: flags, arguments, input files, unknown commands, a broken config file |
-| 3    | auth       | `AuthError`, or an `HttpError` with 401 or 403                                      |
-| 4    | not_found  | `HttpError` 404                                                                     |
-| 5    | refused    | `HttpError` other 4xx, or `RefusedError` (an import the server would not write)     |
-| 6    | server     | `HttpError` 5xx, or a 2xx whose body could not be read                              |
-| 7    | transport  | `TransportError`: no connection, or the deadline passed                             |
+| code | kind         | raised as                                                                              |
+| ---- | ------------ | -------------------------------------------------------------------------------------- |
+| 1    | unexpected   | any `Error` nothing below claims                                                       |
+| 2    | usage        | `UsageError`: flags, arguments, input files, unknown commands, a broken config file    |
+| 3    | auth         | `AuthError`, or an `HttpError` with 401 or 403                                         |
+| 4    | not_found    | `HttpError` 404                                                                        |
+| 5    | refused      | `HttpError` other 4xx, or `RefusedError` (an import the server would not write)        |
+| 6    | server       | `HttpError` 5xx, or a 2xx whose body could not be read                                 |
+| 7    | transport    | `TransportError`: no connection, or the deadline passed                                |
+| 8    | rate_limited | `HttpError` 429, after the client's own retries; `retry_after` is lifted from the body |
 
 An error that wraps another (`{ cause }`) is sorted by what it wraps and keeps
 its own words, so "the form was created but its settings were refused" exits 5
