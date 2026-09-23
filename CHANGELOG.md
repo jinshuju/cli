@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0](https://github.com/jinshuju/cli/compare/v0.1.3...v0.2.0) (2026-09-23)
+
+
+### Features
+
+* --output jsonl, and --all that streams instead of gathering ([e69beb1](https://github.com/jinshuju/cli/commit/e69beb1b7008adf5a717704c3fc2b068c9f6c74f))
+* exit codes that say what went wrong, and JSON errors for JSON callers ([7ea0668](https://github.com/jinshuju/cli/commit/7ea06685674c7d1328d652edb039db3b3edc5c4d))
+
+
+### Fixes
+
+* answer the questions an agent had to guess at ([b1b5e67](https://github.com/jinshuju/cli/commit/b1b5e6749005a779e3e4ab55c20681c3eba04e05))
+* **auth:** a callback that fails while the browser opens is no longer unhandled ([1f2ad3a](https://github.com/jinshuju/cli/commit/1f2ad3a44a357db9e69814c99883f100255bc5a5))
+* bound every wait, and read a broken config or token answer as what it is ([2f6c011](https://github.com/jinshuju/cli/commit/2f6c011f9d599733102071e4a3999314df10d914))
+* **http:** give every request a deadline, and retry the ones worth retrying ([25d820c](https://github.com/jinshuju/cli/commit/25d820c84a4f29f7d1a4dd7e77d22e417e53ea77))
+
 ## [0.1.3](https://github.com/jinshuju/cli/compare/v0.1.2...v0.1.3) (2026-09-23)
 
 
