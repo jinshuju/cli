@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/jinshuju/cli/compare/v0.1.0...v0.1.1) (2026-09-23)
+
+
+### Fixes
+
+* keep the bin entries npm was silently dropping at publish ([b9e1673](https://github.com/jinshuju/cli/commit/b9e1673f511676ea27642d58d3c150ed5241a9f5))
+* keep the bin entries npm was silently dropping at publish ([95a8c61](https://github.com/jinshuju/cli/commit/95a8c61bbdb55f38198e353b9b0fe2d0a6b1d004))
+
 ## 0.1.0 (2026-09-23)
 
 
