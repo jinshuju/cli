@@ -65,10 +65,17 @@ for (const [path, own] of LOCAL_HELP) {
   });
 }
 
-test('package bin points to executable wrapper, not library module', () => {
+// The path has to be one npm keeps. It rewrites the manifest when publishing —
+// `npm pack` does not — and a leading `./` was dropped along with the whole
+// entry, which would have published a command line tool with no commands. The
+// packed tarball still worked, so nothing before the registry noticed.
+test('package bin points to the executable wrapper, in the form npm publishes', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(pkg.bin.jinshuju, './dist/cli-bin.js');
-  assert.equal(pkg.bin.jsj, './dist/cli-bin.js');
+
+  for (const [name, target] of Object.entries(pkg.bin as Record<string, string>)) {
+    assert.equal(target, 'dist/cli-bin.js', `bin.${name} does not point at the wrapper`);
+    assert.doesNotMatch(target, /^\.\//, `bin.${name} starts with ./, which npm drops when publishing`);
+  }
 });
 
 // A flag named `<json>` says nothing about what goes in it. Every command that
