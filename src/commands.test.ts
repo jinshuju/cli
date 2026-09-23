@@ -1396,3 +1396,45 @@ test('a stray token is answered with the flag that takes it', async () => {
   const word = await cli(['field', 'list', 'hello'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
   assert.doesNotMatch(word.stderr, /Did you mean/);
 });
+
+/**
+ * A listing of fifty types and one type read for its shape want opposite things
+ * from `structure`: its values are sentences, which turn a table into a wall.
+ */
+test('field types lists the structure keys, and spells them out for one type', async () => {
+  const rows = [
+    { type: 'TextField', read_as: 'single_line_text', scope: 'normal', flags: ['required'], settings: [] },
+    {
+      type: 'TableField', read_as: 'table', scope: 'normal', flags: ['required'], settings: [],
+      structure: { dimensions: 'Columns: [{label, type}], and a table with none is an empty grid.', init_row_length: 'Rows the grid starts with.' }
+    },
+    { type: 'SingleSelect', read_as: 'single_choice', scope: 'exam', flags: ['required'], settings: [], structure: { answers: 'The correct answer.' } }
+  ];
+  const client = {
+    async request<T>(request: { path: string }): Promise<T> {
+      return (request.path.endsWith('/field_types') ? { data: rows } : rows[1]) as T;
+    }
+  };
+
+  const listed = await cli(['field', 'types'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.match(listed.stdout, /dimensions, init_row_length/);
+  assert.doesNotMatch(listed.stdout, /empty grid/);
+
+  const one = await cli(['field', 'types', 'TableField'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.match(one.stdout, /dimensions: Columns/);
+  assert.match(one.stdout, /empty grid/);
+});
+
+// Scorable question types were listed beside ordinary ones, which is how a
+// caller ends up asking for SingleSelect on a survey.
+test('field types narrows to one scope', async () => {
+  const rows = [
+    { type: 'TextField', scope: 'normal', flags: [], settings: [] },
+    { type: 'SingleSelect', scope: 'exam', flags: [], settings: [] }
+  ];
+  const client = { async request<T>(): Promise<T> { return { data: rows } as T; } };
+
+  const exam = await cli(['field', 'types', '--scope', 'exam', '--output', 'json'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+
+  assert.deepEqual(JSON.parse(exam.stdout).data.map((row: { type: string }) => row.type), ['SingleSelect']);
+});

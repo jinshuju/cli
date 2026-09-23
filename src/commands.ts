@@ -838,6 +838,28 @@ function requiredOption(input: CommandInput, key: string): string {
   return value;
 }
 
+
+export const FIELD_SCOPES = ['normal', 'exam', 'customized'] as const;
+
+/**
+ * A listing has to stay scannable and one type has to be readable, and those
+ * want opposite things from `structure`: its descriptions are sentences, which
+ * turn a table of fifty rows into a wall. A listing shows which keys a type
+ * takes; naming one type spells them out.
+ */
+function fieldTypesForReading(body: unknown): unknown {
+  const rows = ((body as { data?: Record<string, unknown>[] }).data) ?? [];
+  if (rows.length !== 1) {
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        structure: Object.keys((row.structure as Record<string, unknown>) ?? {}).join(', ') || undefined
+      }))
+    };
+  }
+  return rows[0];
+}
+
 const KIND_OPTION: OptionSpec = {
   name: '--kind',
   type: 'string',
@@ -875,19 +897,35 @@ const FIELD: readonly Command[] = [
     path: ['field', 'types'],
     summary: 'List the field types a form or table can hold',
     description:
-      'What to put in `type` when adding a field, and what each type accepts. `takes_choices` says whether the field carries choices; `flags` are the booleans the payload may set on it; `settings` are the keys that type understands beyond the common ones. A table holds far fewer types than a form.',
+      'What to put in `type` when adding a field, and what each type accepts. `structure` is the ' +
+      'part no example can carry: the keys that give a type its shape, like a table\'s columns or ' +
+      'a cascade\'s nesting. `settings` are the flat keys beside them, `flags` the booleans, and ' +
+      '`read_as` the name the same field answers with when read back — which is not the name you ' +
+      'write. Name one type to see its structure described in full. A table holds far fewer types ' +
+      'than a form, and a scorable question type only belongs to a form that scores answers.',
     args: [{ name: 'type', required: false, description: 'One type name, e.g. RadioButton' }],
-    options: [KIND_OPTION],
+    options: [
+      KIND_OPTION,
+      { name: '--scope', type: 'string', choices: FIELD_SCOPES, placeholder: '<scope>', description: `Only types of this scope: ${FIELD_SCOPES.join(', ')}` }
+    ],
     request: (input) => ({
       method: 'GET',
       path: input.args.type ? `${API}/field_types/${input.args.type}` : `${API}/field_types`,
       query: { kind: input.options.kind as string | undefined }
     }),
-    select: (body) => (Array.isArray((body as { data?: unknown }).data) ? body : { data: [body] }),
+    select: (body, input) => {
+      const rows = Array.isArray((body as { data?: unknown }).data)
+        ? ((body as { data: Record<string, unknown>[] }).data)
+        : [body as Record<string, unknown>];
+      const scope = input.options.scope as string | undefined;
+      return { data: scope ? rows.filter((row) => row.scope === scope) : rows };
+    },
+    render: fieldTypesForReading,
     examples: [
       'jinshuju field types',
       'jinshuju field types --kind table',
-      'jinshuju field types RadioButton'
+      'jinshuju field types --scope exam',
+      'jinshuju field types CascadeDropDown'
     ]
   },
   {
