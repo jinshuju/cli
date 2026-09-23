@@ -1727,3 +1727,16 @@ test('a failure under jsonl is JSON on stderr, as under json', async () => {
   assert.equal(result.exitCode, 4);
   assert.equal((JSON.parse(result.stderr) as { error: { kind: string } }).error.kind, 'not_found');
 });
+
+test('a list is essential only to the command that says so; elsewhere it is detail the table drops', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return { data: [{ token: 'Kp7mQ2', name: '报名表', buckets: [{ label: 'x', count: 1 }] }] } as T;
+    }
+  };
+  const result = await cli(['form', 'list', '--output', 'text'], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /token\s+name/);
+  assert.doesNotMatch(result.stdout, /buckets:/);
+});

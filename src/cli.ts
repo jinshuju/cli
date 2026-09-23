@@ -67,9 +67,11 @@ async function runRemote(
 
   // A command that needs more than one round trip, or has to decide how many,
   // runs itself and answers with what should be printed.
+  const hints = { list: command.text?.list ?? command.paginate?.items, essentialLists: command.text?.essentialLists };
+
   if (command.run) {
     const payload = await command.run(input, client);
-    return ok(format(payload, output, width));
+    return ok(format(payload, output, width, hints));
   }
 
   const request = command.request?.(input);
@@ -90,13 +92,13 @@ async function runRemote(
     }
     const rows: unknown[] = [];
     await readAllPages(client, request, command.paginate, progress(), (page) => rows.push(...page));
-    return ok(format({ count: rows.length, data: rows }, output, width));
+    return ok(format({ count: rows.length, data: rows }, output, width, hints));
   }
 
   const result = await client.request(request);
   const selected = command.select ? command.select(result) : result;
-  if (output === 'text') return ok(format(command.render ? command.render(selected) : selected, output, width));
-  return ok(format(selected, output, width, command.paginate?.items));
+  if (output === 'text') return ok(format(command.render ? command.render(selected) : selected, output, width, hints));
+  return ok(format(selected, output, width, hints));
 }
 
 /**

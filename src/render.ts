@@ -69,23 +69,39 @@ function listOf(value: unknown, listKey?: string): unknown[] | undefined {
   return Array.isArray(value[key]) ? (value[key] as unknown[]) : undefined;
 }
 
+/**
+ * What a command knows about the shape of its answer that no renderer could
+ * read off the payload: which key holds the listing when it is not `data`, and
+ * which lists inside a row are the answer rather than detail.
+ */
+export type TextHints = {
+  readonly list?: string;
+  readonly essentialLists?: readonly string[];
+};
+
+type Layout = { width: number; list: string; essentialLists: readonly string[] };
+
 /** The payload in the format asked for. */
-export function format(value: unknown, output: OutputFormat, width: number, listKey?: string): string {
+export function format(value: unknown, output: OutputFormat, width: number, hints: TextHints = {}): string {
   if (output === 'json') return json(value);
-  if (output === 'jsonl') return jsonl(value, listKey);
-  return text(value, width);
+  if (output === 'jsonl') return jsonl(value, hints.list);
+  return text(value, width, hints);
 }
 
-export function text(value: unknown, width: number): string {
+export function text(value: unknown, width: number, hints: TextHints = {}): string {
+  return render(value, { width, list: hints.list ?? 'data', essentialLists: hints.essentialLists ?? [] });
+}
+
+function render(value: unknown, layout: Layout): string {
   if (typeof value === 'string') return value;
   if (value === undefined || value === null) return '';
-  if (Array.isArray(value)) return renderList(value, width);
-  if (typeof value === 'object') return renderObject(value as Record<string, unknown>, width);
+  if (Array.isArray(value)) return renderList(value, layout);
+  if (typeof value === 'object') return renderObject(value as Record<string, unknown>, layout);
   return String(value);
 }
 
-function renderObject(value: Record<string, unknown>, width: number): string {
-  const listKey = ['data', 'items', 'forms', 'entries', 'views'].find((key) => Array.isArray(value[key]));
+function renderObject(value: Record<string, unknown>, layout: Layout): string {
+  const listKey = Array.isArray(value[layout.list]) ? layout.list : undefined;
 
   if (listKey) {
     // Everything beside the listing is rendered, not just its scalars. Filtering
@@ -93,14 +109,14 @@ function renderObject(value: Record<string, unknown>, width: number): string {
     // the page — the warnings an import answers with, say.
     const heading = Object.entries(value)
       .filter(([key]) => key !== listKey)
-      .map(([key, fieldValue]) => renderEntry(key, fieldValue, width));
-    const listText = renderList(value[listKey] as unknown[], width);
+      .map(([key, fieldValue]) => renderEntry(key, fieldValue, layout));
+    const listText = renderList(value[listKey] as unknown[], layout);
     return [...heading, `${listKey}:`, listText].filter(Boolean).join('\n');
   }
 
   const entries = Object.entries(value);
   if (entries.length === 0) return '{}';
-  return entries.map(([key, fieldValue]) => renderEntry(key, fieldValue, width)).join('\n');
+  return entries.map(([key, fieldValue]) => renderEntry(key, fieldValue, layout)).join('\n');
 }
 
 /**
@@ -108,12 +124,12 @@ function renderObject(value: Record<string, unknown>, width: number): string {
  * parse braces to find one flag. Nesting goes one indent deeper instead, so the
  * shape stays visible and every leaf reads as `key: value`.
  */
-function renderEntry(key: string, value: unknown, width: number): string {
+function renderEntry(key: string, value: unknown, layout: Layout): string {
   if (Array.isArray(value)) {
-    return value.length === 0 ? `${key}: (empty)` : `${key}:\n${indent(renderList(value, width))}`;
+    return value.length === 0 ? `${key}: (empty)` : `${key}:\n${indent(renderList(value, layout))}`;
   }
   if (value !== null && typeof value === 'object') {
-    const block = renderObject(value as Record<string, unknown>, width);
+    const block = renderObject(value as Record<string, unknown>, layout);
     return block === '{}' ? `${key}: {}` : `${key}:\n${indent(block)}`;
   }
   return `${key}: ${formatCell(value)}`;
@@ -126,12 +142,14 @@ function indent(block: string): string {
     .join('\n');
 }
 
-function renderList(values: unknown[], width: number): string {
+function renderList(values: unknown[], layout: Layout): string {
   if (values.length === 0) return '(empty)';
   if (!values.every(isRecord)) return values.map((item) => formatField(item)).join('\n');
 
   const { rows, headings } = splitLabels((values as Record<string, unknown>[]).map(unwrapKeyed));
-  if (rows.some(hasEssentialList)) return rows.map((row) => renderObject(row, width)).join('\n\n');
+  if (rows.some((row) => hasEssentialList(row, layout.essentialLists))) {
+    return rows.map((row) => renderObject(row, layout)).join('\n\n');
+  }
 
   const heading = (column: string): string => headings.get(column) ?? column;
   const candidates = candidateColumns(rows);
@@ -148,7 +166,7 @@ function renderList(values: unknown[], width: number): string {
     const next = used + (columns.length === 0 ? 0 : 2) + columnWidth;
     // The first column goes in whatever it costs: a table of nothing is worse
     // than a table too wide.
-    if (columns.length > 0 && next > width) break;
+    if (columns.length > 0 && next > layout.width) break;
     columns.push(column);
     widths.push(columnWidth);
     used = next;
@@ -252,13 +270,11 @@ function isLabelled(value: unknown): boolean {
  * prints how many people answered and never what they answered.
  *
  * Which is which is not readable off the shape — both are a list of objects
- * beside a handful of scalars — so the lists worth breaking the table for are
- * named, the way `renderObject` names the keys that hold a listing.
+ * beside a handful of scalars — so the command names the lists worth breaking
+ * the table for, in its `text` hints.
  */
-const ESSENTIAL_LISTS = ['buckets'];
-
-function hasEssentialList(row: Record<string, unknown>): boolean {
-  return ESSENTIAL_LISTS.some((key) => {
+function hasEssentialList(row: Record<string, unknown>, essential: readonly string[]): boolean {
+  return essential.some((key) => {
     const value = row[key];
     return Array.isArray(value) && value.length > 0 && value.every(isRecord);
   });
