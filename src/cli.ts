@@ -6,7 +6,7 @@ import { HttpError, JinshujuHttpClient, type HttpClient, type HttpRequest } from
 import { runLocal } from './local.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
 import { progress, type Progress } from './progress.js';
-import { json, terminalWidth, text } from './render.js';
+import { format, terminalWidth } from './render.js';
 import { fail, ok, outputOf, unknown, type CliResult, type CliRuntime } from './result.js';
 import { VERSION } from './version.js';
 
@@ -69,22 +69,34 @@ async function runRemote(
   // runs itself and answers with what should be printed.
   if (command.run) {
     const payload = await command.run(input, client);
-    return ok(output === 'json' ? json(payload) : text(payload, width));
+    return ok(format(payload, output, width));
   }
 
   const request = command.request?.(input);
   if (!request) throw new UsageError(`${label} is not available yet`);
 
   if (options.all && command.paginate) {
-    const rows = await readAllPages(client, request, command.paginate, progress());
-    const payload = { count: rows.length, data: rows };
-    return ok(output === 'json' ? json(payload) : text(payload, width));
+    // jsonl is the one format that can be written before the end is known,
+    // so each page goes out as it arrives and nothing is kept. The other two
+    // need the whole listing first: json to close its brackets, text to know
+    // how wide its columns are.
+    if (output === 'jsonl') {
+      let gathered = '';
+      const write = runtime.stdout ?? ((chunk: string) => (gathered += chunk));
+      await readAllPages(client, request, command.paginate, progress(), (rows) => {
+        for (const row of rows) write(`${JSON.stringify(row)}\n`);
+      });
+      return { exitCode: 0, stdout: gathered, stderr: '' };
+    }
+    const rows: unknown[] = [];
+    await readAllPages(client, request, command.paginate, progress(), (page) => rows.push(...page));
+    return ok(format({ count: rows.length, data: rows }, output, width));
   }
 
   const result = await client.request(request);
   const selected = command.select ? command.select(result) : result;
-  if (output === 'json') return ok(json(selected));
-  return ok(text(command.render ? command.render(selected) : selected, width));
+  if (output === 'text') return ok(format(command.render ? command.render(selected) : selected, output, width));
+  return ok(format(selected, output, width, command.paginate?.items));
 }
 
 /**
@@ -94,15 +106,17 @@ async function runRemote(
 const MAX_PAGES = 10_000;
 
 /**
- * Every page of a listing. A cursor is opaque: it goes back exactly as it came.
+ * Every page of a listing, handed on a page at a time. A cursor is opaque: it
+ * goes back exactly as it came. Answers how many rows there were.
  */
 async function readAllPages(
   client: HttpClient,
   request: HttpRequest,
   paginate: { items: string; cursor: string },
-  watching: Progress = { step: () => {}, done: () => {} }
-): Promise<unknown[]> {
-  const rows: unknown[] = [];
+  watching: Progress,
+  onPage: (rows: unknown[]) => void
+): Promise<number> {
+  let count = 0;
   let cursor: string | undefined;
   let page = 0;
   for (;;) {
@@ -110,9 +124,11 @@ async function readAllPages(
       ...request,
       query: { ...request.query, ...(cursor ? { next: cursor } : {}) }
     });
-    rows.push(...((body?.[paginate.items] as unknown[] | undefined) ?? []));
+    const rows = (body?.[paginate.items] as unknown[] | undefined) ?? [];
+    count += rows.length;
+    onPage(rows);
     page += 1;
-    watching.step(`read ${page} page${page === 1 ? '' : 's'}, ${rows.length} rows…`);
+    watching.step(`read ${page} page${page === 1 ? '' : 's'}, ${count} rows…`);
     const next = body?.[paginate.cursor];
     if (next === undefined || next === null || next === '') break;
     // A server answering the cursor it was just given would be read forever.
@@ -124,9 +140,9 @@ async function readAllPages(
       );
     }
     if (page >= MAX_PAGES)
-      throw new Error(`stopped after ${MAX_PAGES} pages and ${rows.length} rows; the listing has no end`);
+      throw new Error(`stopped after ${MAX_PAGES} pages and ${count} rows; the listing has no end`);
     cursor = String(next);
   }
   watching.done();
-  return rows;
+  return count;
 }

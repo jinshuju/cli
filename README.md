@@ -272,6 +272,20 @@ Without it a failed import is invisible — the command succeeds and not a singl
 row is written. After the fact, `entry import-status` answers the same question
 from a job id.
 
+## Line-delimited JSON
+
+`--output jsonl` answers one JSON object per line: a listing becomes its rows,
+anything else is one line. With `--all` the rows are written as each page
+arrives and nothing is held back, so a listing of any size streams through
+`jq -c`, a shell loop or a log shipper without first fitting in memory.
+
+```bash
+jinshuju entry list --form Kp7mQ2 --all --output jsonl | jq -c 'select(.field_3 > 80)'
+jinshuju entry list --form Kp7mQ2 --all --output jsonl | while read -r row; do …; done
+```
+
+Errors are JSON on stderr under `jsonl` exactly as under `json`.
+
 ## Progress
 
 Long-running commands (`--all` paging, uploads, `--wait`) report progress.

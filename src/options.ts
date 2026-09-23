@@ -22,7 +22,7 @@ export interface OptionSpec {
   readonly description: string;
 }
 
-export const OUTPUT_FORMATS = ['text', 'json'] as const;
+export const OUTPUT_FORMATS = ['text', 'json', 'jsonl'] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
 /** Accepted by every command. */
@@ -32,7 +32,7 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
     type: 'string',
     choices: OUTPUT_FORMATS,
     placeholder: '<format>',
-    description: 'Output format: text, json'
+    description: 'Output format: text, json, or jsonl (one JSON object per line; a listing streams its rows)'
   },
   { name: '--config', type: 'string', placeholder: '<path>', description: 'Config file path' },
   { name: '--help', short: '-h', type: 'boolean', description: 'Show help' },

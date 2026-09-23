@@ -1619,3 +1619,88 @@ test('--all stops when the server answers the cursor it was just given, keeping 
   assert.equal(result.exitCode, 6);
   assert.match(result.stderr, /cursor it was asked for/);
 });
+
+// --- jsonl ------------------------------------------------------------------
+
+test('--output jsonl answers a listing as one row per line, and anything else as one line', async () => {
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      if (request.path.endsWith('/entries')) {
+        return {
+          total: 2,
+          data: [
+            { serial_number: 1, field_1: '张三' },
+            { serial_number: 2, field_1: 'Bob' }
+          ]
+        } as T;
+      }
+      return { token: 'Kp7mQ2', name: '报名表' } as T;
+    }
+  };
+  const listing = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--output', 'jsonl'], { env: WRITE_ENV, client });
+  assert.equal(listing.exitCode, 0);
+  assert.deepEqual(
+    listing.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line)),
+    [
+      { serial_number: 1, field_1: '张三' },
+      { serial_number: 2, field_1: 'Bob' }
+    ]
+  );
+
+  const one = await cli(['form', 'get', 'Kp7mQ2', '--output', 'jsonl'], { env: WRITE_ENV, client });
+  assert.equal(one.stdout, '{"token":"Kp7mQ2","name":"报名表"}\n');
+});
+
+test('--all --output jsonl writes each page as it arrives, holding nothing back', async () => {
+  const written: string[] = [];
+  let pages = 0;
+  let writesWhenSecondPageAsked = -1;
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      pages += 1;
+      if (request.query?.next) writesWhenSecondPageAsked = written.length;
+      return pages === 1
+        ? ({ data: [{ serial_number: 1 }, { serial_number: 2 }], next: 'p2' } as T)
+        : ({ data: [{ serial_number: 3 }], next: null } as T);
+    }
+  };
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--all', '--output', 'jsonl'], {
+    env: WRITE_ENV,
+    client,
+    stdout: (chunk) => written.push(chunk)
+  });
+
+  assert.equal(result.exitCode, 0);
+  // The first page was on its way out before the second was even asked for.
+  assert.equal(writesWhenSecondPageAsked, 2);
+  assert.equal(written.join(''), '{"serial_number":1}\n{"serial_number":2}\n{"serial_number":3}\n');
+  // Nothing is repeated in the result: it already went through the writer.
+  assert.equal(result.stdout, '');
+});
+
+test('without a writer, a streamed listing is gathered into the result instead', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return { data: [{ serial_number: 1 }], next: null } as T;
+    }
+  };
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--all', '--output', 'jsonl'], {
+    env: WRITE_ENV,
+    client
+  });
+  assert.equal(result.stdout, '{"serial_number":1}\n');
+});
+
+test('a failure under jsonl is JSON on stderr, as under json', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      throw new HttpError('form cannot be found', 404, undefined);
+    }
+  };
+  const result = await cli(['form', 'get', 'ZZZZZZ', '--output', 'jsonl'], { env: WRITE_ENV, client });
+  assert.equal(result.exitCode, 4);
+  assert.equal((JSON.parse(result.stderr) as { error: { kind: string } }).error.kind, 'not_found');
+});

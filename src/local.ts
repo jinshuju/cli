@@ -12,7 +12,7 @@ import {
 } from './config.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
-import { json } from './render.js';
+import { format } from './render.js';
 import { ok, unknown, type CliResult, type CliRuntime } from './result.js';
 
 /**
@@ -117,7 +117,7 @@ async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<Cl
     scope: result.token.scope,
     expires_at: result.token.expires_at
   };
-  if (options.output === 'json') return ok(json(payload));
+  if (options.output !== 'text') return ok(format(payload, options.output, 0));
   return ok(`Authenticated with OAuth.\nConfig: ${options.configPath}`);
 }
 
@@ -167,7 +167,7 @@ async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<C
   if (options.verify && authenticated) {
     await createClient(options, runtime).request({ method: 'GET', path: '/api/v1/forms' });
   }
-  if (options.output === 'json') return ok(json(payload));
+  if (options.output !== 'text') return ok(format(payload, options.output, 0));
   if (mode === 'access_token') return ok(`Authenticated with an access token (from ${config.sources.accessToken}).`);
   if (mode === 'oauth') return ok('Authenticated with OAuth.');
   if (mode === 'api_key_secret') return ok('Authenticated with API Key / Secret.');
@@ -183,15 +183,17 @@ async function authRefresh(options: LocalOptions, runtime: CliRuntime): Promise<
     cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
   });
   const auth = await refreshOAuthToken(config);
-  if (options.output === 'json')
-    return ok(json({ authenticated: true, mode: 'oauth', expires_at: auth.expires_at, scope: auth.scope }));
+  if (options.output !== 'text')
+    return ok(
+      format({ authenticated: true, mode: 'oauth', expires_at: auth.expires_at, scope: auth.scope }, options.output, 0)
+    );
   return ok('OAuth token refreshed.');
 }
 
 async function authLogout(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   const config = loadConfig({ configPath: options.configPath, env: runtime.env });
   await revokeOAuthToken(config);
-  return ok(options.output === 'json' ? json({ authenticated: false }) : 'Logged out.');
+  return ok(options.output !== 'text' ? format({ authenticated: false }, options.output, 0) : 'Logged out.');
 }
 
 function configGet(positionals: readonly string[], options: LocalOptions): CliResult {
@@ -212,7 +214,7 @@ function configGet(positionals: readonly string[], options: LocalOptions): CliRe
       api_secret: renderValue('api_secret', config.api_secret)
     };
   }
-  if (options.output === 'json') return ok(json(payload));
+  if (options.output !== 'text') return ok(format(payload, options.output, 0));
   return ok(
     Object.entries(payload)
       .map(([k, v]) => `${k}: ${v ?? '(unset)'}`)
