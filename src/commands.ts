@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 
 import { RefusedError } from './errors.js';
-import { validateCreateFormPayload } from './payload.js';
+import { validateContainerPayload } from './payload.js';
 import { progress } from './progress.js';
 import { TransportError, type HttpClient, type HttpRequest } from './http.js';
 import { isRecord } from './values.js';
@@ -534,7 +534,7 @@ function createFormBody(input: CommandInput): {
   body: Record<string, unknown>;
   settings?: { key: string; path: string; value: unknown };
 } {
-  const payloadBody = { ...(validateCreateFormPayload(payload(input)) as Record<string, unknown>) };
+  const payloadBody = { ...validateContainerPayload(payload(input), 'form') };
   const settings = settingsBlock(payloadBody);
   if (settings) delete payloadBody[settings.key];
 
@@ -862,7 +862,7 @@ const TABLE: readonly Command[] = [
     request: (input) => ({
       method: 'POST',
       path: `${API}/tables`,
-      body: overriding(payload(input) as Record<string, unknown>, {
+      body: overriding(validateContainerPayload(payload(input), 'table'), {
         folder_token: input.options.folder,
         with_default_entries: input.options.with_default_entries ? true : undefined
       })
