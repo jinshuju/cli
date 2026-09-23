@@ -102,11 +102,15 @@ export async function loginWithOAuth(
 
 export async function refreshOAuthToken(config: LoadedConfig): Promise<OAuthConfig> {
   if (!config.auth?.refresh_token) throw new Error('No OAuth refresh token. Run `jinshuju auth login` again.');
-  const token = await tokenRequest(config.auth.auth_host, {
-    grant_type: 'refresh_token',
-    client_id: config.auth.client_id,
-    refresh_token: config.auth.refresh_token
-  });
+  const token = await tokenRequest(
+    config.auth.auth_host,
+    {
+      grant_type: 'refresh_token',
+      client_id: config.auth.client_id,
+      refresh_token: config.auth.refresh_token
+    },
+    config.timeoutMs
+  );
   const auth = toOAuthConfig(config, config.auth.client_id, token, config.auth);
   saveOAuthConfig(config.configPath, auth);
   return auth;
@@ -118,7 +122,8 @@ export async function revokeOAuthToken(config: LoadedConfig): Promise<void> {
   await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({ client_id: config.auth.client_id, token: config.auth.access_token })
+    body: new URLSearchParams({ client_id: config.auth.client_id, token: config.auth.access_token }),
+    signal: AbortSignal.timeout(config.timeoutMs ?? TOKEN_TIMEOUT_MS)
   }).catch(() => undefined);
   clearOAuthConfig(config.configPath);
 }
@@ -144,12 +149,20 @@ async function exchangeAuthorizationCode(
   });
 }
 
-async function tokenRequest(authHost: string, params: Record<string, string>): Promise<TokenResponse> {
+/** A token endpoint answers at once or not at all; a minute is generous. */
+const TOKEN_TIMEOUT_MS = 60_000;
+
+async function tokenRequest(
+  authHost: string,
+  params: Record<string, string>,
+  timeoutMs = TOKEN_TIMEOUT_MS
+): Promise<TokenResponse> {
   const url = new URL('/oauth/token', authHost);
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams(params)
+    body: new URLSearchParams(params),
+    signal: AbortSignal.timeout(timeoutMs)
   });
   const text = await response.text();
   const body = text ? JSON.parse(text) : undefined;

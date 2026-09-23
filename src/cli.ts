@@ -15,6 +15,7 @@ import { progress, type Progress } from './progress.js';
 import { findCommand, type Command, type QueryValues } from './commands.js';
 import { helpFor, rootHelp, unknownCommandHelp } from './help.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
+import { VERSION } from './version.js';
 import {
   GLOBAL_OPTIONS,
   LOCAL_OPTIONS,
@@ -235,22 +236,6 @@ function localOptions(flags: Record<string, unknown>, stdin: () => string): Loca
     verify: Boolean(bound.verify),
     showSecret: Boolean(bound.show_secret)
   };
-}
-
-/**
- * Read from package.json, not restated here. A release bumps that file and
- * nothing else, so a constant reports the previous version from the moment it
- * is published — 0.1.1 shipped saying 0.1.0.
- */
-export const VERSION: string = readVersion();
-
-function readVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string };
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
 }
 
 function ok(stdout: string): CliResult {
