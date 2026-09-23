@@ -13,8 +13,8 @@
   },
   "type": "module",
   "bin": {
-    "jinshuju": "./dist/cli-bin.js",
-    "jsj": "./dist/cli-bin.js"
+    "jinshuju": "dist/cli-bin.js",
+    "jsj": "dist/cli-bin.js"
   },
   "scripts": {
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",

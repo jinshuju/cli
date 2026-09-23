@@ -93,6 +93,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # npm rewrites the manifest at publish time, and `npm pack` does not: a bin
+      # path it silently drops here still works in the packed tarball, so the
+      # install check above passes while the published package would have no
+      # binaries at all. A dry run is the only place that rewrite is visible, and
+      # it needs no credentials.
+      - name: Verify npm publishes the manifest as written
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          out="$(npm publish --dry-run 2>&1)"
+          echo "${out}"
+
+          if grep -q "auto-corrected" <<<"${out}"; then
+            echo "::error::npm would rewrite package.json at publish time. Run 'npm pkg fix' and commit the result."
+            exit 1
+          fi
+
       # `prepare` runs the build, so dist/ is produced from this exact tag. CI
       # already proved this tarball installs and that both binaries start.
       - name: Publish
