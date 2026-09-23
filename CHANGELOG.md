@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/jinshuju/cli/compare/v0.1.1...v0.1.2) (2026-09-23)
+
+
+### Fixes
+
+* report the version the package was actually published as ([573619f](https://github.com/jinshuju/cli/commit/573619f55151c76fa90e442b663547fa4f8dfd79))
+* report the version the package was actually published as ([03e963b](https://github.com/jinshuju/cli/commit/03e963baafde0dae7a525ac63a12d09e2895c0b9))
+
 ## [0.1.1](https://github.com/jinshuju/cli/compare/v0.1.0...v0.1.1) (2026-09-23)
 
 
