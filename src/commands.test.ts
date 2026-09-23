@@ -6,7 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli, type CliRuntime } from './cli.js';
-import { HttpError, TransportError, type HttpRequest } from './http.js';
+import { HttpError, TransportError, withQuery, type HttpRequest } from './http.js';
+
+/** What the client would have put on the wire: the path with its query. */
+const url = (request: HttpRequest): string => withQuery(request.path, request.query);
 
 /**
  * A path with no file behind it, so a test never reads the config of whoever is
@@ -320,7 +323,7 @@ test('entry list forwards the cursor back verbatim', async () => {
 
   assert.equal(result.exitCode, 0);
   assert.equal(mock.requests[0].method, 'GET');
-  assert.equal(mock.requests[0].path, '/api/v1/forms/BaLZpn/entries?next=51');
+  assert.equal(url(mock.requests[0]), '/api/v1/forms/BaLZpn/entries?next=51');
 });
 
 test('form list and a view listing also forward the cursor', async () => {
@@ -336,8 +339,8 @@ test('form list and a view listing also forward the cursor', async () => {
     client: viewEntries.client
   });
 
-  assert.equal(formList.requests[0].path, '/api/v1/forms?next=60cc514761936ced06123456');
-  assert.equal(viewEntries.requests[0].path, '/api/v1/forms/BaLZpn/views/Mixqc1/entries?next=51');
+  assert.equal(url(formList.requests[0]), '/api/v1/forms?next=60cc514761936ced06123456');
+  assert.equal(url(viewEntries.requests[0]), '/api/v1/forms/BaLZpn/views/Mixqc1/entries?next=51');
 });
 
 test('--limit rides along on listings, including the two without a cursor', async () => {
@@ -350,9 +353,9 @@ test('--limit rides along on listings, including the two without a cursor', asyn
   await cli(['folder', 'list', '--limit', '5'], { env, client: folders.client });
   await cli(['account', 'member', 'list', '--limit', '5'], { env, client: members.client });
 
-  assert.equal(entries.requests[0].path, '/api/v1/forms/BaLZpn/entries?limit=5');
-  assert.equal(folders.requests[0].path, '/api/v1/folders?limit=5');
-  assert.equal(members.requests[0].path, '/api/v1/billing_account/users?limit=5');
+  assert.equal(url(entries.requests[0]), '/api/v1/forms/BaLZpn/entries?limit=5');
+  assert.equal(url(folders.requests[0]), '/api/v1/folders?limit=5');
+  assert.equal(url(members.requests[0]), '/api/v1/billing_account/users?limit=5');
 });
 
 test('page and per-page options are not exposed as CLI options', async () => {
@@ -438,8 +441,8 @@ test('entry count takes one container, or several through the batch endpoint', a
   await cli(['entry', 'count', '--table', 'Vn4xR8', '--keyword', '张三'], { env, client: one.client });
   await cli(['entry', 'count', '--form', 'Kp7mQ2', '--form', 'aB3dE9'], { env, client: many.client });
 
-  assert.equal(one.requests[0].path, '/api/v1/tables/Vn4xR8/entries/count?keyword=%E5%BC%A0%E4%B8%89');
-  assert.equal(many.requests[0].path, '/api/v1/entries/count?form_tokens=Kp7mQ2%2CaB3dE9');
+  assert.equal(url(one.requests[0]), '/api/v1/tables/Vn4xR8/entries/count?keyword=%E5%BC%A0%E4%B8%89');
+  assert.equal(url(many.requests[0]), '/api/v1/entries/count?form_tokens=Kp7mQ2%2CaB3dE9');
 });
 
 test('entry count refuses more containers than the endpoint accepts', async () => {
@@ -477,7 +480,7 @@ test('entry aggregate turns --metric and --by into the JSON the API reads', asyn
   );
 
   assert.equal(result.exitCode, 0);
-  const query = new URL(mock.requests[0].path, 'https://x').searchParams;
+  const query = new URL(url(mock.requests[0]), 'https://x').searchParams;
   assert.equal(query.get('metrics'), '[{"func":"avg","field":"field_3"},{"func":"sum","field":"field_5"}]');
   assert.equal(query.get('dimensions'), '[{"field":"field_7"},{"field":"created_at","bucket":"month"}]');
   assert.equal(query.get('limit'), '5');
@@ -562,7 +565,7 @@ test('entry summary asks for named fields and can drop the overview', async () =
   });
 
   assert.equal(
-    mock.requests[0].path,
+    url(mock.requests[0]),
     '/api/v1/forms/Kp7mQ2/entries/summary?fields=field_3%2Cfield_7&include_overview=false'
   );
 });
@@ -739,8 +742,8 @@ test('several --name keywords stay separate, so the API matches any of them', as
   await cli(['form', 'list', '--name', '报名', '--name', '问卷'], { env: WRITE_ENV, client: forms.client });
   await cli(['table', 'list', '--name', '台账'], { env: WRITE_ENV, client: tables.client });
 
-  assert.equal(forms.requests[0].path, '/api/v1/forms?q%5B%5D=%E6%8A%A5%E5%90%8D&q%5B%5D=%E9%97%AE%E5%8D%B7');
-  assert.equal(tables.requests[0].path, '/api/v1/tables?q%5B%5D=%E5%8F%B0%E8%B4%A6');
+  assert.equal(url(forms.requests[0]), '/api/v1/forms?q%5B%5D=%E6%8A%A5%E5%90%8D&q%5B%5D=%E9%97%AE%E5%8D%B7');
+  assert.equal(url(tables.requests[0]), '/api/v1/tables?q%5B%5D=%E5%8F%B0%E8%B4%A6');
 });
 
 test('--labels is asked for on the entry reads, and left off otherwise', async () => {
@@ -757,9 +760,9 @@ test('--labels is asked for on the entry reads, and left off otherwise', async (
   });
   await cli(['entry', 'list', '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: bare.client });
 
-  assert.equal(listed.requests[0].path, '/api/v1/forms/Kp7mQ2/entries?include_labels=true');
-  assert.equal(got.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12?include_labels=true');
-  assert.equal(viewed.requests[0].path, '/api/v1/forms/Kp7mQ2/views/aB3dE9/entries?include_labels=true');
+  assert.equal(url(listed.requests[0]), '/api/v1/forms/Kp7mQ2/entries?include_labels=true');
+  assert.equal(url(got.requests[0]), '/api/v1/forms/Kp7mQ2/entries/12?include_labels=true');
+  assert.equal(url(viewed.requests[0]), '/api/v1/forms/Kp7mQ2/views/aB3dE9/entries?include_labels=true');
   assert.equal(bare.requests[0].path, '/api/v1/forms/Kp7mQ2/entries');
 });
 
@@ -796,7 +799,7 @@ test('form get --include names the blocks, and setting is honoured by already be
     client: createMockClient().client
   });
 
-  const query = new URL(asked.requests[0].path, 'https://x').searchParams;
+  const query = new URL(url(asked.requests[0]), 'https://x').searchParams;
   assert.deepEqual([...query.keys()].sort(), [
     'include_analytics',
     'include_extended_attributes',
@@ -816,7 +819,7 @@ test('form list asks for transaction totals only when told to', async () => {
   await cli(['form', 'list', '--with-transactions'], { env: WRITE_ENV, client: withTotals.client });
   await cli(['form', 'list'], { env: WRITE_ENV, client: without.client });
 
-  assert.equal(withTotals.requests[0].path, '/api/v1/forms?include_transactions=true');
+  assert.equal(url(withTotals.requests[0]), '/api/v1/forms?include_transactions=true');
   assert.equal(without.requests[0].path, '/api/v1/forms');
 });
 
@@ -845,12 +848,13 @@ test('field check batches its targets, from arguments and from --json alike', as
     client: createMockClient().client
   });
 
-  const checks = (path: string) => JSON.parse(new URL(path, 'https://x').searchParams.get('checks') as string);
-  assert.deepEqual(checks(plain.requests[0].path), [
+  const checks = (request: HttpRequest) =>
+    JSON.parse(new URL(url(request), 'https://x').searchParams.get('checks') as string);
+  assert.deepEqual(checks(plain.requests[0]), [
     { field_api_code: 'field_3' },
     { field_api_code: 'field_7', choice_value: 'choice_1' }
   ]);
-  assert.deepEqual(checks(mixed.requests[0].path), [
+  assert.deepEqual(checks(mixed.requests[0]), [
     { field_api_code: 'field_3' },
     { field_api_code: 'field_9', choice_value: 's1', choice_type: 'statement' }
   ]);
@@ -870,8 +874,8 @@ test('field preview-convert asks about one conversion, and needs a target type',
     client: createMockClient().client
   });
 
-  const checks = JSON.parse(new URL(mock.requests[0].path, 'https://x').searchParams.get('checks') as string);
-  assert.equal(mock.requests[0].path.split('?')[0], '/api/v1/forms/Kp7mQ2/fields/preview_convert');
+  const checks = JSON.parse(new URL(url(mock.requests[0]), 'https://x').searchParams.get('checks') as string);
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/fields/preview_convert');
   assert.deepEqual(checks, [{ field_api_code: 'field_1', target_type: 'RadioButton' }]);
   assert.equal(noType.exitCode, 2);
   assert.match(noType.stderr, /--to is required/);
@@ -896,14 +900,14 @@ test('entry search names its containers, or describes them with --scope-filter',
     client: createMockClient().client
   });
 
-  const query = (path: string) => new URL(path, 'https://x').searchParams;
-  assert.equal(query(named.requests[0].path).get('form_tokens'), 'Kp7mQ2,aB3dE9');
+  const query = (request: HttpRequest) => new URL(url(request), 'https://x').searchParams;
+  assert.equal(query(named.requests[0]).get('form_tokens'), 'Kp7mQ2,aB3dE9');
   assert.equal(
-    query(described.requests[0].path).get('filters'),
+    query(described.requests[0]).get('filters'),
     '[{"field":"entries_count","operator":"gt","value":"100"}]'
   );
   // No container and no scope filter means every form the caller can reach.
-  assert.equal(everything.requests[0].path, '/api/v1/entries/search?keyword=%E5%BC%A0%E4%B8%89');
+  assert.equal(url(everything.requests[0]), '/api/v1/entries/search?keyword=%E5%BC%A0%E4%B8%89');
   assert.equal(mixed.exitCode, 2);
   assert.match(mixed.stderr, /--form and --table are mutually exclusive/);
 });
@@ -921,9 +925,9 @@ test('--mine switches all three reads to what the caller submitted', async () =>
   await cli(['entry', 'search', '某某公司', '--mine', '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: search.client });
 
   assert.equal(forms.requests[0].path, '/api/v1/my/forms');
-  assert.equal(entries.requests[0].path, '/api/v1/my/forms/Kp7mQ2/entries?keyword=%E6%8A%A5%E4%BF%AE');
+  assert.equal(url(entries.requests[0]), '/api/v1/my/forms/Kp7mQ2/entries?keyword=%E6%8A%A5%E4%BF%AE');
   assert.equal(
-    search.requests[0].path,
+    url(search.requests[0]),
     '/api/v1/my/search?keyword=%E6%9F%90%E6%9F%90%E5%85%AC%E5%8F%B8&form_tokens=Kp7mQ2'
   );
 });
@@ -1575,7 +1579,7 @@ test('field types reads the catalogue, for a form by default and for a table whe
   await cli(['field', 'types', 'RadioButton'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
 
   assert.deepEqual(
-    requests.map((request) => `${request.method} ${request.path}`),
+    requests.map((request) => `${request.method} ${url(request)}`),
     ['GET /api/v1/field_types', 'GET /api/v1/field_types?kind=table', 'GET /api/v1/field_types/RadioButton']
   );
 });

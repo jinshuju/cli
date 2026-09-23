@@ -5,9 +5,14 @@ import { VERSION } from './version.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+/** A repeated parameter arrives as a list; everything else is one value. */
+export type QueryValues = Record<string, string | readonly string[] | undefined>;
+
 export type HttpRequest = {
-  method: HttpMethod | string;
+  method: HttpMethod;
   path: string;
+  /** The query string, as values; how they are spelled on the wire is this module's business. */
+  query?: QueryValues;
   body?: unknown;
   /**
    * A multipart body, for the three endpoints that take a file. fetch sets its
@@ -18,6 +23,25 @@ export type HttpRequest = {
 
 export interface HttpClient {
   request<T>(request: HttpRequest): Promise<T>;
+}
+
+/**
+ * The path with its query string. A list value repeats its parameter as
+ * `name[]=a&name[]=b`, which is how Rails reads a list. Joining them with a
+ * comma would ask for one keyword containing a comma instead of two keywords.
+ */
+export function withQuery(path: string, query?: QueryValues): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(query ?? {})) {
+    if (value === undefined) continue;
+    if (typeof value === 'string') {
+      params.set(name, value);
+    } else {
+      for (const item of value) params.append(`${name}[]`, item);
+    }
+  }
+  const search = params.toString();
+  return search ? `${path}?${search}` : path;
 }
 
 /** A response the server sent and refused with. `status` and `body` are what it said. */
@@ -236,7 +260,7 @@ export class JinshujuHttpClient implements HttpClient {
       const last = attempt >= this.retries;
       let response: Response;
       try {
-        response = await fetch(`${this.config.host}${request.path}`, {
+        response = await fetch(`${this.config.host}${withQuery(request.path, request.query)}`, {
           method: request.method,
           headers,
           body: request.form ?? (request.body === undefined ? undefined : JSON.stringify(request.body)),

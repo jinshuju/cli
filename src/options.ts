@@ -330,16 +330,23 @@ export interface Containers {
   readonly kind: 'form' | 'table';
 }
 
-/** The repeatable form of the above, for a read that answers about several. */
-export function resolveContainers(options: Record<string, unknown>, max: number): Containers {
+/**
+ * Every container named, of one kind, possibly none: a search that names no
+ * container lets the server choose. Still one kind per call.
+ */
+export function namedContainers(options: Record<string, unknown>): Containers {
   const forms = (options.form as string[] | undefined) ?? [];
   const tables = (options.table as string[] | undefined) ?? [];
   if (forms.length > 0 && tables.length > 0) throw new UsageError('--form and --table are mutually exclusive');
+  return { tokens: forms.length > 0 ? forms : tables, kind: forms.length > 0 ? 'form' : 'table' };
+}
 
-  const tokens = forms.length > 0 ? forms : tables;
-  if (tokens.length === 0) throw new UsageError('one of --form <token> or --table <token> is required');
-  if (tokens.length > max) {
-    throw new UsageError(`at most ${max} containers can be asked about in one call, got ${tokens.length}`);
+/** The repeatable form of resolveContainer, for a read that answers about several. */
+export function resolveContainers(options: Record<string, unknown>, max: number): Containers {
+  const containers = namedContainers(options);
+  if (containers.tokens.length === 0) throw new UsageError('one of --form <token> or --table <token> is required');
+  if (containers.tokens.length > max) {
+    throw new UsageError(`at most ${max} containers can be asked about in one call, got ${containers.tokens.length}`);
   }
-  return { tokens, kind: forms.length > 0 ? 'form' : 'table' };
+  return containers;
 }

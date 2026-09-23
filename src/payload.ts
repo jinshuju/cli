@@ -76,14 +76,6 @@ export type FormCreatePayload = {
   folder_token?: string;
 };
 
-export function parseJsonPayload(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch (error) {
-    throw new UsageError(`Invalid JSON payload: ${(error as Error).message}`, { cause: error });
-  }
-}
-
 export function validateCreateFormPayload(payload: unknown): FormCreatePayload {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new UsageError('Form payload must be a JSON object');
