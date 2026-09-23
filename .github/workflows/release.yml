@@ -1,88 +1,108 @@
 name: Release
 
-# Merging to main releases: the version is derived from the commits, the tag and
-# GitHub Release are created from them, and the package goes to npm. The release
-# commit carries [skip ci] so it does not start this over.
+# Two steps, deliberately separated by a human.
 #
-# Commit subjects here carry a ticket before the type (`#T17067 fix: ...`), which
-# the default conventional-commits parser does not recognise — it would find no
-# releasable commits and quietly release nothing. The header pattern in
-# .releaserc.json is what makes them readable, so keep the two in step.
+# release-please watches conventional commits on main and keeps ONE open pull
+# request that bumps the version and writes CHANGELOG.md. Nothing is published
+# while that PR sits there. Merging it is the decision to release: that merge
+# tags the commit, cuts a GitHub release, and only then does `publish` run.
+#
+# Publishing uses npm trusted publishing (OIDC), so there is no NPM_TOKEN to
+# store, rotate or leak. The first publish of a package cannot come from here:
+# npm will not let you configure a trusted publisher for a package that does not
+# exist yet, so the first version has to be published by hand and everything
+# after it is automatic.
+#
+# Commit subjects must be plain conventional commits. A ticket in front of the
+# type (`#T17067 feat: ...`) does not parse — release-please has no option to
+# change that — and the release would silently never happen. The ticket goes in
+# a `Refs:` footer instead.
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  # So a release can be re-attempted if the publish job fails after the tag was
+  # already cut. release-please is idempotent: it will not re-release a version
+  # whose tag already exists.
   workflow_dispatch:
 
-# contents/issues/pull-requests: the release commit, the tag and the GitHub
-# Release. id-token: the OIDC token npm exchanges for a short-lived publish
-# credential, so no long-lived token has to be stored here — see the Release step.
+# Least privilege at the top; each job widens only what it needs.
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
+  contents: read
 
-# Two merges landing together must not race for the same version.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Release
+  release-please:
+    name: Maintain the release PR
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          # semantic-release reads the whole history to work out what changed.
-          fetch-depth: 0
-          persist-credentials: true
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          # Pull requests opened with GITHUB_TOKEN do not trigger other
+          # workflows, so CI would never run on the release PR. Supplying a
+          # RELEASE_PLEASE_TOKEN (a fine-grained PAT with contents and
+          # pull-requests write) fixes that; without it everything still works
+          # and the release PR simply shows no checks.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+  publish:
+    name: Publish to npm
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # What lets npm verify this workflow's identity over OIDC, so no
+      # long-lived token is involved. Once this repository and the package are
+      # both public, npm attaches a provenance attestation on its own. Do not
+      # add --provenance; that flag is for token-based publishing and conflicts
+      # with this.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
         with:
-          node-version: 22.x
-          cache: npm
+          # The tag release-please just cut, not whatever main has moved on to.
+          ref: ${{ needs.release-please.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
           registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Trusted publishing needs npm >= 11.5.1, which is newer than what the
+      # Node 24 image happens to bundle. Pinning it here rather than trusting
+      # the runner image means a runner update cannot silently break publishing.
+      - name: Use an npm that speaks OIDC
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
+      # `prepare` runs the build, so dist/ is produced from this exact tag. CI
+      # already proved this tarball installs and that both binaries start.
+      - name: Publish
+        run: npm publish --access public
 
-      - name: Test
-        run: npm test
-
-      # The same gate CI runs. A release that skipped it could publish a package
-      # whose binaries do not start.
-      - name: Verify package contents and CLI bins
-        shell: bash
+      - name: Summary
         run: |
-          set -euo pipefail
-
-          packed_tgz="$(npm pack --json | node -e "let s = ''; process.stdin.on('data', d => s += d).on('end', () => process.stdout.write(JSON.parse(s)[0].filename))")"
-          prefix="$(mktemp -d)"
-
-          npm install -g "./${packed_tgz}" --prefix "${prefix}"
-
-          test -x "${prefix}/bin/jinshuju"
-          test -x "${prefix}/bin/jsj"
-          test -f "${prefix}/lib/node_modules/@jinshuju/cli/dist/cli-bin.js"
-
-          "${prefix}/bin/jinshuju" --help
-          "${prefix}/bin/jsj" --help
-
-      # npm is asked for a short-lived credential with this run's OIDC identity
-      # first, and only falls back to NPM_TOKEN when that is refused. The
-      # exchange is per package, so it can only work once the package exists and
-      # names this repository and workflow as a trusted publisher; until then the
-      # token is what publishes. Once it is set up, delete the secret.
-      - name: Release
-        run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          {
+            echo "### Published \`@jinshuju/cli@${{ needs.release-please.outputs.version }}\`"
+            echo
+            echo "- tag: \`${{ needs.release-please.outputs.tag }}\`"
+            echo "- https://www.npmjs.com/package/@jinshuju/cli"
+          } >> "$GITHUB_STEP_SUMMARY"
