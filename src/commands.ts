@@ -29,7 +29,7 @@ import { basename, extname } from 'node:path';
 import { RefusedError } from './errors.js';
 import { validateCreateFormPayload } from './payload.js';
 import { progress } from './progress.js';
-import type { HttpClient, HttpRequest } from './http.js';
+import { TransportError, type HttpClient, type HttpRequest } from './http.js';
 import { isRecord } from './values.js';
 
 /**
@@ -1253,16 +1253,36 @@ const IMPORT_SETTLED = new Set(['success', 'failed', 'cancelled']);
 const IMPORT_POLL_MS = 1000;
 
 /**
+ * How long `--wait` waits before giving up. An import of any size the plan
+ * allows finishes well inside this; one that has not is stuck, and a command
+ * that never returns is worse than one that says so and names the job.
+ */
+export const IMPORT_WAIT_MS = 30 * 60 * 1000;
+
+export type Waiting = {
+  step(message: string): void;
+  /** How long to wait in all; tests shorten it. */
+  deadlineMs?: number;
+  /** How to pause between polls, and what time it is; tests replace both. */
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+};
+
+/**
  * Waits for the rows to be written. A failed import exits non-zero, because
  * the alternative — answering 0 for an import that wrote nothing — is how a
  * caller comes to believe data is there when it is not.
  */
-async function awaitImport(
+export async function awaitImport(
   client: HttpClient,
   token: string,
   jobId: string,
-  watching: { step(m: string): void }
+  watching: Waiting
 ): Promise<ImportJob> {
+  const deadlineMs = watching.deadlineMs ?? IMPORT_WAIT_MS;
+  const sleep = watching.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const now = watching.now ?? Date.now;
+  const started = now();
   // Every way out of this loop but the good one carries the job id. The rows are
   // already being written by the time the first poll happens, so an error that
   // drops the id leaves the caller unable to ask how it went and tempted to
@@ -1272,6 +1292,12 @@ async function awaitImport(
       `${reason}. The import is job ${jobId} and may still be running: ` +
         `jinshuju entry import-status --form ${token} ${jobId}`,
       { cause }
+    );
+  const stillRunning = (): Error =>
+    new TransportError(
+      `gave up waiting after ${Math.round(deadlineMs / 60_000)} minutes. The import is job ${jobId} and is still running: ` +
+        `jinshuju entry import-status --form ${token} ${jobId}`,
+      true
     );
 
   for (;;) {
@@ -1293,7 +1319,8 @@ async function awaitImport(
     const seen = job.processed_rows ?? 0;
     const total = job.total_rows;
     watching.step(`importing ${seen}${total ? `/${total}` : ''} rows…`);
-    await new Promise((resolve) => setTimeout(resolve, IMPORT_POLL_MS));
+    if (now() - started >= deadlineMs) throw stillRunning();
+    await sleep(IMPORT_POLL_MS);
   }
 }
 

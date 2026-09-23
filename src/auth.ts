@@ -150,6 +150,27 @@ async function exchangeAuthorizationCode(
   });
 }
 
+/**
+ * A token endpoint that answers with something other than JSON — a login page,
+ * a gateway's error — is reported as the status it sent. Parsing first turned
+ * that into "Unexpected token '<'" with the status nowhere to be seen.
+ */
+function parseTokenBody(
+  text: string,
+  response: Response
+): { access_token?: string; error?: string; error_description?: string } | undefined {
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text) as { access_token?: string; error?: string; error_description?: string };
+  } catch {
+    const flat = text.replace(/\s+/g, ' ').trim();
+    throw new AuthError(
+      `${response.status} ${response.statusText} from the token endpoint, and the body is not JSON: ` +
+        (flat.length <= 120 ? flat : `${flat.slice(0, 120)}…`)
+    );
+  }
+}
+
 /** A token endpoint answers at once or not at all; a minute is generous. */
 const TOKEN_TIMEOUT_MS = 60_000;
 
@@ -166,9 +187,9 @@ async function tokenRequest(
     signal: AbortSignal.timeout(timeoutMs)
   });
   const text = await response.text();
-  const body = text ? JSON.parse(text) : undefined;
+  const body = parseTokenBody(text, response);
   if (!response.ok) {
-    throw new AuthError(body?.error_description ?? body?.error ?? response.statusText);
+    throw new AuthError(body?.error_description ?? body?.error ?? `${response.status} ${response.statusText}`.trim());
   }
   if (!body?.access_token) throw new AuthError('OAuth token response is missing access_token');
   return body as TokenResponse;

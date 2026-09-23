@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli, type CliRuntime } from './cli.js';
+import { awaitImport } from './commands.js';
 import { HttpError, TransportError, withQuery, type HttpRequest } from './http.js';
 
 /** What the client would have put on the wire: the path with its query. */
@@ -1582,4 +1583,39 @@ test('field types reads the catalogue, for a form by default and for a table whe
     requests.map((request) => `${request.method} ${url(request)}`),
     ['GET /api/v1/field_types', 'GET /api/v1/field_types?kind=table', 'GET /api/v1/field_types/RadioButton']
   );
+});
+
+test('--wait gives up after its deadline, naming the job, rather than polling forever', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return { job_id: 'job_9', status: 'processing', processed_rows: 10, total_rows: 1000 } as T;
+    }
+  };
+  let clock = 0;
+  const steps: string[] = [];
+  const error = await awaitImport(client, 'Kp7mQ2', 'job_9', {
+    step: (m) => steps.push(m),
+    deadlineMs: 5_000,
+    now: () => clock,
+    sleep: async (ms) => {
+      clock += ms;
+    }
+  }).catch((e: Error) => e);
+
+  assert.ok(error instanceof TransportError);
+  assert.match(error.message, /gave up waiting/);
+  assert.match(error.message, /entry import-status --form Kp7mQ2 job_9/);
+  assert.ok(steps.length >= 5 && steps.length <= 7, `polled ${steps.length} times`);
+});
+
+test('--all stops when the server answers the cursor it was just given, keeping what was read', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return { data: [{ token: 'a' }], next: 'same' } as T;
+    }
+  };
+  const result = await cli(['form', 'list', '--all'], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 6);
+  assert.match(result.stderr, /cursor it was asked for/);
 });

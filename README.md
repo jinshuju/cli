@@ -267,6 +267,7 @@ finished.
 
 That is what `--wait` is for. It waits for the job to settle, reports how many
 rows were written, skipped and rejected, and **exits non-zero on failure**.
+It gives up after thirty minutes, naming the job so it can still be looked up.
 Without it a failed import is invisible — the command succeeds and not a single
 row is written. After the fact, `entry import-status` answers the same question
 from a job id.

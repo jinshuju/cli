@@ -1,5 +1,3 @@
-import { HttpError, TransportError } from './http.js';
-
 /** The command line itself was wrong: a flag, an argument, an input file. */
 export class UsageError extends Error {
   override name = 'UsageError';
@@ -8,6 +6,30 @@ export class UsageError extends Error {
 /** No credential, or one the server would not take. */
 export class AuthError extends Error {
   override name = 'AuthError';
+}
+
+/** A response the server sent and refused with. `status` and `body` are what it said. */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: unknown
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+/** No response at all: the connection failed, or the request ran out of time. */
+export class TransportError extends Error {
+  constructor(
+    message: string,
+    readonly timedOut: boolean,
+    cause?: unknown
+  ) {
+    super(message, { cause });
+    this.name = 'TransportError';
+  }
 }
 
 /**
