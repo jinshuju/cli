@@ -107,7 +107,10 @@ for (const command of COMMANDS.filter((entry) => entry.payload?.length)) {
 
     for (const field of (parsed.fields as Record<string, unknown>[] | undefined) ?? [parsed]) {
       for (const choice of (field.choices as Record<string, unknown>[] | undefined) ?? []) {
-        assert.ok('name' in choice, `a choice is keyed ${JSON.stringify(Object.keys(choice))}, but the API reads "name"`);
+        assert.ok(
+          'name' in choice,
+          `a choice is keyed ${JSON.stringify(Object.keys(choice))}, but the API reads "name"`
+        );
       }
     }
   });

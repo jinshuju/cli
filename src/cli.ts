@@ -1,15 +1,28 @@
 import { readFileSync } from 'node:fs';
 
 import {
-  assertConfigKey, defaultConfigPath, getConfig, loadConfig, maskSecret, setConfigValue, unsetConfigValue, type ConfigKey
+  assertConfigKey,
+  defaultConfigPath,
+  getConfig,
+  loadConfig,
+  maskSecret,
+  setConfigValue,
+  unsetConfigValue,
+  type ConfigKey
 } from './config.js';
 import { loginWithOAuth, refreshOAuthToken, revokeOAuthToken } from './auth.js';
 import { progress, type Progress } from './progress.js';
-import { COMMANDS, findCommand, type Command, type QueryValues } from './commands.js';
-import { commandHelp, helpFor, rootHelp, unknownCommandHelp } from './help.js';
+import { findCommand, type Command, type QueryValues } from './commands.js';
+import { helpFor, rootHelp, unknownCommandHelp } from './help.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
 import {
-  GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, optionKey, readJsonInput, type OptionSpec, type OutputFormat
+  GLOBAL_OPTIONS,
+  LOCAL_OPTIONS,
+  UsageError,
+  optionKey,
+  readJsonInput,
+  type OptionSpec,
+  type OutputFormat
 } from './options.js';
 
 export type CliResult = { exitCode: number; stdout: string; stderr: string };
@@ -114,7 +127,7 @@ function splitArgs(argv: readonly string[], specs: readonly OptionSpec[] = []): 
     // with whatever followed it and is refused by name rather than by shape.
     const wanted = takesValue.get(flag) ?? true;
     const consumable = wanted && next !== undefined && (next === '-' || !next.startsWith('-'));
-    const value = inline ?? (consumable ? (index += 1, next) : true);
+    const value = inline ?? (consumable ? ((index += 1), next) : true);
     const existing = flags[flag];
     flags[flag] = existing === undefined ? value : ([] as unknown[]).concat(existing as never, value as never);
   }
@@ -168,7 +181,11 @@ function coerceOne(spec: OptionSpec, value: unknown, stdin: () => string): unkno
     if (!/^\d+$/.test(text)) throw new UsageError(`${spec.name} must be a whole number, got ${JSON.stringify(text)}`);
     return Number.parseInt(text, 10);
   }
-  if (spec.type === 'list') return text.split(',').map((item) => item.trim()).filter(Boolean);
+  if (spec.type === 'list')
+    return text
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
   if (spec.type === 'json') return readJsonInput(text, stdin);
   return text;
 }
@@ -188,7 +205,8 @@ function bindArgs(command: Command, words: readonly string[]): { args: Record<st
     }
     const value = positionals[index];
     if (value === undefined) {
-      if (arg.required) throw new UsageError(`jinshuju ${command.path.join(' ')} needs <${arg.name}>: ${arg.description}`);
+      if (arg.required)
+        throw new UsageError(`jinshuju ${command.path.join(' ')} needs <${arg.name}>: ${arg.description}`);
       return;
     }
     args[arg.name] = value;
@@ -249,7 +267,18 @@ const MAX_CELL = 120;
 const PIPED_WIDTH = 120;
 
 /** Columns that say which row this is; they earn their place before any value. */
-const LEADING_COLUMNS = ['token', 'api_code', 'serial_number', 'id', 'name', 'title', 'label', 'type', 'state', 'status'];
+const LEADING_COLUMNS = [
+  'token',
+  'api_code',
+  'serial_number',
+  'id',
+  'name',
+  'title',
+  'label',
+  'type',
+  'state',
+  'status'
+];
 
 /**
  * Timestamps go last, however early they appear in the payload. On a listing of
@@ -319,7 +348,10 @@ function renderEntry(key: string, value: unknown, width: number): string {
 }
 
 function indent(block: string): string {
-  return block.split('\n').map((line) => (line ? `  ${line}` : line)).join('\n');
+  return block
+    .split('\n')
+    .map((line) => (line ? `  ${line}` : line))
+    .join('\n');
 }
 
 function renderList(values: unknown[], width: number): string {
@@ -337,7 +369,10 @@ function renderList(values: unknown[], width: number): string {
   const widths: number[] = [];
   let used = 0;
   for (const column of candidates) {
-    const columnWidth = Math.max(displayWidth(heading(column)), ...rows.map((row) => displayWidth(formatCell(row[column]))));
+    const columnWidth = Math.max(
+      displayWidth(heading(column)),
+      ...rows.map((row) => displayWidth(formatCell(row[column])))
+    );
     const next = used + (columns.length === 0 ? 0 : 2) + columnWidth;
     // The first column goes in whatever it costs: a table of nothing is worse
     // than a table too wide.
@@ -359,12 +394,16 @@ function renderList(values: unknown[], width: number): string {
     const rescued = candidates.find((column) => !columns.includes(column) && told(row, column));
     if (!rescued) continue;
     columns.push(rescued);
-    widths.push(Math.max(displayWidth(heading(rescued)), ...rows.map((other) => displayWidth(formatCell(other[rescued])))));
+    widths.push(
+      Math.max(displayWidth(heading(rescued)), ...rows.map((other) => displayWidth(formatCell(other[rescued]))))
+    );
   }
 
   const header = columns.map((column, index) => pad(heading(column), widths[index])).join('  ');
   const separator = widths.map((columnWidth) => '-'.repeat(columnWidth)).join('  ');
-  const body = rows.map((row) => columns.map((column, index) => pad(formatCell(row[column]), widths[index])).join('  '));
+  const body = rows.map((row) =>
+    columns.map((column, index) => pad(formatCell(row[column]), widths[index])).join('  ')
+  );
   return [header, separator, ...body].join('\n');
 }
 
@@ -406,7 +445,10 @@ function unwrapKeyed(row: Record<string, unknown>): Record<string, unknown> {
  * becomes the cell, the label becomes the column's heading. Columns stay keyed
  * by api_code, because two fields may carry the same label.
  */
-function splitLabels(rows: Record<string, unknown>[]): { rows: Record<string, unknown>[]; headings: Map<string, string> } {
+function splitLabels(rows: Record<string, unknown>[]): {
+  rows: Record<string, unknown>[];
+  headings: Map<string, string>;
+} {
   const headings = new Map<string, string>();
   const split = rows.map((row) => {
     const out: Record<string, unknown> = {};
@@ -563,11 +605,19 @@ async function runRemote(
   const output = (options.output as OutputFormat) ?? 'text';
   const width = runtime.width ?? terminalWidth();
 
-  const client = runtime.client ?? new JinshujuHttpClient(loadConfig({
-    configPath: (options.config as string) ?? defaultConfigPath,
-    env: runtime.env,
-    cli: { apiKey: options.api_key as string | undefined, apiSecret: options.api_secret as string | undefined, host: options.host as string | undefined }
-  }));
+  const client =
+    runtime.client ??
+    new JinshujuHttpClient(
+      loadConfig({
+        configPath: (options.config as string) ?? defaultConfigPath,
+        env: runtime.env,
+        cli: {
+          apiKey: options.api_key as string | undefined,
+          apiSecret: options.api_secret as string | undefined,
+          host: options.host as string | undefined
+        }
+      })
+    );
 
   // A command that needs more than one round trip handles itself. Answering
   // undefined means "this call is the ordinary one", so `entry create` only
@@ -586,7 +636,11 @@ async function runRemote(
     return ok(output === 'json' ? json(payload) : text(payload, width));
   }
 
-  const result = await client.request({ method: request.method, path: withQuery(request.path, request.query), body: request.body });
+  const result = await client.request({
+    method: request.method,
+    path: withQuery(request.path, request.query),
+    body: request.body
+  });
   const selected = command.select ? command.select(result) : result;
   if (output === 'json') return ok(json(selected));
   return ok(text(command.render ? command.render(selected) : selected, width));
@@ -606,7 +660,11 @@ async function readAllPages(
   let page = 0;
   for (;;) {
     const query = { ...request.query, ...(cursor ? { next: cursor } : {}) };
-    const body = await client.request<Record<string, unknown>>({ method: request.method, path: withQuery(request.path, query), body: request.body });
+    const body = await client.request<Record<string, unknown>>({
+      method: request.method,
+      path: withQuery(request.path, query),
+      body: request.body
+    });
     rows.push(...((body?.[paginate.items] as unknown[] | undefined) ?? []));
     page += 1;
     watching.step(`read ${page} page${page === 1 ? '' : 's'}, ${rows.length} rows…`);
@@ -679,7 +737,16 @@ function requireArg(value: string | undefined, name: string): string {
 }
 
 function createClient(options: LocalOptions, runtime: CliRuntime): HttpClient {
-  return runtime.client ?? new JinshujuHttpClient(loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host } }));
+  return (
+    runtime.client ??
+    new JinshujuHttpClient(
+      loadConfig({
+        configPath: options.configPath,
+        env: runtime.env,
+        cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host }
+      })
+    )
+  );
 }
 
 async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
@@ -692,13 +759,30 @@ async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<Cl
     scopes: options.scopes,
     openBrowser: !options.noOpen
   });
-  const payload = { authenticated: true, mode: 'oauth', auth_host: result.token.auth_host, client_id: result.token.client_id, scope: result.token.scope, expires_at: result.token.expires_at };
+  const payload = {
+    authenticated: true,
+    mode: 'oauth',
+    auth_host: result.token.auth_host,
+    client_id: result.token.client_id,
+    scope: result.token.scope,
+    expires_at: result.token.expires_at
+  };
   if (options.output === 'json') return ok(json(payload));
   return ok(`Authenticated with OAuth.\nConfig: ${options.configPath}`);
 }
 
 async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
-  const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host, authHost: options.authHost, clientId: options.clientId } });
+  const config = loadConfig({
+    configPath: options.configPath,
+    env: runtime.env,
+    cli: {
+      apiKey: options.apiKey,
+      apiSecret: options.apiSecret,
+      host: options.host,
+      authHost: options.authHost,
+      clientId: options.clientId
+    }
+  });
   const authenticated = Boolean(config.accessToken || (config.apiKey && config.apiSecret) || config.auth?.access_token);
   const mode = config.accessToken
     ? 'access_token'
@@ -713,10 +797,22 @@ async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<C
     host: config.host,
     auth_host: config.authHost,
     sources: config.sources,
-    source: mode === 'access_token' ? config.sources.accessToken
-      : mode === 'api_key_secret' ? config.sources.apiKey
-        : mode === 'oauth' ? config.sources.auth : 'missing',
-    oauth: config.auth ? { client_id: config.auth.client_id, scope: config.auth.scope, expires_at: config.auth.expires_at, has_refresh_token: Boolean(config.auth.refresh_token) } : undefined
+    source:
+      mode === 'access_token'
+        ? config.sources.accessToken
+        : mode === 'api_key_secret'
+          ? config.sources.apiKey
+          : mode === 'oauth'
+            ? config.sources.auth
+            : 'missing',
+    oauth: config.auth
+      ? {
+          client_id: config.auth.client_id,
+          scope: config.auth.scope,
+          expires_at: config.auth.expires_at,
+          has_refresh_token: Boolean(config.auth.refresh_token)
+        }
+      : undefined
   };
   if (options.verify && authenticated) {
     await createClient(options, runtime).request({ method: 'GET', path: '/api/v1/forms' });
@@ -725,13 +821,20 @@ async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<C
   if (mode === 'access_token') return ok(`Authenticated with an access token (from ${config.sources.accessToken}).`);
   if (mode === 'oauth') return ok('Authenticated with OAuth.');
   if (mode === 'api_key_secret') return ok('Authenticated with API Key / Secret.');
-  return ok('Missing authentication. Run `jinshuju auth login`, or set an access token, or configure API Key / Secret.');
+  return ok(
+    'Missing authentication. Run `jinshuju auth login`, or set an access token, or configure API Key / Secret.'
+  );
 }
 
 async function authRefresh(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
-  const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { host: options.host, authHost: options.authHost, clientId: options.clientId } });
+  const config = loadConfig({
+    configPath: options.configPath,
+    env: runtime.env,
+    cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
+  });
   const auth = await refreshOAuthToken(config);
-  if (options.output === 'json') return ok(json({ authenticated: true, mode: 'oauth', expires_at: auth.expires_at, scope: auth.scope }));
+  if (options.output === 'json')
+    return ok(json({ authenticated: true, mode: 'oauth', expires_at: auth.expires_at, scope: auth.scope }));
   return ok('OAuth token refreshed.');
 }
 
@@ -760,7 +863,11 @@ function configGet(positionals: readonly string[], options: LocalOptions): CliRe
     };
   }
   if (options.output === 'json') return ok(json(payload));
-  return ok(Object.entries(payload).map(([k, v]) => `${k}: ${v ?? '(unset)'}`).join('\n'));
+  return ok(
+    Object.entries(payload)
+      .map(([k, v]) => `${k}: ${v ?? '(unset)'}`)
+      .join('\n')
+  );
 }
 
 function configSet(positionals: readonly string[], options: LocalOptions): CliResult {

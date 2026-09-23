@@ -7,7 +7,13 @@ function fakeStream(isTTY: boolean) {
   const written: string[] = [];
   return {
     written,
-    stream: { isTTY, write: (chunk: string) => { written.push(chunk); return true; } } as unknown as NodeJS.WriteStream
+    stream: {
+      isTTY,
+      write: (chunk: string) => {
+        written.push(chunk);
+        return true;
+      }
+    } as unknown as NodeJS.WriteStream
   };
 }
 

@@ -4,7 +4,14 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig, setConfigValue, unsetConfigValue, maskSecret, saveOAuthConfig, clearOAuthConfig } from './config.js';
+import {
+  loadConfig,
+  setConfigValue,
+  unsetConfigValue,
+  maskSecret,
+  saveOAuthConfig,
+  clearOAuthConfig
+} from './config.js';
 
 test('loadConfig prefers cli options over env over config file', () => {
   const dir = mkdtempSync(join(tmpdir(), 'jsj-config-'));

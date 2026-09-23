@@ -309,5 +309,6 @@ digits**, for example `Kp7mQ2`, `Vn4xR8`, `aB3dE9`. Examples here and in
 ```bash
 npm install
 npm test
-npm run typecheck
+npm run check       # typecheck + oxlint + oxfmt --check, what CI runs
+npm run fmt         # format in place with oxfmt
 ```

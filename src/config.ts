@@ -70,9 +70,23 @@ function writeConfigFile(configPath: string, config: RawConfig): void {
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
 }
 
-function pickValue(cliValue: string | undefined, envValue: string | undefined, fileValue: string | undefined, fallback?: string): { value: string; source: ConfigSource };
-function pickValue(cliValue: string | undefined, envValue: string | undefined, fileValue: string | undefined): { value?: string; source: ConfigSource };
-function pickValue(cliValue: string | undefined, envValue: string | undefined, fileValue: string | undefined, fallback?: string): { value?: string; source: ConfigSource } {
+function pickValue(
+  cliValue: string | undefined,
+  envValue: string | undefined,
+  fileValue: string | undefined,
+  fallback?: string
+): { value: string; source: ConfigSource };
+function pickValue(
+  cliValue: string | undefined,
+  envValue: string | undefined,
+  fileValue: string | undefined
+): { value?: string; source: ConfigSource };
+function pickValue(
+  cliValue: string | undefined,
+  envValue: string | undefined,
+  fileValue: string | undefined,
+  fallback?: string
+): { value?: string; source: ConfigSource } {
   if (cliValue) return { value: cliValue, source: 'cli' };
   if (envValue) return { value: envValue, source: 'env' };
   if (fileValue) return { value: fileValue, source: 'file' };
@@ -88,9 +102,19 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
   const apiKey = pickValue(options.cli?.apiKey, env.JINSHUJU_API_KEY, file.api_key);
   const apiSecret = pickValue(options.cli?.apiSecret, env.JINSHUJU_API_SECRET, file.api_secret);
   const host = pickValue(options.cli?.host, env.JINSHUJU_HOST, file.host, defaultHost);
-  const authHost = pickValue(options.cli?.authHost, env.JINSHUJU_AUTH_HOST, file.auth_host ?? file.auth?.auth_host, defaultAuthHost);
+  const authHost = pickValue(
+    options.cli?.authHost,
+    env.JINSHUJU_AUTH_HOST,
+    file.auth_host ?? file.auth?.auth_host,
+    defaultAuthHost
+  );
   const defaultClientId = authHost.value === defaultAuthHost ? defaultOAuthClientId : undefined;
-  const clientId = pickValue(options.cli?.clientId, env.JINSHUJU_OAUTH_CLIENT_ID, file.client_id ?? file.auth?.client_id, defaultClientId);
+  const clientId = pickValue(
+    options.cli?.clientId,
+    env.JINSHUJU_OAUTH_CLIENT_ID,
+    file.client_id ?? file.auth?.client_id,
+    defaultClientId
+  );
   const auth = file.auth?.type === 'oauth' ? file.auth : undefined;
 
   return {
@@ -151,7 +175,14 @@ export function maskSecret(value: string | undefined): string | undefined {
 }
 
 /** Every key the config file holds, in the order help should list them. */
-export const CONFIG_KEYS: readonly ConfigKey[] = ['access_token', 'api_key', 'api_secret', 'host', 'auth_host', 'client_id'];
+export const CONFIG_KEYS: readonly ConfigKey[] = [
+  'access_token',
+  'api_key',
+  'api_secret',
+  'host',
+  'auth_host',
+  'client_id'
+];
 
 export function assertConfigKey(value: string): asserts value is ConfigKey {
   if (!(CONFIG_KEYS as readonly string[]).includes(value)) {

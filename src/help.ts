@@ -10,7 +10,9 @@ import { GLOBAL_OPTIONS, optionKey, type OptionSpec } from './options.js';
 
 export function rootHelp(commands: readonly Command[] = COMMANDS): string {
   const present = new Set(commands.map((command) => command.path[0]));
-  const resources = RESOURCES.filter((resource) => present.has(resource.name) || resource.name === 'auth' || resource.name === 'config');
+  const resources = RESOURCES.filter(
+    (resource) => present.has(resource.name) || resource.name === 'auth' || resource.name === 'config'
+  );
   const width = Math.max(...resources.map((resource) => resource.name.length)) + 4;
 
   return [

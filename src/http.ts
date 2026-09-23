@@ -150,6 +150,8 @@ export class JinshujuHttpClient implements HttpClient {
       return `Bearer ${this.config.auth.access_token}`;
     }
 
-    throw new Error('Missing authentication. Run `jinshuju auth login`, or configure JINSHUJU_ACCESS_TOKEN, or JINSHUJU_API_KEY with JINSHUJU_API_SECRET.');
+    throw new Error(
+      'Missing authentication. Run `jinshuju auth login`, or configure JINSHUJU_ACCESS_TOKEN, or JINSHUJU_API_KEY with JINSHUJU_API_SECRET.'
+    );
   }
 }

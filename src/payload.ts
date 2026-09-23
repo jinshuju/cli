@@ -1,10 +1,43 @@
 const API_V1_FIELD_TYPES = new Set([
-  'TextField', 'TextArea', 'NumberField', 'EmailField', 'MobileField', 'TelephoneField', 'IdCardField',
-  'NameField', 'AddressField', 'LinkField', 'GeoField', 'AttachmentField', 'DateTimeField', 'TimeField',
-  'RatingField', 'NpsField', 'RadioButton', 'CheckBox', 'DropDown', 'TableField', 'CascadeDropDown',
-  'SortField', 'LikertField', 'MatrixField', 'MatrixScaleField', 'ImageRadioButton', 'ImageCheckBox',
-  'GoodsField', 'FormulaField', 'ReservationField', 'FormAssociation', 'ESignatureField', 'AudioField',
-  'PageBreak', 'SectionBreak', 'WidgetButton', 'WidgetContact', 'WidgetMap', 'WidgetMarquee'
+  'TextField',
+  'TextArea',
+  'NumberField',
+  'EmailField',
+  'MobileField',
+  'TelephoneField',
+  'IdCardField',
+  'NameField',
+  'AddressField',
+  'LinkField',
+  'GeoField',
+  'AttachmentField',
+  'DateTimeField',
+  'TimeField',
+  'RatingField',
+  'NpsField',
+  'RadioButton',
+  'CheckBox',
+  'DropDown',
+  'TableField',
+  'CascadeDropDown',
+  'SortField',
+  'LikertField',
+  'MatrixField',
+  'MatrixScaleField',
+  'ImageRadioButton',
+  'ImageCheckBox',
+  'GoodsField',
+  'FormulaField',
+  'ReservationField',
+  'FormAssociation',
+  'ESignatureField',
+  'AudioField',
+  'PageBreak',
+  'SectionBreak',
+  'WidgetButton',
+  'WidgetContact',
+  'WidgetMap',
+  'WidgetMarquee'
 ]);
 
 /**
@@ -18,9 +51,19 @@ const API_V1_FIELD_TYPES = new Set([
  * refusal; there is nothing to duplicate here beyond letting them through.
  */
 const SCENE_FIELD_TYPES = new Set([
-  'SingleSelect', 'MultiSelect', 'ImageSingleSelect', 'ImageMultiSelect', 'TrueOrFalse', 'DropDownSelect',
-  'FillInBlank', 'ShortAnswer', 'FillInNumber', 'Rating', 'Nps',
-  'Department', 'Grade'
+  'SingleSelect',
+  'MultiSelect',
+  'ImageSingleSelect',
+  'ImageMultiSelect',
+  'TrueOrFalse',
+  'DropDownSelect',
+  'FillInBlank',
+  'ShortAnswer',
+  'FillInNumber',
+  'Rating',
+  'Nps',
+  'Department',
+  'Grade'
 ]);
 
 export type FormCreatePayload = {
@@ -35,7 +78,7 @@ export function parseJsonPayload(value: string): unknown {
   try {
     return JSON.parse(value) as unknown;
   } catch (error) {
-    throw new Error(`Invalid JSON payload: ${(error as Error).message}`);
+    throw new Error(`Invalid JSON payload: ${(error as Error).message}`, { cause: error });
   }
 }
 
@@ -58,7 +101,10 @@ export function validateCreateFormPayload(payload: unknown): FormCreatePayload {
     if ('api_code' in fieldObject) {
       throw new Error('Do not pass api_code when creating fields; backend generates it');
     }
-    if (typeof fieldObject.type !== 'string' || !(API_V1_FIELD_TYPES.has(fieldObject.type) || SCENE_FIELD_TYPES.has(fieldObject.type))) {
+    if (
+      typeof fieldObject.type !== 'string' ||
+      !(API_V1_FIELD_TYPES.has(fieldObject.type) || SCENE_FIELD_TYPES.has(fieldObject.type))
+    ) {
       throw new Error(`Field type must be an API v1 field type, got ${String(fieldObject.type)}`);
     }
     if (typeof fieldObject.label !== 'string' && fieldObject.type !== 'PageBreak') {
