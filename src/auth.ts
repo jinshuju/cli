@@ -93,6 +93,10 @@ export async function loginWithOAuth(
     codeChallenge: challenge
   });
 
+  // The callback can fail while the browser is still being opened — a forged
+  // state, a refusal — and a rejection nobody is awaiting yet is reported as
+  // unhandled. It is awaited right below; this only says so in the meantime.
+  callback.code.catch(() => undefined);
   if (options.openBrowser !== false) await opener(authorizeUrl);
   const code = await callback.code;
   const token = await exchangeAuthorizationCode(config.authHost, clientId, callback.redirectUri, code, verifier);
