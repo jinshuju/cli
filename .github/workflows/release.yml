@@ -1,0 +1,108 @@
+name: Release
+
+# Two steps, deliberately separated by a human.
+#
+# release-please watches conventional commits on main and keeps ONE open pull
+# request that bumps the version and writes CHANGELOG.md. Nothing is published
+# while that PR sits there. Merging it is the decision to release: that merge
+# tags the commit, cuts a GitHub release, and only then does `publish` run.
+#
+# Publishing uses npm trusted publishing (OIDC), so there is no NPM_TOKEN to
+# store, rotate or leak. The first publish of a package cannot come from here:
+# npm will not let you configure a trusted publisher for a package that does not
+# exist yet, so the first version has to be published by hand and everything
+# after it is automatic.
+#
+# Commit subjects must be plain conventional commits. A ticket in front of the
+# type (`#T17067 feat: ...`) does not parse — release-please has no option to
+# change that — and the release would silently never happen. The ticket goes in
+# a `Refs:` footer instead.
+on:
+  push:
+    branches: [main]
+  # So a release can be re-attempted if the publish job fails after the tag was
+  # already cut. release-please is idempotent: it will not re-release a version
+  # whose tag already exists.
+  workflow_dispatch:
+
+# Least privilege at the top; each job widens only what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Maintain the release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          # Pull requests opened with GITHUB_TOKEN do not trigger other
+          # workflows, so CI would never run on the release PR. Supplying a
+          # RELEASE_PLEASE_TOKEN (a fine-grained PAT with contents and
+          # pull-requests write) fixes that; without it everything still works
+          # and the release PR simply shows no checks.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish to npm
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # What lets npm verify this workflow's identity over OIDC, so no
+      # long-lived token is involved. Once this repository and the package are
+      # both public, npm attaches a provenance attestation on its own. Do not
+      # add --provenance; that flag is for token-based publishing and conflicts
+      # with this.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tag release-please just cut, not whatever main has moved on to.
+          ref: ${{ needs.release-please.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Trusted publishing needs npm >= 11.5.1, which is newer than what the
+      # Node 24 image happens to bundle. Pinning it here rather than trusting
+      # the runner image means a runner update cannot silently break publishing.
+      - name: Use an npm that speaks OIDC
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `prepare` runs the build, so dist/ is produced from this exact tag. CI
+      # already proved this tarball installs and that both binaries start.
+      - name: Publish
+        run: npm publish --access public
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published \`@jinshuju/cli@${{ needs.release-please.outputs.version }}\`"
+            echo
+            echo "- tag: \`${{ needs.release-please.outputs.tag }}\`"
+            echo "- https://www.npmjs.com/package/@jinshuju/cli"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,16 @@
 {
   "name": "@jinshuju/cli",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Command line interface for Jinshuju Open API v1",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jinshuju/cli.git"
+  },
+  "homepage": "https://github.com/jinshuju/cli#readme",
+  "bugs": {
+    "url": "https://github.com/jinshuju/cli/issues"
+  },
   "type": "module",
   "bin": {
     "jinshuju": "./dist/cli-bin.js",
@@ -9,7 +18,7 @@
   },
   "scripts": {
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
-    "build": "npm run clean && tsc -p tsconfig.json",
+    "build": "npm run clean && tsc -p tsconfig.json && chmod +x dist/cli-bin.js",
     "prepare": "npm run build",
     "test": "npm run build && node --test dist/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -26,5 +35,9 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   }
 }
