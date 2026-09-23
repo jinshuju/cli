@@ -253,8 +253,58 @@ function ok(stdout: string): CliResult {
   return { exitCode: 0, stdout: stdout.endsWith('\n') ? stdout : `${stdout}\n`, stderr: '' };
 }
 
-function fail(message: string, exitCode = 2): CliResult {
+/**
+ * Exit codes, because a caller that cannot tell one failure from another has to
+ * treat them all as fatal. Rate limiting is the one that is not the caller's
+ * fault and not permanent: it wants waiting, not a corrected request.
+ */
+export const EXIT_USAGE = 2;
+export const EXIT_RATE_LIMITED = 3;
+
+function fail(message: string, exitCode = EXIT_USAGE): CliResult {
   return { exitCode, stdout: '', stderr: `Error: ${message}\n` };
+}
+
+type RequestFailure = Error & { status?: number; body?: unknown };
+
+/**
+ * What an error was, in the shape the caller asked for. Text output stays a
+ * sentence a person reads; `--output json` answers a body, because an agent
+ * that has to regex an error message is one wording change from breaking.
+ *
+ * Errors stay on stderr either way: stdout belongs to the answer, and a caller
+ * piping it into a parser should get nothing rather than an error object it
+ * might mistake for one.
+ */
+function failFromError(error: RequestFailure, output: OutputFormat): CliResult {
+  const status = error.status;
+  const rateLimited = status === 429;
+  const exitCode = rateLimited ? EXIT_RATE_LIMITED : EXIT_USAGE;
+
+  if (output !== 'json') {
+    const wait = retryAfterOf(error);
+    const suffix = wait === undefined ? '' : ` Retry after ${wait}s.`;
+    return { exitCode, stdout: '', stderr: `Error: ${error.message}${suffix}\n` };
+  }
+
+  const body = isRecord(error.body) ? error.body : undefined;
+  const payload = {
+    error: {
+      code: rateLimited ? 'rate_limit_exceeded' : (body?.error ?? 'request_failed'),
+      message: error.message,
+      ...(status === undefined ? {} : { status }),
+      ...(retryAfterOf(error) === undefined ? {} : { retry_after: retryAfterOf(error) }),
+      ...(body === undefined ? {} : { body })
+    }
+  };
+  return { exitCode, stdout: '', stderr: `${json(payload)}\n` };
+}
+
+/** The server says how long to wait; it is the one number worth lifting out. */
+function retryAfterOf(error: RequestFailure): number | undefined {
+  const body = isRecord(error.body) ? error.body : undefined;
+  const value = body?.retry_after;
+  return typeof value === 'number' ? value : undefined;
 }
 
 const MAX_CELL = 120;
@@ -469,7 +519,7 @@ function hasEssentialList(row: Record<string, unknown>): boolean {
   });
 }
 
-function isRecord(value: unknown): boolean {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -564,7 +614,10 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
 
     return await runRemote(command, words, flags, runtime, stdin);
   } catch (error) {
-    return fail((error as Error).message);
+    // Read off the flag rather than the resolved options: this catch also covers
+    // the failures that happen before they are resolved.
+    const output: OutputFormat = flags['--output'] === 'json' ? 'json' : 'text';
+    return failFromError(error as RequestFailure, output);
   }
 }
 

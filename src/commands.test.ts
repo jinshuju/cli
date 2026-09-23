@@ -1438,3 +1438,47 @@ test('field types narrows to one scope', async () => {
 
   assert.deepEqual(JSON.parse(exam.stdout).data.map((row: { type: string }) => row.type), ['SingleSelect']);
 });
+
+/**
+ * An agent that cannot tell "wait" from "you wrote it wrong" has to treat both
+ * as fatal. Rate limiting is the one failure that is neither the caller's fault
+ * nor permanent, so it gets its own code — and the server already says how long
+ * to wait, which text output had been dropping.
+ */
+test('rate limiting exits differently from a bad request, and carries retry_after', async () => {
+  const failing = (status: number, body: unknown) => ({
+    async request(): Promise<never> {
+      throw Object.assign(new Error(`${status} failed`), { status, body });
+    }
+  });
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+  const limited = { error: 'rate_limit_exceeded', retry_after: 3420, limit: 100, remaining: 0 };
+
+  const text = await cli(['form', 'list'], { client: failing(429, limited), env });
+  assert.equal(text.exitCode, 3);
+  assert.match(text.stderr, /Retry after 3420s/);
+
+  const structured = await cli(['form', 'list', '--output', 'json'], { client: failing(429, limited), env });
+  assert.equal(structured.exitCode, 3);
+  assert.deepEqual(JSON.parse(structured.stderr).error.code, 'rate_limit_exceeded');
+  assert.equal(JSON.parse(structured.stderr).error.retry_after, 3420);
+
+  const wrong = await cli(['form', 'list', '--output', 'json'], { client: failing(400, { error_description: 'nope' }), env });
+  assert.equal(wrong.exitCode, 2);
+  assert.equal(JSON.parse(wrong.stderr).error.status, 400);
+});
+
+// stdout is the answer. A caller piping it into a parser should get nothing on
+// failure rather than an error object it might read as one.
+test('a structured error goes to stderr, leaving stdout empty', async () => {
+  const client = {
+    async request(): Promise<never> {
+      throw Object.assign(new Error('429 failed'), { status: 429, body: { retry_after: 60 } });
+    }
+  };
+
+  const result = await cli(['form', 'list', '--output', 'json'], { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /rate_limit_exceeded/);
+});

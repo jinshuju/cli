@@ -24,6 +24,9 @@ export function rootHelp(commands: readonly Command[] = COMMANDS): string {
     '',
     'Run `jinshuju <resource> --help` to see its verbs.',
     '`jsj` is the same command, for typing less.',
+    '',
+    'Exit codes: 0 ok, 1 unknown command, 2 the request was wrong, 3 rate limited',
+    '(wait and retry; --output json carries retry_after).',
     ''
   ].join('\n');
 }
