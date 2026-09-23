@@ -30,6 +30,7 @@ import { RefusedError } from './errors.js';
 import { validateContainerPayload } from './payload.js';
 import { progress } from './progress.js';
 import { TransportError, type HttpClient, type HttpRequest } from './http.js';
+import type { TextHints } from './render.js';
 import { isRecord } from './values.js';
 
 /**
@@ -100,6 +101,12 @@ export interface Command {
    * could know how to put it back together.
    */
   readonly render?: (body: unknown) => unknown;
+  /**
+   * What the text renderer cannot read off the payload: the key holding the
+   * listing when it is not `data` or the paginated one, and the lists inside
+   * a row that are the answer rather than detail.
+   */
+  readonly text?: TextHints;
 }
 
 export interface Resource {
@@ -1621,6 +1628,8 @@ const ENTRY: readonly Command[] = [
   {
     path: ['entry', 'summary'],
     summary: 'Profile every analysable field at once',
+    // The buckets are what a profile is; a table that drops them says nothing.
+    text: { essentialLists: ['buckets'] },
     description:
       'One pass over the data describing each field in its own terms: choices by share, numbers by ' +
       'spread, dates by range. Submission metadata is left out — it describes the submitting, not the answer.',
