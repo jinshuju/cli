@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 
-import { JinshujuHttpClient } from './http.js';
+import { HttpError, JinshujuHttpClient, TransportError } from './http.js';
 import { loadConfig } from './config.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -142,4 +142,148 @@ test('an empty body on a successful response is not an error', async () => {
   await server.close();
 
   assert.equal(answer, undefined);
+});
+
+// --- retries and timeouts ----------------------------------------------------
+
+type Scripted = { status: number; body?: string; headers?: Record<string, string> };
+
+/**
+ * A server that answers one path with a scripted sequence, one response per
+ * request, repeating the last forever. It records what it was asked so a test
+ * can say how many attempts were made and what headers they carried.
+ */
+function script(answers: Scripted[]): Promise<{
+  url: string;
+  hits: { method: string; headers: Record<string, string | string[] | undefined> }[];
+  close: () => Promise<void>;
+}> {
+  const hits: { method: string; headers: Record<string, string | string[] | undefined> }[] = [];
+  return new Promise((resolve) => {
+    const server = createServer((req, res) => {
+      hits.push({ method: req.method ?? '', headers: req.headers });
+      const answer = answers[Math.min(hits.length - 1, answers.length - 1)] as Scripted;
+      res.writeHead(answer.status, { 'Content-Type': 'application/json', ...answer.headers });
+      res.end(answer.body ?? '{}');
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('listen failed');
+      resolve({
+        url: `http://127.0.0.1:${address.port}`,
+        hits,
+        close: () => new Promise<void>((done) => server.close(() => done()))
+      });
+    });
+  });
+}
+
+/** A client whose waits are recorded instead of slept. */
+function quickClient(host: string, options: { retries?: number; timeoutMs?: number } = {}) {
+  const waits: number[] = [];
+  const client = new JinshujuHttpClient(
+    loadConfig({
+      configPath: NO_CONFIG,
+      env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret', JINSHUJU_HOST: host }
+    }),
+    {
+      ...options,
+      sleep: async (ms) => {
+        waits.push(ms);
+      }
+    }
+  );
+  return { client, waits };
+}
+
+test('a 429 is tried again after backing off, and the answer that follows is the answer', async () => {
+  const server = await script([{ status: 429 }, { status: 429 }, { status: 200, body: '{"ok":true}' }]);
+  const { client, waits } = quickClient(server.url);
+  const answer = await client.request<{ ok: boolean }>({ method: 'GET', path: '/api/v1/forms' });
+  await server.close();
+
+  assert.deepEqual(answer, { ok: true });
+  assert.equal(server.hits.length, 3);
+  assert.equal(waits.length, 2);
+  // Doubling: the second wait is roughly twice the first, jitter aside.
+  assert.ok((waits[1] as number) > (waits[0] as number));
+});
+
+test('Retry-After is honoured over the backoff schedule', async () => {
+  const server = await script([{ status: 503, headers: { 'Retry-After': '2' } }, { status: 200 }]);
+  const { client, waits } = quickClient(server.url);
+  await client.request({ method: 'GET', path: '/api/v1/forms' });
+  await server.close();
+
+  assert.deepEqual(waits, [2000]);
+});
+
+test('a write is tried again on 429 and 503 only; a 500 may already have landed', async () => {
+  const later = await script([{ status: 503 }, { status: 201, body: '{"token":"Kp7mQ2"}' }]);
+  const { client: patient } = quickClient(later.url);
+  const created = await patient.request({ method: 'POST', path: '/api/v1/forms', body: { name: 'x' } });
+  await later.close();
+  assert.deepEqual(created, { token: 'Kp7mQ2' });
+  assert.equal(later.hits.length, 2);
+
+  const broken = await script([{ status: 500, body: '{"message":"boom"}' }, { status: 201 }]);
+  const { client: once, waits } = quickClient(broken.url);
+  await assert.rejects(once.request({ method: 'POST', path: '/api/v1/forms', body: { name: 'x' } }), /boom/);
+  await broken.close();
+  assert.equal(broken.hits.length, 1);
+  assert.deepEqual(waits, []);
+});
+
+test('a read is tried again on a gateway failure, up to the retry budget, then reported', async () => {
+  const server = await script([{ status: 502, body: '<html>bad gateway</html>' }]);
+  const { client, waits } = quickClient(server.url, { retries: 2 });
+  const error = await client.request({ method: 'GET', path: '/api/v1/forms' }).catch((e: Error) => e);
+  await server.close();
+
+  assert.ok(error instanceof HttpError);
+  assert.equal(error.status, 502);
+  assert.equal(server.hits.length, 3);
+  assert.equal(waits.length, 2);
+});
+
+test('a request that gets no answer in time fails as a timeout, naming the deadline', async () => {
+  const server = createServer(() => {
+    // Never answers.
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('listen failed');
+  const { client } = quickClient(`http://127.0.0.1:${address.port}`, { retries: 0, timeoutMs: 50 });
+
+  const error = await client.request({ method: 'GET', path: '/api/v1/forms' }).catch((e: Error) => e);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  server.closeAllConnections();
+
+  assert.ok(error instanceof TransportError);
+  assert.equal(error.timedOut, true);
+  assert.match(error.message, /timed out after 50ms/);
+});
+
+test('a server nobody is listening on is a transport error, not a stack trace', async () => {
+  const { client } = quickClient('http://127.0.0.1:9', { retries: 0 });
+  const error = await client.request({ method: 'GET', path: '/api/v1/forms' }).catch((e: Error) => e);
+
+  assert.ok(error instanceof TransportError);
+  assert.equal(error.timedOut, false);
+  assert.match(error.message, /could not reach the server/);
+});
+
+test('every request says which client it is', async () => {
+  const server = await script([{ status: 200 }]);
+  const { client } = quickClient(server.url);
+  await client.request({ method: 'GET', path: '/api/v1/forms' });
+  await server.close();
+
+  assert.match(String(server.hits[0]?.headers['user-agent']), /^jinshuju-cli\/\S+ node\//);
+});
+
+test('JINSHUJU_TIMEOUT_MS sets the deadline, and refuses what is not a number', () => {
+  assert.equal(loadConfig({ configPath: NO_CONFIG, env: { JINSHUJU_TIMEOUT_MS: '5000' } }).timeoutMs, 5000);
+  assert.equal(loadConfig({ configPath: NO_CONFIG, env: {} }).timeoutMs, undefined);
+  assert.throws(() => loadConfig({ configPath: NO_CONFIG, env: { JINSHUJU_TIMEOUT_MS: 'soon' } }), /whole number/);
 });

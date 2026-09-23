@@ -27,6 +27,8 @@ export type LoadedConfig = {
   authHost: string;
   clientId?: string;
   auth?: OAuthConfig;
+  /** How long one request may take, from JINSHUJU_TIMEOUT_MS; unset means the client's default. */
+  timeoutMs?: number;
   configPath: string;
   sources: {
     accessToken: ConfigSource;
@@ -116,6 +118,7 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     defaultClientId
   );
   const auth = file.auth?.type === 'oauth' ? file.auth : undefined;
+  const timeoutMs = parseTimeout(env.JINSHUJU_TIMEOUT_MS);
 
   return {
     accessToken: accessToken.value,
@@ -125,6 +128,7 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     authHost: authHost.value,
     clientId: clientId.value,
     auth,
+    timeoutMs,
     configPath,
     sources: {
       accessToken: accessToken.source,
@@ -136,6 +140,14 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
       auth: auth ? 'file' : 'missing'
     }
   };
+}
+
+/** A whole number of milliseconds, or nothing: a timeout nobody can parse is not a timeout of zero. */
+function parseTimeout(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  if (!/^\d+$/.test(value))
+    throw new Error(`JINSHUJU_TIMEOUT_MS must be a whole number of milliseconds, got ${JSON.stringify(value)}`);
+  return Number.parseInt(value, 10);
 }
 
 export function setConfigValue(configPath: string, key: ConfigKey, value: string): void {

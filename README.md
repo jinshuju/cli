@@ -278,6 +278,14 @@ Progress is written **to stderr, and only when stderr is a terminal**, so
 `--output json | jq` receives exactly the same bytes it would without it: a pipe,
 or an agent on the other end, never sees a stray character.
 
+## Timeouts and retries
+
+Every request has a deadline of one minute; `JINSHUJU_TIMEOUT_MS` changes it. A
+request the server answers with 429 or 503 is tried again after backing off,
+honouring `Retry-After` when it is sent. A read is also retried after a gateway
+failure or a dropped connection. A write is not: a POST that timed out may well
+have landed, and sending it again would create the entry twice.
+
 ## Before removing a field
 
 ```bash
