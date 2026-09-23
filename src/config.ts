@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
+import { UsageError } from './errors.js';
+
 export type ConfigKey = 'access_token' | 'api_key' | 'api_secret' | 'host' | 'auth_host' | 'client_id';
 export type ConfigSource = 'cli' | 'env' | 'file' | 'missing';
 
@@ -146,7 +148,7 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
 function parseTimeout(value: string | undefined): number | undefined {
   if (!value) return undefined;
   if (!/^\d+$/.test(value))
-    throw new Error(`JINSHUJU_TIMEOUT_MS must be a whole number of milliseconds, got ${JSON.stringify(value)}`);
+    throw new UsageError(`JINSHUJU_TIMEOUT_MS must be a whole number of milliseconds, got ${JSON.stringify(value)}`);
   return Number.parseInt(value, 10);
 }
 
@@ -198,6 +200,6 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
 
 export function assertConfigKey(value: string): asserts value is ConfigKey {
   if (!(CONFIG_KEYS as readonly string[]).includes(value)) {
-    throw new Error(`Config key must be one of ${CONFIG_KEYS.join(', ')}`);
+    throw new UsageError(`Config key must be one of ${CONFIG_KEYS.join(', ')}`);
   }
 }

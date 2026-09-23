@@ -1,5 +1,6 @@
 import { loadConfig, type LoadedConfig } from './config.js';
 import { refreshOAuthToken, shouldRefresh } from './auth.js';
+import { AuthError } from './errors.js';
 import { VERSION } from './version.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -284,7 +285,7 @@ export class JinshujuHttpClient implements HttpClient {
       return `Bearer ${this.config.auth.access_token}`;
     }
 
-    throw new Error(
+    throw new AuthError(
       'Missing authentication. Run `jinshuju auth login`, or configure JINSHUJU_ACCESS_TOKEN, or JINSHUJU_API_KEY with JINSHUJU_API_SECRET.'
     );
   }

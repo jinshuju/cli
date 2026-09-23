@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { execFile } from 'node:child_process';
 
+import { AuthError } from './errors.js';
 import {
   clearOAuthConfig,
   defaultScopes,
@@ -77,7 +78,7 @@ export async function loginWithOAuth(
     cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
   });
   const clientId = options.clientId ?? config.clientId;
-  if (!clientId) throw new Error('Missing OAuth client id. Set JINSHUJU_OAUTH_CLIENT_ID or config client_id.');
+  if (!clientId) throw new AuthError('Missing OAuth client id. Set JINSHUJU_OAUTH_CLIENT_ID or config client_id.');
 
   const state = base64Url(randomBytes(24));
   const { verifier, challenge } = createPkcePair();
@@ -101,7 +102,7 @@ export async function loginWithOAuth(
 }
 
 export async function refreshOAuthToken(config: LoadedConfig): Promise<OAuthConfig> {
-  if (!config.auth?.refresh_token) throw new Error('No OAuth refresh token. Run `jinshuju auth login` again.');
+  if (!config.auth?.refresh_token) throw new AuthError('No OAuth refresh token. Run `jinshuju auth login` again.');
   const token = await tokenRequest(
     config.auth.auth_host,
     {
@@ -167,9 +168,9 @@ async function tokenRequest(
   const text = await response.text();
   const body = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
-    throw new Error(body?.error_description ?? body?.error ?? response.statusText);
+    throw new AuthError(body?.error_description ?? body?.error ?? response.statusText);
   }
-  if (!body?.access_token) throw new Error('OAuth token response is missing access_token');
+  if (!body?.access_token) throw new AuthError('OAuth token response is missing access_token');
   return body as TokenResponse;
 }
 

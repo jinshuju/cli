@@ -25,6 +25,7 @@ import { CONFIG_KEYS } from './config.js';
 import { readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 
+import { RefusedError } from './errors.js';
 import { validateCreateFormPayload } from './payload.js';
 import { progress } from './progress.js';
 import type { HttpClient } from './http.js';
@@ -1279,10 +1280,11 @@ async function awaitImport(
   // already being written by the time the first poll happens, so an error that
   // drops the id leaves the caller unable to ask how it went and tempted to
   // import the file a second time.
-  const recoverable = (reason: string): Error =>
-    new Error(
+  const recoverable = (reason: string, cause?: unknown): Error =>
+    new (cause === undefined ? RefusedError : Error)(
       `${reason}. The import is job ${jobId} and may still be running: ` +
-        `jinshuju entry import-status --form ${token} ${jobId}`
+        `jinshuju entry import-status --form ${token} ${jobId}`,
+      { cause }
     );
 
   for (;;) {
@@ -1293,7 +1295,7 @@ async function awaitImport(
         path: `${API}/forms/${token}/entry_imports/${jobId}`
       });
     } catch (error) {
-      throw recoverable(`the import started, but asking how it is going failed: ${(error as Error).message}`);
+      throw recoverable(`the import started, but asking how it is going failed: ${(error as Error).message}`, error);
     }
     if (IMPORT_SETTLED.has(job.status)) {
       if (job.status !== 'success') {
