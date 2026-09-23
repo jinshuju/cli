@@ -1,109 +1,44 @@
 import { UsageError } from './errors.js';
 
-const API_V1_FIELD_TYPES = new Set([
-  'TextField',
-  'TextArea',
-  'NumberField',
-  'EmailField',
-  'MobileField',
-  'TelephoneField',
-  'IdCardField',
-  'NameField',
-  'AddressField',
-  'LinkField',
-  'GeoField',
-  'AttachmentField',
-  'DateTimeField',
-  'TimeField',
-  'RatingField',
-  'NpsField',
-  'RadioButton',
-  'CheckBox',
-  'DropDown',
-  'TableField',
-  'CascadeDropDown',
-  'SortField',
-  'LikertField',
-  'MatrixField',
-  'MatrixScaleField',
-  'ImageRadioButton',
-  'ImageCheckBox',
-  'GoodsField',
-  'FormulaField',
-  'ReservationField',
-  'FormAssociation',
-  'ESignatureField',
-  'AudioField',
-  'PageBreak',
-  'SectionBreak',
-  'WidgetButton',
-  'WidgetContact',
-  'WidgetMap',
-  'WidgetMarquee'
-]);
-
 /**
- * The question types only a scorable scene has. They are not Fields::* classes
- * of their own — each persists as a base field plus a customized_type and the
- * correct answers — which is why they are absent from the list above and were
- * being refused here: `--type exam` could create an exam-scene form and then
- * not one question that scores, the only thing the scene is for.
+ * What a form or table payload has to look like before it is worth sending.
  *
- * Which scene accepts which is the server's answer, and it names them in the
- * refusal; there is nothing to duplicate here beyond letting them through.
+ * Only the shape is checked here: an object, a name, fields that are objects
+ * with a type and without an api_code. Which types exist, which a table takes,
+ * which a scene allows and what each one needs is the server's vocabulary, and
+ * `jinshuju field types` reads it from there. A copy kept here was already
+ * wrong once — it refused every question type an exam scene has — and would be
+ * wrong again the next time the server learned a type.
  */
-const SCENE_FIELD_TYPES = new Set([
-  'SingleSelect',
-  'MultiSelect',
-  'ImageSingleSelect',
-  'ImageMultiSelect',
-  'TrueOrFalse',
-  'DropDownSelect',
-  'FillInBlank',
-  'ShortAnswer',
-  'FillInNumber',
-  'Rating',
-  'Nps',
-  'Department',
-  'Grade'
-]);
 
-export type FormCreatePayload = {
+export type ContainerPayload = {
   name: string;
-  description?: string;
-  fields: Array<Record<string, unknown> & { type: string; label?: string }>;
-  setting?: Record<string, unknown>;
-  folder_token?: string;
+  fields?: Array<Record<string, unknown> & { type: string }>;
+  [key: string]: unknown;
 };
 
-export function validateCreateFormPayload(payload: unknown): FormCreatePayload {
+export function validateContainerPayload(payload: unknown, what: 'form' | 'table'): ContainerPayload {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new UsageError('Form payload must be a JSON object');
+    throw new UsageError(`the ${what} payload must be a JSON object`);
   }
-  const form = payload as Record<string, unknown>;
-  if (typeof form.name !== 'string' || form.name.trim() === '') {
-    throw new UsageError('Form payload requires non-empty name');
+  const container = payload as Record<string, unknown>;
+  if (typeof container.name !== 'string' || container.name.trim() === '') {
+    throw new UsageError(`the ${what} payload needs a non-empty "name"`);
   }
-  if (!Array.isArray(form.fields) || form.fields.length === 0) {
-    throw new UsageError('Form payload requires at least one field');
+  if (container.fields !== undefined) {
+    if (!Array.isArray(container.fields)) throw new UsageError('"fields" must be a list of field objects');
+    container.fields.forEach((field, index) => {
+      if (!field || typeof field !== 'object' || Array.isArray(field)) {
+        throw new UsageError(`fields[${index}] must be an object`);
+      }
+      const shape = field as Record<string, unknown>;
+      if ('api_code' in shape) {
+        throw new UsageError(`fields[${index}] carries an api_code; leave it out, the backend assigns one`);
+      }
+      if (typeof shape.type !== 'string' || shape.type === '') {
+        throw new UsageError(`fields[${index}] needs a "type"; run \`jinshuju field types\` for the list`);
+      }
+    });
   }
-  for (const field of form.fields) {
-    if (!field || typeof field !== 'object' || Array.isArray(field)) {
-      throw new UsageError('Each field must be an object');
-    }
-    const fieldObject = field as Record<string, unknown>;
-    if ('api_code' in fieldObject) {
-      throw new UsageError('Do not pass api_code when creating fields; backend generates it');
-    }
-    if (
-      typeof fieldObject.type !== 'string' ||
-      !(API_V1_FIELD_TYPES.has(fieldObject.type) || SCENE_FIELD_TYPES.has(fieldObject.type))
-    ) {
-      throw new UsageError(`Field type must be an API v1 field type, got ${String(fieldObject.type)}`);
-    }
-    if (typeof fieldObject.label !== 'string' && fieldObject.type !== 'PageBreak') {
-      throw new UsageError('Each field requires label');
-    }
-  }
-  return form as FormCreatePayload;
+  return container as ContainerPayload;
 }

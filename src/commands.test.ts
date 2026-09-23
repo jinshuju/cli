@@ -71,15 +71,38 @@ test('form create posts API v1 payload without injecting api_code', async () => 
   assert.equal(JSON.stringify(mock.requests[0].body).includes('api_code'), false);
 });
 
-test('form create rejects non API v1 field type', async () => {
-  const payload = { name: '活动报名表', fields: [{ type: 'text', label: '姓名' }] };
-  const result = await cli(['form', 'create', '--json', JSON.stringify(payload)], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+test('form and table create check the shape of the payload, and leave the type vocabulary to the server', async () => {
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  // A type this CLI has never heard of goes through: the server knows the list.
+  const unknownType = createMockClient();
+  const sent = await cli(['form', 'create', '--json', '{"name":"x","fields":[{"type":"HologramField","label":"h"}]}'], {
+    env,
+    client: unknownType.client
+  });
+  assert.equal(sent.exitCode, 0);
+  assert.equal(unknownType.requests.length, 1);
+
+  const noName = await cli(['form', 'create', '--json', '{"fields":[]}'], { env, client: createMockClient().client });
+  assert.equal(noName.exitCode, 2);
+  assert.match(noName.stderr, /needs a non-empty "name"/);
+
+  const noType = await cli(['table', 'create', '--json', '{"name":"t","fields":[{"label":"a"}]}'], {
+    env,
     client: createMockClient().client
   });
+  assert.equal(noType.exitCode, 2);
+  assert.match(noType.stderr, /fields\[0\] needs a "type"/);
 
-  assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /API v1 field type/);
+  const withCode = await cli(
+    ['table', 'create', '--json', '{"name":"t","fields":[{"type":"TextArea","api_code":"field_1"}]}'],
+    {
+      env,
+      client: createMockClient().client
+    }
+  );
+  assert.equal(withCode.exitCode, 2);
+  assert.match(withCode.stderr, /api_code/);
 });
 
 test('text output for API commands prints a human-readable response instead of JSON or placeholders', async () => {
