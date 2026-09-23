@@ -2,7 +2,7 @@
   "name": "@jinshuju/cli",
   "version": "0.0.0",
   "description": "Command line interface for Jinshuju Open API v1",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jinshuju/cli.git"
@@ -36,7 +36,7 @@
     "@semantic-release/git": "^10.0.1",
     "@types/node": "^22.10.0",
     "conventional-changelog-conventionalcommits": "^8.0.0",
-    "semantic-release": "^24.2.0",
+    "semantic-release": "^25.0.9",
     "typescript": "^5.9.3"
   },
   "publishConfig": {

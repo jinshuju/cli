@@ -14,7 +14,9 @@ on:
       - main
   workflow_dispatch:
 
-# The release commit, the tag and the GitHub Release all need write.
+# contents/issues/pull-requests: the release commit, the tag and the GitHub
+# Release. id-token: the OIDC token npm exchanges for a short-lived publish
+# credential, so no long-lived token has to be stored here — see the Release step.
 permissions:
   contents: write
   issues: write
@@ -74,6 +76,11 @@ jobs:
           "${prefix}/bin/jinshuju" --help
           "${prefix}/bin/jsj" --help
 
+      # npm is asked for a short-lived credential with this run's OIDC identity
+      # first, and only falls back to NPM_TOKEN when that is refused. The
+      # exchange is per package, so it can only work once the package exists and
+      # names this repository and workflow as a trusted publisher; until then the
+      # token is what publishes. Once it is set up, delete the secret.
       - name: Release
         run: npx semantic-release
         env:
