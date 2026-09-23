@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 
 import { HttpError, JinshujuHttpClient, TransportError } from './http.js';
-import { loadConfig } from './config.js';
-import { mkdtempSync } from 'node:fs';
+import { loadConfig, saveOAuthConfig } from './config.js';
+import { AuthError } from './errors.js';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -286,4 +287,127 @@ test('JINSHUJU_TIMEOUT_MS sets the deadline, and refuses what is not a number', 
   assert.equal(loadConfig({ configPath: NO_CONFIG, env: { JINSHUJU_TIMEOUT_MS: '5000' } }).timeoutMs, 5000);
   assert.equal(loadConfig({ configPath: NO_CONFIG, env: {} }).timeoutMs, undefined);
   assert.throws(() => loadConfig({ configPath: NO_CONFIG, env: { JINSHUJU_TIMEOUT_MS: 'soon' } }), /whole number/);
+});
+
+// --- an OAuth session that expires ------------------------------------------
+
+/** One server playing both the API and the token endpoint, so a refresh has somewhere to go. */
+function apiWithTokenEndpoint(options: { firstApiStatus: number; refreshAnswers: number }) {
+  const seen: { path: string; authorization: string | undefined }[] = [];
+  let refreshes = 0;
+  return new Promise<{
+    url: string;
+    seen: typeof seen;
+    refreshes: () => number;
+    close: () => Promise<void>;
+  }>((resolve) => {
+    const server = createServer((req, res) => {
+      const path = (req.url ?? '').split('?')[0] as string;
+      if (path === '/oauth/token') {
+        refreshes += 1;
+        res.writeHead(refreshes <= options.refreshAnswers ? 200 : 400, { 'Content-Type': 'application/json' });
+        res.end(
+          refreshes <= options.refreshAnswers
+            ? JSON.stringify({ access_token: `fresh-${refreshes}`, refresh_token: 'refresh-2', expires_in: 3600 })
+            : JSON.stringify({ error: 'invalid_grant', error_description: 'refresh token revoked' })
+        );
+        return;
+      }
+      seen.push({ path, authorization: req.headers.authorization });
+      const stale = req.headers.authorization === 'Bearer stale';
+      res.writeHead(stale ? options.firstApiStatus : 200, { 'Content-Type': 'application/json' });
+      res.end(stale ? '{"error_description":"token expired"}' : '{"ok":true}');
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('listen failed');
+      resolve({
+        url: `http://127.0.0.1:${address.port}`,
+        seen,
+        refreshes: () => refreshes,
+        close: () => new Promise<void>((done) => server.close(() => done()))
+      });
+    });
+  });
+}
+
+function oauthConfigPath(auth: { auth_host: string; expires_at?: string }): string {
+  const dir = mkdtempSync(join(tmpdir(), 'jsj-http-oauth-'));
+  const configPath = join(dir, 'config.json');
+  saveOAuthConfig(configPath, {
+    type: 'oauth',
+    auth_host: auth.auth_host,
+    client_id: 'cli',
+    access_token: 'stale',
+    refresh_token: 'refresh-1',
+    expires_at: auth.expires_at
+  });
+  return configPath;
+}
+
+test('a 401 on a stored session refreshes the token, retries once, and saves what came back', async () => {
+  const server = await apiWithTokenEndpoint({ firstApiStatus: 401, refreshAnswers: 1 });
+  const configPath = oauthConfigPath({ auth_host: server.url });
+  const client = new JinshujuHttpClient(loadConfig({ configPath, env: { JINSHUJU_HOST: server.url } }));
+
+  const answer = await client.request<{ ok: boolean }>({ method: 'GET', path: '/api/v1/forms' });
+  await server.close();
+
+  assert.deepEqual(answer, { ok: true });
+  assert.equal(server.refreshes(), 1);
+  assert.deepEqual(
+    server.seen.map((hit) => hit.authorization),
+    ['Bearer stale', 'Bearer fresh-1']
+  );
+  const saved = JSON.parse(readFileSync(configPath, 'utf8')) as {
+    auth: { access_token: string; refresh_token: string };
+  };
+  assert.equal(saved.auth.access_token, 'fresh-1');
+  assert.equal(saved.auth.refresh_token, 'refresh-2');
+});
+
+test('a session about to expire is refreshed before the request, without a 401 first', async () => {
+  const server = await apiWithTokenEndpoint({ firstApiStatus: 401, refreshAnswers: 1 });
+  const soon = new Date(Date.now() + 10_000).toISOString();
+  const configPath = oauthConfigPath({ auth_host: server.url, expires_at: soon });
+  const client = new JinshujuHttpClient(loadConfig({ configPath, env: { JINSHUJU_HOST: server.url } }));
+
+  await client.request({ method: 'GET', path: '/api/v1/forms' });
+  await server.close();
+
+  assert.equal(server.refreshes(), 1);
+  assert.deepEqual(
+    server.seen.map((hit) => hit.authorization),
+    ['Bearer fresh-1']
+  );
+});
+
+test('a refresh that is itself refused ends the request as an authentication failure, and is not retried', async () => {
+  const server = await apiWithTokenEndpoint({ firstApiStatus: 401, refreshAnswers: 0 });
+  const configPath = oauthConfigPath({ auth_host: server.url });
+  const client = new JinshujuHttpClient(loadConfig({ configPath, env: { JINSHUJU_HOST: server.url } }));
+
+  const error = await client.request({ method: 'GET', path: '/api/v1/forms' }).catch((e: Error) => e);
+  await server.close();
+
+  assert.ok(error instanceof AuthError);
+  assert.match(error.message, /refresh token revoked/);
+  assert.equal(server.refreshes(), 1);
+  assert.equal(server.seen.length, 1);
+});
+
+test('an access token that is refused is not refreshed: there is nothing to refresh it with', async () => {
+  const server = await apiWithTokenEndpoint({ firstApiStatus: 401, refreshAnswers: 1 });
+  const configPath = oauthConfigPath({ auth_host: server.url });
+  const client = new JinshujuHttpClient(
+    loadConfig({ configPath, env: { JINSHUJU_HOST: server.url, JINSHUJU_ACCESS_TOKEN: 'stale' } })
+  );
+
+  const error = await client.request({ method: 'GET', path: '/api/v1/forms' }).catch((e: Error) => e);
+  await server.close();
+
+  assert.ok(error instanceof HttpError);
+  assert.equal(error.status, 401);
+  assert.equal(server.refreshes(), 0);
+  assert.equal(server.seen.length, 1);
 });

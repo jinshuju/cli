@@ -129,3 +129,65 @@ test('a token endpoint that answers HTML is reported as its status, not as a par
   assert.match(error.message, /not JSON/);
   assert.doesNotMatch(error.message, /Unexpected token/);
 });
+
+/** A login whose browser step is scripted: the opener is handed the authorize URL and answers the callback itself. */
+function loginAnswering(answer: (redirect: URL, state: string) => Promise<void>, timeoutMs = 5_000): Promise<unknown> {
+  const dir = mkdtempSync(join(tmpdir(), 'jsj-oauth-cb-'));
+  return loginWithOAuth(
+    { configPath: join(dir, 'config.json'), env: {}, authHost: 'http://127.0.0.1:9', clientId: 'cli', timeoutMs },
+    async (url) => {
+      const parsed = new URL(url);
+      await answer(new URL(parsed.searchParams.get('redirect_uri') ?? ''), parsed.searchParams.get('state') ?? '');
+    }
+  ).finally(() => rmSync(dir, { recursive: true, force: true }));
+}
+
+test('a login nobody completes times out, rather than holding the port forever', async () => {
+  const error = await loginAnswering(async () => {}, 100).catch((e: Error) => e);
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /timed out/);
+});
+
+test('a callback with the wrong state is refused, and the login fails with it', async () => {
+  let answered = 0;
+  const error = await loginAnswering(async (redirect) => {
+    redirect.searchParams.set('state', 'forged');
+    redirect.searchParams.set('code', 'x');
+    answered = (await fetch(redirect)).status;
+  }).catch((e: Error) => e);
+
+  assert.equal(answered, 400);
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /Invalid OAuth state/);
+});
+
+test('a callback carrying an error from the authorization server ends the login with that error', async () => {
+  const error = await loginAnswering(async (redirect, state) => {
+    redirect.searchParams.set('state', state);
+    redirect.searchParams.set('error', 'access_denied');
+    await fetch(redirect);
+  }).catch((e: Error) => e);
+
+  assert.ok(error instanceof Error);
+  assert.equal(error.message, 'access_denied');
+});
+
+test('a callback with the right state but no code is refused', async () => {
+  const error = await loginAnswering(async (redirect, state) => {
+    redirect.searchParams.set('state', state);
+    await fetch(redirect);
+  }).catch((e: Error) => e);
+
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /Missing OAuth code/);
+});
+
+test('a request for any other path on the callback server is a 404 and the login keeps waiting', async () => {
+  const error = await loginAnswering(async (redirect) => {
+    const other = new URL('/favicon.ico', redirect);
+    assert.equal((await fetch(other)).status, 404);
+  }, 150).catch((e: Error) => e);
+
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /timed out/);
+});
