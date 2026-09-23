@@ -173,6 +173,18 @@ function coerceOne(spec: OptionSpec, value: unknown, stdin: () => string): unkno
   return text;
 }
 
+
+/**
+ * A stray word that looks like a token, on a command whose parent is a flag, is
+ * almost always `field list <token>` written as `form get <token>` reads. Saying
+ * only that the argument is not taken leaves the caller to find that out.
+ */
+function containerHint(command: Command, extra: string): string {
+  const takesContainer = (command.options ?? []).some((option) => option.name === '--form');
+  if (!takesContainer || !/^[A-Za-z0-9]{6}$/.test(extra)) return '';
+  return `. Did you mean --form ${extra}? (a table: --table ${extra})`;
+}
+
 function bindArgs(command: Command, words: readonly string[]): { args: Record<string, string>; rest: string[] } {
   const positionals = words.slice(command.path.length);
   const specs = command.args ?? [];
@@ -196,7 +208,9 @@ function bindArgs(command: Command, words: readonly string[]): { args: Record<st
   if (!specs.some((arg) => arg.variadic)) {
     const extra = positionals.slice(specs.length);
     if (extra.length > 0) {
-      throw new UsageError(`jinshuju ${command.path.join(' ')} takes no argument ${JSON.stringify(extra[0])}`);
+      throw new UsageError(
+        `jinshuju ${command.path.join(' ')} takes no argument ${JSON.stringify(extra[0])}${containerHint(command, extra[0] as string)}`
+      );
     }
   }
   return { args, rest };
@@ -294,6 +308,11 @@ function renderObject(value: Record<string, unknown>, width: number): string {
       .filter(([key]) => key !== listKey)
       .map(([key, fieldValue]) => renderEntry(key, fieldValue, width));
     const listText = renderList(value[listKey] as unknown[], width);
+
+    // A response that is nothing but the listing has nothing to separate it
+    // from, and `data:` on its own line is the JSON envelope showing through.
+    if (heading.length === 0) return listText;
+
     return [...heading, `${listKey}:`, listText].filter(Boolean).join('\n');
   }
 
@@ -587,7 +606,7 @@ async function runRemote(
   }
 
   const result = await client.request({ method: request.method, path: withQuery(request.path, request.query), body: request.body });
-  const selected = command.select ? command.select(result) : result;
+  const selected = command.select ? command.select(result, input) : result;
   if (output === 'json') return ok(json(selected));
   return ok(text(command.render ? command.render(selected) : selected, width));
 }

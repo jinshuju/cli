@@ -79,8 +79,11 @@ export interface Command {
   /**
    * Narrows the response to what the command is about. `field list` asks for a
    * form because that is where fields live, but a caller asked for the fields.
+   * It gets the input too, because what a write touched is known from what was
+   * sent: a field patch answers with the whole form, and only the caller's
+   * api_code says which row of it the caller meant.
    */
-  readonly select?: (body: unknown) => unknown;
+  readonly select?: (body: unknown, input: CommandInput) => unknown;
   /**
    * Reshapes the response for reading, and only for reading: `--output json`
    * answers what the API answered. A command needs this when its payload is
@@ -93,6 +96,12 @@ export interface Command {
 export interface Resource {
   readonly name: string;
   readonly summary: string;
+  /**
+   * Shown under the resource's verbs. For what a caller will look for here and
+   * not find: a missing verb is indistinguishable from a verb named something
+   * else unless the help says which it is.
+   */
+  readonly note?: string;
 }
 
 /** Resource order in the root help, and the one-liner each gets. */
@@ -100,7 +109,11 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'auth', summary: 'Manage authentication' },
   { name: 'account', summary: 'Account and members' },
   { name: 'folder', summary: 'Manage folders' },
-  { name: 'form', summary: 'Manage forms' },
+  {
+    name: 'form',
+    summary: 'Manage forms',
+    note: 'There is no delete: the v1 API does not expose one, so a form has to be removed in the web app.'
+  },
   { name: 'table', summary: 'Manage tables' },
   { name: 'field', summary: 'Manage fields' },
   { name: 'view', summary: 'Manage views' },
@@ -216,7 +229,11 @@ const FORM_PAYLOAD: readonly string[] = [
   'A choice carries "name". The "value" it reads back with is the code the',
   'backend assigns, not what you sent.',
   '',
-  'Field types: jinshuju field types   |   A real one: jinshuju form get <token> --output json'
+  'Reading a form back does not give you something you can send again: a field',
+  'written as "TextField" reads as "single_line_text". `field types` lists the',
+  'names to write, and `field types <Type>` describes one.',
+  '',
+  'Field types: jinshuju field types'
 ];
 
 /** One field, or a list of them — the same objects `fields` holds above. */
@@ -829,6 +846,30 @@ const KIND_OPTION: OptionSpec = {
   description: 'Which container the types are for (default form)'
 };
 
+/**
+ * What a field write touched, out of the whole form it answers with.
+ *
+ * A patch returns the container, so adding one field to a form of twenty-five
+ * answers with all twenty-five and leaves the caller hunting for the api_code it
+ * just created. `update` and `update-choices` name their field, so that row is
+ * the answer; `add` does not get an api_code back to match on, but it does know
+ * the labels it sent, and those name the rows that were not there before.
+ */
+function touchedFields(body: unknown, wanted: (field: Record<string, unknown>) => boolean): unknown {
+  const fields = selectFields(body);
+  const touched = fields.filter(wanted);
+  return { data: touched.length > 0 ? touched : fields };
+}
+
+/** The labels a field payload carries, one object or a list of them. */
+function labelsOf(payload: unknown): Set<string> {
+  const each = Array.isArray(payload) ? payload : [payload];
+  return new Set(each.flatMap((item) => {
+    const label = (item as { label?: unknown } | null)?.label;
+    return typeof label === 'string' ? [label] : [];
+  }));
+}
+
 const FIELD: readonly Command[] = [
   {
     path: ['field', 'types'],
@@ -868,6 +909,10 @@ const FIELD: readonly Command[] = [
       path: containerPath(input),
       body: { fields: { add: one(payload(input)) } }
     }),
+    select: (body, input) => {
+      const labels = labelsOf(payload(input));
+      return touchedFields(body, (field) => labels.has(String(field.label)));
+    },
     examples: ['jinshuju field add --form Kp7mQ2 --json \'{"type":"TextField","label":"备注"}\'']
   },
   {
@@ -881,6 +926,7 @@ const FIELD: readonly Command[] = [
       path: containerPath(input),
       body: { fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] } }
     }),
+    select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code']),
     examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
   },
   {
@@ -897,7 +943,8 @@ const FIELD: readonly Command[] = [
           update_choices: [{ ...(payload(input) as Record<string, unknown>), field_api_code: input.args['api-code'] }]
         }
       }
-    })
+    }),
+    select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code'])
   },
   {
     path: ['field', 'check'],
@@ -923,8 +970,10 @@ const FIELD: readonly Command[] = [
     summary: 'Preview what changing a field\'s type would do to its data',
     description:
       'The conversion happens in place, so the only thing at stake is the data: this reports how ' +
-      'many values are kept and how many are cleared. supported=false means the edit would refuse it.',
-    args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
+      'many values are kept and how many are cleared. The edit itself is `field update <api-code> ' +
+      '--json \'{"type":"TextArea"}\'`, and supported=false means that call would refuse it. ' +
+      'source_type and target_type are write names (NumberField), not the names a read answers with.',
+    args: [{ name: 'api-code', required: false, description: 'Field api_code; omit it only when --json names the field' }],
     options: [
       ...CONTAINER_OPTIONS,
       { name: '--to', type: 'string', placeholder: '<type>', description: 'Target field type, e.g. RadioButton' },
@@ -932,6 +981,11 @@ const FIELD: readonly Command[] = [
       JSON_OPTION
     ],
     request: (input) => {
+      // Taking --json used to drop the argument beside it without a word, and
+      // the server answered about a field named nothing. One or the other.
+      if (input.options.json !== undefined && input.args['api-code'] !== undefined) {
+        throw new UsageError('name the field as an argument or through --json, not both');
+      }
       const inline = input.options.json === undefined
         ? [{
             field_api_code: input.args['api-code'],

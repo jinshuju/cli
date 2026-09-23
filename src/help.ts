@@ -23,6 +23,7 @@ export function rootHelp(commands: readonly Command[] = COMMANDS): string {
     ...GLOBAL_OPTIONS.map((option) => `  ${flagLabel(option).padEnd(width + 12)}${option.description}`),
     '',
     'Run `jinshuju <resource> --help` to see its verbs.',
+    '`jsj` is the same command, for typing less.',
     ''
   ].join('\n');
 }
@@ -33,11 +34,14 @@ export function resourceHelp(resource: string, commands: readonly Command[] = CO
   if (owned.length === 0) return rootHelp(commands);
   const width = Math.max(...owned.map((command) => command.path.join(' ').length)) + 4;
 
+  const note = RESOURCES.find((entry) => entry.name === resource)?.note;
+
   return [
     `Usage: jinshuju ${resource} <verb> [args] [flags]`,
     '',
     'Commands:',
     ...owned.map((command) => `  ${command.path.join(' ').padEnd(width)}${command.summary}`),
+    ...(note ? ['', note] : []),
     '',
     `Run \`jinshuju ${resource} <verb> --help\` for one of them.`,
     ''

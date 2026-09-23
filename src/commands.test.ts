@@ -185,8 +185,11 @@ test('table columns line up when cells hold full-width characters', async () => 
   const lines = result.stdout.trimEnd().split('\n');
   assert.equal(result.exitCode, 0);
   // 报名表 is three characters and eight terminal cells wide, same as feedback.
-  assert.equal(lines[3], 'BaLZpn  报名表  ');
-  assert.equal(lines[4], 'Cx9Kq2  feedback');
+  // Found by content, not by line number: what precedes the rows is the
+  // response envelope, and asserting its height tests the wrong thing.
+  const row = (token: string) => lines.find((line) => line.startsWith(token));
+  assert.equal(row('BaLZpn'), 'BaLZpn  报名表  ');
+  assert.equal(row('Cx9Kq2'), 'Cx9Kq2  feedback');
 });
 
 test('--labels heads each column with the field label instead of losing the column', async () => {
@@ -1350,4 +1353,46 @@ test('field types reads the catalogue, for a form by default and for a table whe
       'GET /api/v1/field_types/RadioButton'
     ]
   );
+});
+
+// A field patch answers with the whole container, so adding one field to a form
+// of twenty-five used to answer with all twenty-five and leave the caller
+// hunting for the api_code it had just created.
+test('a field write answers with the field it touched, not the whole form', async () => {
+  const form = {
+    fields: [
+      { field_1: { label: '甲', type: 'single_line_text' } },
+      { field_2: { label: '乙', type: 'single_line_text' } },
+      { field_3: { label: '新增字段', type: 'number' } }
+    ]
+  };
+  const client = { async request<T>(): Promise<T> { return form as T; } };
+
+  const added = await cli(['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"NumberField","label":"新增字段"}', '--output', 'json'],
+    { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.deepEqual(JSON.parse(added.stdout).data.map((field: { api_code: string }) => field.api_code), ['field_3']);
+
+  const updated = await cli(['field', 'update', '--form', 'Kp7mQ2', 'field_2', '--json', '{"required":true}', '--output', 'json'],
+    { client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.deepEqual(JSON.parse(updated.stdout).data.map((field: { api_code: string }) => field.api_code), ['field_2']);
+});
+
+// Naming the field twice used to drop the argument silently, and the server
+// answered about a field named nothing.
+test('preview-convert refuses a field named both ways', async () => {
+  const result = await cli(['field', 'preview-convert', '--form', 'Kp7mQ2', 'field_1', '--json', '{"field_api_code":"field_1"}'],
+    { client: createMockClient().client, env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /not both/);
+});
+
+// `field list <token>` is how `form get <token>` reads, and the refusal used to
+// stop at "takes no argument".
+test('a stray token is answered with the flag that takes it', async () => {
+  const token = await cli(['field', 'list', 'wiuEAD'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.match(token.stderr, /--form wiuEAD/);
+
+  const word = await cli(['field', 'list', 'hello'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  assert.doesNotMatch(word.stderr, /Did you mean/);
 });
