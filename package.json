@@ -1,6 +1,6 @@
 {
   "name": "@jinshuju/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Command line interface for Jinshuju Open API v1",
   "license": "Apache-2.0",
   "repository": {
