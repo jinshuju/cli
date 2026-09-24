@@ -42,11 +42,27 @@ const FORM_PAYLOAD: readonly string[] = [
   '    { "type": "TextField",   "label": "Name",   "required": true },',
   '    { "type": "RadioButton", "label": "Ticket", "choices": [',
   '        { "name": "Standard" }, { "name": "VIP" } ] }',
-  '  ]',
+  '  ],',
+  '  "setting": {',
+  '    "by_time_range_close_rule": { "start_time": "2026-10-01T09:00:00+08:00",',
+  '                                  "end_time":   "2026-10-07T18:00:00+08:00" },',
+  '    "daily_repeat_close_rule": { "time_periods": [',
+  '        { "start_time": { "hour": 11, "minute": 0 }, "end_time": { "hour": 12, "minute": 40 } } ] },',
+  '    "show_close_count_down": true',
+  '  }',
   '}',
   '',
   'A choice carries "name". The "value" it reads back with is the code the',
   'backend assigns, not what you sent.',
+  '',
+  '"setting" is optional and travels as is. When the form takes entries is its',
+  'close rules: by_time_range_close_rule opens it between two instants (either',
+  'may be left out), daily_repeat_close_rule opens it inside time-of-day periods',
+  'every day, by_entries_close_rule {"limit": 100} closes it after that many',
+  'entries, and manually_close_rule {"closed": true} stops it now. The rules',
+  'coexist. show_form_before_open and show_close_count_down only hold with a',
+  'time-range or daily rule. The same keys go in a `form edit` payload, where',
+  'time_periods replaces the list and {"enabled": false} removes a rule.',
   '',
   'Reading a form back does not give you something you can send again: a field',
   'written as "TextField" reads as "single_line_text". `field types` lists the',
@@ -308,7 +324,8 @@ export const FORM: readonly Command[] = [
     summary: 'Edit a form',
     description:
       'The payload carries the operations to apply: name, description, setting, and fields as ' +
-      '{add, update, update_choices, remove}. Only what is named changes.',
+      '{add, update, update_choices, remove}. Only what is named changes. `form create --help` ' +
+      'shows what setting takes, the close rules among it.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
     run: async (input, client) => {
@@ -344,6 +361,7 @@ export const FORM: readonly Command[] = [
     },
     examples: [
       'jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'',
+      'jinshuju form edit Kp7mQ2 --json \'{"setting":{"daily_repeat_close_rule":{"time_periods":[{"start_time":{"hour":11,"minute":0},"end_time":{"hour":12,"minute":40}}]}}}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"exam_setting":{"total_score":100}}\''
     ]
   },

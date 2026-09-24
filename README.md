@@ -93,6 +93,28 @@ The settings block is always sent first. It is the half that can be rejected —
 "this is not an exam form" — and sending it first is what guarantees a rejection
 leaves every other change unsent.
 
+### When the form takes entries
+
+`setting` travels as is, on create and on edit. Its close rules decide when the
+form is open; they coexist, and `form get` reads them back in the shape they
+were written. On edit a rule replaces what was there (`time_periods` is the
+whole list) and `{"enabled": false}` removes it.
+
+```bash
+# between two instants; either end may be left out
+jinshuju form edit Kp7mQ2 --json '{"setting":{"by_time_range_close_rule":{"start_time":"2026-10-01T09:00:00+08:00","end_time":"2026-10-07T18:00:00+08:00"}}}'
+# 11:00-12:40 and 17:00-18:30, every day
+jinshuju form edit Kp7mQ2 --json '{"setting":{"daily_repeat_close_rule":{"time_periods":[
+  {"start_time":{"hour":11,"minute":0},"end_time":{"hour":12,"minute":40}},
+  {"start_time":{"hour":17,"minute":0},"end_time":{"hour":18,"minute":30}}]}}}'
+jinshuju form edit Kp7mQ2 --json '{"setting":{"daily_repeat_close_rule":{"enabled":false}}}'
+jinshuju form edit Kp7mQ2 --json '{"setting":{"by_entries_close_rule":{"limit":100}}}'   # closes after 100 entries
+jinshuju form edit Kp7mQ2 --json '{"setting":{"manually_close_rule":{"closed":true}}}'   # stops it now
+```
+
+`show_form_before_open` and `show_close_count_down` only hold with a time-range
+or daily rule; without one the save resets them to false.
+
 ## Reading data
 
 `entry`, `view`, `field` and `comment` are all top-level resources; the
