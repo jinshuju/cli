@@ -9,6 +9,11 @@ export const ACCOUNT: readonly Command[] = [
     request: () => ({ method: 'GET', path: `${API}/billing_account` })
   },
   {
+    path: ['account', 'me'],
+    summary: 'Show who is signed in: name, email, mobile and role in the account',
+    request: () => ({ method: 'GET', path: `${API}/me` })
+  },
+  {
     path: ['account', 'member', 'list'],
     summary: 'List account members',
     options: [LIMIT_OPTION],

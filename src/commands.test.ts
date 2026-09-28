@@ -385,6 +385,17 @@ test('--limit rides along on listings, including the two without a cursor', asyn
   assert.equal(url(members.requests[0]), '/api/v1/billing_account/users?limit=5');
 });
 
+test('account me asks who is signed in, not what the account holds', async () => {
+  const mock = createMockClient();
+  await cli(['account', 'me'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0]?.method, 'GET');
+  assert.equal(url(mock.requests[0]), '/api/v1/me');
+});
+
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
