@@ -32,6 +32,19 @@ test('root help lists the resources', async () => {
   }
 });
 
+// A value in a shape its field cannot read is dropped with the write still
+// answering success, so the commands that write one have to say where each
+// type's shape is described, and that the entry is worth reading back.
+test('the commands that write entry values say where each type is described', async () => {
+  for (const verb of ['create', 'update']) {
+    const result = await runCli(['entry', verb, '--help']);
+    assert.match(result.stdout, /field types <Type>/, `entry ${verb} does not point at field types`);
+    assert.match(result.stdout, /read .*back/i, `entry ${verb} does not say to read the entry back`);
+  }
+  const types = await runCli(['field', 'types', '--help']);
+  assert.match(types.stdout, /`value`/);
+});
+
 test('a resource lists its own verbs', async () => {
   const result = await runCli(['entry', '--help']);
   assert.equal(result.exitCode, 0);

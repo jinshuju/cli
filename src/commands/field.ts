@@ -107,7 +107,9 @@ export const FIELD: readonly Command[] = [
       "a cascade's nesting. `settings` are the flat keys beside them, `flags` the booleans, and " +
       '`read_as` the name the same field answers with when read back — which is not the name you ' +
       'write. Name one type to see its structure described in full. A table holds far fewer types ' +
-      'than a form, and a scorable question type only belongs to a form that scores answers.',
+      'than a form, and a scorable question type only belongs to a form that scores answers. ' +
+      '`value` is what an entry writes into the type: `example` is a value it takes, exact under ' +
+      '--output json, and `note` what the example cannot show.',
     args: [{ name: 'type', required: false, description: 'One type name, e.g. RadioButton' }],
     options: [
       KIND_OPTION,
