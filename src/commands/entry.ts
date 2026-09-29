@@ -51,6 +51,14 @@ function labels(input: CommandInput): string | undefined {
   return input.options.labels ? 'true' : undefined;
 }
 
+/**
+ * The web host is not the API host on every environment, so the link is the
+ * server's to spell; all a command can do is say it is there and what it is for.
+ */
+const DETAIL_URL =
+  'One entry comes back with `url`, where it opens in the Jinshuju data page: hand it to the user ' +
+  'so they can check it.';
+
 const LABELS_OPTION: OptionSpec = {
   name: '--labels',
   type: 'boolean',
@@ -643,7 +651,9 @@ export const ENTRY: readonly Command[] = [
     summary: 'Create entries',
     description:
       'The payload is keyed by field api_code, not by field label. --batch takes a list of them and ' +
-      'writes them in one request. ' +
+      'writes them in one request, and answers without a `url` for each. ' +
+      DETAIL_URL +
+      ' ' +
       VALUE_SHAPES,
     options: [...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION, ATTACH_OPTION],
     run: async (input, client) => {
@@ -672,6 +682,8 @@ export const ENTRY: readonly Command[] = [
       'The payload merges onto the entry, leaving the fields it does not name alone; --replace ' +
       'writes the entry as given, clearing the rest. --batch takes [{serial_number, entry}] and ' +
       'always merges. ' +
+      DETAIL_URL +
+      ' ' +
       VALUE_SHAPES,
     args: [{ name: 'serial', required: false, description: 'Entry serial number; leave out with --batch' }],
     options: [
@@ -817,6 +829,7 @@ export const ENTRY: readonly Command[] = [
   {
     path: ['entry', 'get'],
     summary: 'Show one entry',
+    description: DETAIL_URL,
     args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
     options: [
       ...CONTAINER_OPTIONS,
