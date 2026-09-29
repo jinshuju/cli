@@ -134,6 +134,14 @@ const ATTACH_OPTION: OptionSpec = {
 
 const ATTACH_SHAPE = "--attach must be '<api-code>=<file>', or '<api-code>.<row>.<sub>=<file>' for a subtable column";
 
+// The write answers success for a value its field could not read and keeps
+// nothing of it, so the only warning a caller gets is the one written here.
+const VALUE_SHAPES =
+  'Each type takes a value of its own shape — some choices only by code, a time as ' +
+  '{hour, minute} — and `field types <Type>` shows it under `value`. A value in a shape its ' +
+  'field cannot read is dropped without an error, as is a key naming no field, so read the ' +
+  'entry back when it matters.';
+
 /**
  * `field_5=/path/a.png`, or `field_5.0.field_2=/path/a.png` for one row of a
  * subtable column.
@@ -635,7 +643,8 @@ export const ENTRY: readonly Command[] = [
     summary: 'Create entries',
     description:
       'The payload is keyed by field api_code, not by field label. --batch takes a list of them and ' +
-      'writes them in one request.',
+      'writes them in one request. ' +
+      VALUE_SHAPES,
     options: [...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION, ATTACH_OPTION],
     run: async (input, client) => {
       const attached = attachments(input);
@@ -662,7 +671,8 @@ export const ENTRY: readonly Command[] = [
     description:
       'The payload merges onto the entry, leaving the fields it does not name alone; --replace ' +
       'writes the entry as given, clearing the rest. --batch takes [{serial_number, entry}] and ' +
-      'always merges.',
+      'always merges. ' +
+      VALUE_SHAPES,
     args: [{ name: 'serial', required: false, description: 'Entry serial number; leave out with --batch' }],
     options: [
       ...CONTAINER_OPTIONS,
