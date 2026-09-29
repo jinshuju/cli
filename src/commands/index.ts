@@ -16,7 +16,9 @@ import { FOLDER } from './folder.js';
 import { FORM } from './form.js';
 import { LOCAL } from './local.js';
 import { OPENSEARCH } from './opensearch.js';
+import { SMS } from './sms.js';
 import { TABLE } from './table.js';
+import { TRADE } from './trade.js';
 import type { Command, Resource } from './types.js';
 import { VIEW } from './view.js';
 
@@ -31,7 +33,7 @@ export const RESOURCES: readonly Resource[] = [
       'login is the browser flow. To use a token instead: `jinshuju config set access_token <token>`, ' +
       'or set JINSHUJU_ACCESS_TOKEN. `auth status --verify` says which account the credential belongs to.'
   },
-  { name: 'account', summary: 'Account and members' },
+  { name: 'account', summary: 'Account, members, invoices and what the account paid' },
   { name: 'folder', summary: 'Manage folders' },
   {
     name: 'form',
@@ -46,6 +48,11 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'entry', summary: 'Manage entries' },
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
+  { name: 'merchant', summary: '小金商户: onboarding, balance and settlement' },
+  { name: 'transaction', summary: 'Payment orders placed on payment forms' },
+  { name: 'refund', summary: 'Refunds of payment orders' },
+  { name: 'payout', summary: 'Payouts to the settlement account' },
+  { name: 'sms', summary: 'SMS signature and template review' },
   { name: 'config', summary: 'Manage CLI configuration' }
 ];
 
@@ -59,7 +66,9 @@ export const COMMANDS: readonly Command[] = [
   ...VIEW,
   ...ENTRY,
   ...COMMENT,
-  ...OPENSEARCH
+  ...OPENSEARCH,
+  ...TRADE,
+  ...SMS
 ];
 
 /** The command whose path the words begin with, longest match first. */
