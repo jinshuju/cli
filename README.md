@@ -186,6 +186,10 @@ jinshuju entry create --form Kp7mQ2 --json @entry.json
 cat entry.json | jinshuju entry create --form Kp7mQ2 --json -
 ```
 
+Creating, updating or getting one entry answers with a `url`: where that entry
+opens in the Jinshuju data page, for whoever wrote it to check it there. A
+`--batch` write answers without one.
+
 ## Writing
 
 Apart from the settings-block dispatch described above, every write command
