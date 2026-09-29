@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/jinshuju/cli/compare/v0.3.0...v0.4.0) (2026-09-29)
+
+
+### Features
+
+* read merchant payments, refunds, payouts, invoices and SMS review status ([#32](https://github.com/jinshuju/cli/issues/32)) ([33fdca0](https://github.com/jinshuju/cli/commit/33fdca00441171279648edfff4584cf04dd692e2))
+
 ## [0.3.0](https://github.com/jinshuju/cli/compare/v0.2.0...v0.3.0) (2026-09-29)
 
 
