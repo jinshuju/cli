@@ -32,6 +32,7 @@ src/
     shared.ts       what more than one resource builds requests from: paths, filters, paging
     upload.ts       a file on disk as a multipart request
     account.ts folder.ts form.ts table.ts field.ts view.ts entry.ts comment.ts opensearch.ts
+    trade.ts sms.ts
                     one table of commands per resource
     local.ts        the auth and config commands, in the table so they have help
   local.ts          runs the auth and config commands (they never reach the API)

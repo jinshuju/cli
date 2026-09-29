@@ -396,6 +396,91 @@ test('account me asks who is signed in, not what the account holds', async () =>
   assert.equal(url(mock.requests[0]), '/api/v1/me');
 });
 
+test('merchant, transaction, refund and payout ask the 小金商户 endpoints, a list of statuses as one parameter each', async () => {
+  const mock = createMockClient();
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  await cli(['merchant', 'get'], { env, client: mock.client });
+  await cli(
+    [
+      'transaction',
+      'list',
+      '--from',
+      '2026-09-01',
+      '--to',
+      '2026-09-28',
+      '--status',
+      'refunded',
+      '--status',
+      'partial_refunded',
+      '--form',
+      'Kp7mQ2',
+      '--limit',
+      '20'
+    ],
+    { env, client: mock.client }
+  );
+  await cli(['transaction', 'aggregate', '--group-by', 'channel'], { env, client: mock.client });
+  await cli(['refund', 'list', '--status', 'success', '--include', 'stats'], { env, client: mock.client });
+  await cli(['payout', 'list', '--next', '2'], { env, client: mock.client });
+
+  assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/trade/merchant',
+    '/api/v1/trade/transactions?start_date=2026-09-01&end_date=2026-09-28' +
+      '&paid_status%5B%5D=refunded&paid_status%5B%5D=partial_refunded&form_token=Kp7mQ2&limit=20',
+    '/api/v1/trade/transactions/aggregate?group_by=payment_channel',
+    '/api/v1/trade/refunds?status=success&include=stats',
+    '/api/v1/trade/payouts?next=2'
+  ]);
+});
+
+test('transaction list refuses a status the API does not have', async () => {
+  const result = await cli(['transaction', 'list', '--status', 'gone'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: createMockClient().client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /--status must be one of/);
+});
+
+test('transaction list --all follows the page the API hands back', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      const next = request.query?.next;
+      return (next ? { transactions: [{ trade_no: 'T2' }] } : { transactions: [{ trade_no: 'T1' }], next: '2' }) as T;
+    }
+  };
+  const result = await cli(['transaction', 'list', '--all', '--output', 'json'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(requests.map(url), ['/api/v1/trade/transactions', '/api/v1/trade/transactions?next=2']);
+  assert.match(result.stdout, /T1[\s\S]*T2/);
+});
+
+test('account invoice, account payment and sms status read their own endpoints', async () => {
+  const mock = createMockClient();
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+
+  await cli(['account', 'invoice', 'list'], { env, client: mock.client });
+  await cli(['account', 'payment', 'list', '--verb', 'sms_charge', '--limit', '10', '--with-balance'], {
+    env,
+    client: mock.client
+  });
+  await cli(['sms', 'status'], { env, client: mock.client });
+
+  assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/billing_account/invoices',
+    '/api/v1/billing_account/payment_histories?verb=sms_charge&limit=10&include_balance=true',
+    '/api/v1/sms/audit_statuses'
+  ]);
+});
+
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
