@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/jinshuju/cli/compare/v0.2.0...v0.3.0) (2026-09-29)
+
+
+### Features
+
+* **account:** say who is signed in, which account get cannot ([#29](https://github.com/jinshuju/cli/issues/29)) ([d037c5f](https://github.com/jinshuju/cli/commit/d037c5fd61215b58427219c0df1acf39de477534))
+
 ## [0.2.0](https://github.com/jinshuju/cli/compare/v0.1.3...v0.2.0) (2026-09-23)
 
 
