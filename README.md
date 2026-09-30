@@ -138,6 +138,9 @@ jinshuju entry list --form Kp7mQ2 --all
 `--limit` can only ask for less: a listing's default page size is also its
 maximum (50 in most cases), and anything larger is capped.
 
+`--all` reads at most 200 pages. Past that it stops with an error naming the
+cursor; pass it to `--next` (with `--all` again) to read on.
+
 `--filter` is repeatable and the conditions are AND-combined. For conditions it
 cannot express, use `--filters <json|@file>`. Cursors are opaque strings — pass
 the `next` value from the previous response back verbatim.
