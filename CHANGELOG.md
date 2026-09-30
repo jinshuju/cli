@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/jinshuju/cli/compare/v0.5.0...v0.6.0) (2026-09-30)
+
+
+### Features
+
+* **help:** open help with the version and colour headings at a terminal ([#38](https://github.com/jinshuju/cli/issues/38)) ([720fef5](https://github.com/jinshuju/cli/commit/720fef5da8fa7622c2de5173bfa52678dada38b6))
+
 ## [0.5.0](https://github.com/jinshuju/cli/compare/v0.4.0...v0.5.0) (2026-09-30)
 
 
