@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/jinshuju/cli/compare/v0.4.0...v0.5.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **auth:** API key and secret authentication is removed, along with --api-key, --api-secret, JINSHUJU_API_KEY and JINSHUJU_API_SECRET. access_token, api_key and api_secret at the top level of the config file are no longer read; run `jinshuju auth login` again. auth status no longer reports the api_key_secret mode or sources.apiKey/apiSecret.
+
+### Features
+
+* **auth:** take every credential through auth login ([#35](https://github.com/jinshuju/cli/issues/35)) ([8a85dc2](https://github.com/jinshuju/cli/commit/8a85dc208d339af1e3d6d79d5a4b13cd80077962))
+* split entry stats by day, week or month ([#37](https://github.com/jinshuju/cli/issues/37)) ([cfbc729](https://github.com/jinshuju/cli/commit/cfbc729ea61ba87d8edf755119e2a23fa44a43c6))
+
 ## [0.4.0](https://github.com/jinshuju/cli/compare/v0.3.0...v0.4.0) (2026-09-29)
 
 
