@@ -99,10 +99,10 @@ async function runRemote(
 }
 
 /**
- * More pages than any listing has. A cursor that never runs out would
- * otherwise read forever; stopping here says so instead, with what was read.
+ * The most pages one `--all` reads. Past it the listing goes on with `--next`,
+ * and a cursor that never runs out cannot read forever.
  */
-const MAX_PAGES = 10_000;
+const MAX_PAGES = 200;
 
 /**
  * Every page of a listing, handed on a page at a time. A cursor is opaque: it
@@ -138,9 +138,9 @@ async function readAllPages(
         body
       );
     }
-    if (page >= MAX_PAGES)
-      throw new Error(`stopped after ${MAX_PAGES} pages and ${count} rows; the listing has no end`);
     cursor = String(next);
+    if (page >= MAX_PAGES)
+      throw new Error(`stopped after ${MAX_PAGES} pages and ${count} rows; carry on with --next ${cursor}`);
   }
   watching.done();
   return count;

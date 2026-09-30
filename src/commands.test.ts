@@ -1847,6 +1847,21 @@ test('--all stops when the server answers the cursor it was just given, keeping 
   assert.match(result.stderr, /cursor it was asked for/);
 });
 
+test('--all stops at 200 pages and names the cursor to carry on from', async () => {
+  let pages = 0;
+  const client = {
+    async request<T>(): Promise<T> {
+      pages += 1;
+      return { data: [{ token: 'a' }], next: `p${pages + 1}` } as T;
+    }
+  };
+  const result = await cli(['form', 'list', '--all'], { env: WRITE_ENV, client });
+
+  assert.equal(pages, 200);
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /stopped after 200 pages and 200 rows; carry on with --next p201/);
+});
+
 // --- jsonl ------------------------------------------------------------------
 
 test('--output jsonl answers a listing as one row per line, and anything else as one line', async () => {
