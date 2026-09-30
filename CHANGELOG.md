@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/jinshuju/cli/compare/v0.6.0...v0.7.0) (2026-09-30)
+
+
+### Features
+
+* stop --all at 200 pages so an agent caller can keep up ([#40](https://github.com/jinshuju/cli/issues/40)) ([f025eb0](https://github.com/jinshuju/cli/commit/f025eb02f31669169bc9f96b39b726e29c681f71))
+
 ## [0.6.0](https://github.com/jinshuju/cli/compare/v0.5.0...v0.6.0) (2026-09-30)
 
 
