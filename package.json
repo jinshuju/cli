@@ -1,6 +1,6 @@
 {
   "name": "@jinshuju/cli",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Command line interface for Jinshuju Open API v1",
   "homepage": "https://github.com/jinshuju/cli#readme",
   "bugs": {
