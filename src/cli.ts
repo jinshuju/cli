@@ -22,18 +22,19 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
   const stdin = runtime.stdin ?? readStdin;
 
   if (flags['--version'] || flags['-V']) return ok(VERSION);
-  if (args.length === 0) return ok(rootHelp());
-  if (flags['--help'] || flags['-h']) return ok(helpFor(words));
+  const terminal = runtime.terminal ?? {};
+  if (args.length === 0) return ok(rootHelp(undefined, terminal.stdout));
+  if (flags['--help'] || flags['-h']) return ok(helpFor(words, undefined, terminal.stdout));
 
   const resource = words[0] as string;
   try {
     if (resource === 'auth' || resource === 'config') return await runLocal(words, flags, runtime, stdin);
 
-    if (!command) return unknown(words, outputOf(flags));
+    if (!command) return unknown(words, outputOf(flags), terminal.stderr);
 
     return await runRemote(command, words, flags, runtime, stdin);
   } catch (error) {
-    return fail(error, outputOf(flags));
+    return fail(error, outputOf(flags), terminal.stderr);
   }
 }
 

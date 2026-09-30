@@ -1,8 +1,9 @@
 import { EXIT_CODES, UsageError, classify } from './errors.js';
-import { unknownCommandHelp } from './help.js';
+import { unknownCommandHelp, versionLine } from './help.js';
 import type { HttpClient } from './http.js';
 import type { OutputFormat } from './options.js';
 import { json } from './render.js';
+import type { Style } from './style.js';
 
 export type CliResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -17,6 +18,11 @@ export type CliRuntime = {
   stdout?: (chunk: string) => void;
   /** How wide a table may be. Defaults to the terminal, or 120 through a pipe. */
   width?: number;
+  /**
+   * How each stream is styled when it is a terminal; a stream left out is a
+   * pipe, and gets neither colour nor the version line on an error.
+   */
+  terminal?: { stdout?: Style; stderr?: Style };
 };
 
 export function ok(stdout: string): CliResult {
@@ -28,21 +34,32 @@ export function ok(stdout: string): CliResult {
  * anything being parsed; with `--output json` stderr carries the same in
  * words, plus whatever status and body the server answered with, so a script
  * that reads JSON on the way in reads JSON on the way out as well.
+ *
+ * At a terminal a text failure opens with the version, since "which version"
+ * is the first question about any error. Only there: JSON stays JSON.
  */
-export function fail(error: unknown, output: OutputFormat): CliResult {
+export function fail(error: unknown, output: OutputFormat, terminal?: Style): CliResult {
   const sorted = classify(error);
   if (output !== 'text') {
     const { exitCode, ...envelope } = sorted;
     return { exitCode, stdout: '', stderr: `${json({ error: envelope })}\n` };
   }
   const wait = sorted.retry_after === undefined ? '' : ` Retry after ${sorted.retry_after}s.`;
-  return { exitCode: sorted.exitCode, stdout: '', stderr: `Error: ${sorted.message}${wait}\n` };
+  return { exitCode: sorted.exitCode, stdout: '', stderr: `${banner(terminal)}Error: ${sorted.message}${wait}\n` };
 }
 
 /** An unknown command is a usage error, and in text mode the help is the message. */
-export function unknown(words: readonly string[], output: OutputFormat): CliResult {
+export function unknown(words: readonly string[], output: OutputFormat, terminal?: Style): CliResult {
   if (output !== 'text') return fail(new UsageError(`Unknown command: jinshuju ${words.join(' ')}`), output);
-  return { exitCode: EXIT_CODES.usage, stdout: '', stderr: unknownCommandHelp(words) };
+  return {
+    exitCode: EXIT_CODES.usage,
+    stdout: '',
+    stderr: banner(terminal) + unknownCommandHelp(words, undefined, terminal)
+  };
+}
+
+function banner(terminal: Style | undefined): string {
+  return terminal ? `${versionLine(terminal)}\n\n` : '';
 }
 
 /** What `--output` asked for, read before the flags are checked so a failure can honour it. */

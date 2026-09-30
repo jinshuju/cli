@@ -45,6 +45,7 @@ src/
   result.ts         CliResult, CliRuntime, and how a failure is written out
   render.ts         text, json and jsonl; the table layout and CJK-aware widths
   progress.ts       one overwritten line on stderr, only when stderr is a terminal
+  style.ts          the logo orange for help headings, only for a terminal, and never under NO_COLOR
   values.ts         isRecord, isScalar
   version.ts        VERSION, read from package.json
 ```

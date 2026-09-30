@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 
 import { runCli } from './cli.js';
 import { COMMANDS } from './commands/index.js';
+import { styleFor } from './style.js';
+import { VERSION } from './version.js';
 
 // Help is rendered from the command table, so every command in it is covered
 // by walking the table rather than by a list kept in step by hand.
@@ -12,7 +14,8 @@ for (const command of COMMANDS) {
     const result = await runCli([...command.path, '--help']);
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, new RegExp(`Usage: jinshuju ${command.path.join(' ')}`));
-    assert.match(result.stdout, /Flags:/);
+    assert.match(result.stdout, /Global Options:/);
+    if (command.options?.length) assert.match(result.stdout, /\nFlags:\n/);
     for (const argument of command.args ?? []) {
       assert.match(result.stdout, new RegExp(argument.name), `<${argument.name}> is missing from the help`);
     }
@@ -21,6 +24,55 @@ for (const command of COMMANDS) {
     }
   });
 }
+
+// A command's own flags and the ones every command takes are two lists, so
+// the reader can tell what is particular to this command at a glance.
+test('a command lists its own flags apart from the global ones', async () => {
+  const { stdout } = await runCli(['entry', 'list', '--help']);
+  const [own, rest] = stdout.split('Global Options:') as [string, string];
+  const global = rest.split('\n\n')[0] as string;
+  assert.match(own, /\nFlags:\n[\s\S]*--form <token>/);
+  assert.doesNotMatch(own, /--output/);
+  assert.match(global, /--output <format>/);
+  assert.doesNotMatch(global, /--form/);
+});
+
+test('every help opens with the version, piped or not', async () => {
+  for (const args of [[], ['--help'], ['entry', '--help'], ['entry', 'list', '--help']]) {
+    const { stdout } = await runCli(args);
+    assert.ok(
+      stdout.startsWith(`jinshuju v${VERSION}\n\n`),
+      `jinshuju ${args.join(' ')} does not open with the version`
+    );
+  }
+});
+
+test('help is coloured only for a terminal', async () => {
+  const piped = await runCli(['entry', 'list', '--help']);
+  assert.ok(!piped.stdout.includes('\x1b'));
+  const terminal = await runCli(['entry', 'list', '--help'], { terminal: { stdout: styleFor({ isTTY: true }, {}) } });
+  assert.ok(terminal.stdout.includes('\x1b[38;5;209mGlobal Options:\x1b[39m'));
+  const stripped = terminal.stdout
+    .replaceAll('\x1b[38;5;209m', '')
+    .replaceAll('\x1b[90m', '')
+    .replaceAll('\x1b[39m', '');
+  assert.equal(stripped, piped.stdout);
+});
+
+// A text error at a terminal says which version failed. Through a pipe, or as
+// JSON, the error is exactly what it was, so nothing that parses it breaks.
+test('an error opens with the version only at a terminal, and only as text', async () => {
+  const terminal = { stderr: styleFor({ isTTY: true }, { NO_COLOR: '1' }) };
+  const shown = await runCli(['entry', 'list', '--nope'], { terminal });
+  assert.ok(shown.stderr.startsWith(`jinshuju v${VERSION}\n\nError: `), shown.stderr);
+  const unknownShown = await runCli(['entry', 'lsit'], { terminal });
+  assert.ok(unknownShown.stderr.startsWith(`jinshuju v${VERSION}\n\nUnknown command`), unknownShown.stderr);
+
+  const piped = await runCli(['entry', 'list', '--nope']);
+  assert.ok(piped.stderr.startsWith('Error: '), piped.stderr);
+  const json = await runCli(['entry', 'list', '--nope', '--output', 'json'], { terminal });
+  assert.doesNotThrow(() => JSON.parse(json.stderr));
+});
 
 // The root help lists resources, not every verb: one level, as the design says.
 test('root help lists the resources', async () => {
