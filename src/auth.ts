@@ -26,7 +26,6 @@ export type OAuthLoginOptions = LoadConfigOptions & {
   authHost?: string;
   clientId?: string;
   scopes?: string;
-  openBrowser?: boolean;
   timeoutMs?: number;
   port?: number;
 };
@@ -97,7 +96,7 @@ export async function loginWithOAuth(
   // state, a refusal — and a rejection nobody is awaiting yet is reported as
   // unhandled. It is awaited right below; this only says so in the meantime.
   callback.code.catch(() => undefined);
-  if (options.openBrowser !== false) await opener(authorizeUrl);
+  await opener(authorizeUrl);
   const code = await callback.code;
   const token = await exchangeAuthorizationCode(config.authHost, clientId, callback.redirectUri, code, verifier);
   const auth = toOAuthConfig(config, clientId, token);

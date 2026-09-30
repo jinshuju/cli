@@ -94,15 +94,17 @@ function createClient(options: LocalOptions, runtime: CliRuntime, accessToken?: 
 
 async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   if (options.accessToken !== undefined) return await tokenLogin(options.accessToken, options, runtime);
-  const result = await loginWithOAuth({
-    configPath: options.configPath,
-    env: runtime.env,
-    host: options.host,
-    authHost: options.authHost,
-    clientId: options.clientId,
-    scopes: options.scopes,
-    openBrowser: !options.noOpen
-  });
+  const result = await loginWithOAuth(
+    {
+      configPath: options.configPath,
+      env: runtime.env,
+      host: options.host,
+      authHost: options.authHost,
+      clientId: options.clientId,
+      scopes: options.scopes
+    },
+    options.noOpen ? printLoginUrl : undefined
+  );
   const payload = {
     authenticated: true,
     mode: 'oauth',
@@ -120,6 +122,11 @@ async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<Cl
  * in the config until the next command failed with it, far from where it was
  * typed. The same call says whose token it is.
  */
+/** --no-open: the URL goes to stderr, so stdout still carries only the result. */
+async function printLoginUrl(url: string): Promise<void> {
+  process.stderr.write(`Open this URL in a browser to log in:\n${url}\n`);
+}
+
 async function tokenLogin(accessToken: string, options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   if (!accessToken) throw new UsageError('--access-token needs a token');
   const account = await identify(createClient(options, runtime, accessToken));

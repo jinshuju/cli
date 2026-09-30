@@ -577,6 +577,36 @@ test('auth login --access-token stores nothing when the token is refused', async
   assert.equal(existsSync(path), false);
 });
 
+test(
+  'auth login --no-open prints the URL to log in with, instead of waiting in silence',
+  { timeout: 5_000 },
+  async () => {
+    let written = '';
+    const original = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => {
+      written += chunk;
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const login = cli(['auth', 'login', '--no-open'], { env: {} });
+      while (!/https?:\/\/\S+/.test(written)) await new Promise((resolve) => setTimeout(resolve, 10));
+      // Refusing at the authorization server ends the login without a token exchange.
+      const authorize = new URL((written.match(/https?:\/\/\S+/) as RegExpMatchArray)[0]);
+      const redirect = new URL(authorize.searchParams.get('redirect_uri') ?? '');
+      redirect.searchParams.set('state', authorize.searchParams.get('state') ?? '');
+      redirect.searchParams.set('error', 'access_denied');
+      await fetch(redirect);
+      const result = await login;
+
+      assert.match(written, /^Open this URL in a browser to log in:\n/);
+      assert.equal(authorize.pathname, '/oauth/authorize');
+      assert.match(result.stderr, /access_denied/);
+    } finally {
+      process.stderr.write = original;
+    }
+  }
+);
+
 test('auth logout forgets a stored access token, and refresh says a token cannot be renewed', async () => {
   const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
   writeFileSync(path, JSON.stringify({ host: 'https://h', auth: { type: 'access_token', access_token: 'tok' } }));
