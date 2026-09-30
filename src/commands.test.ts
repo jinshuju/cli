@@ -281,16 +281,16 @@ test('a summary keeps its buckets, by giving up the table for the rows that carr
   assert.match(result.stdout, /^tz: Asia\/Shanghai$/m);
 });
 
-test('stats by day keeps each day\'s forms in text output', async () => {
+test("split stats keep each bucket's forms in text output", async () => {
   const row = { token: 'Kp7mQ2', name: '报修单', kind: 'form', fill_count: 8 };
   const client = {
     async request<T>(): Promise<T> {
       return {
         total: 8,
         data: [row],
-        days: [
-          { date: '2026-09-28', total: 8, data: [row] },
-          { date: '2026-09-29', total: 0, data: [] }
+        buckets: [
+          { from: '2026-09-28', to: '2026-09-28', total: 8, data: [row] },
+          { from: '2026-09-29', to: '2026-09-29', total: 0, data: [] }
         ]
       } as T;
     }
@@ -302,7 +302,7 @@ test('stats by day keeps each day\'s forms in text output', async () => {
   });
 
   assert.equal(result.exitCode, 0);
-  assert.match(result.stdout, /^ {2}date: 2026-09-28$/m);
+  assert.match(result.stdout, /^ {2}from: 2026-09-28$/m);
   assert.match(result.stdout, /^ {2}Kp7mQ2\s+报修单\s+form\s+8\s*$/m);
 });
 
@@ -604,15 +604,20 @@ test('entry count refuses more containers than the endpoint accepts', async () =
   assert.match(result.stderr, /at most 10 containers/);
 });
 
-test('entry stats splits the range by day in one request', async () => {
+test('entry stats splits the range by day, week or month in one request', async () => {
   const mock = createMockClient();
+  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
 
   await cli(['entry', 'stats', '--from', '2026-09-28', '--to', '2026-09-30', '--by', 'day'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env,
     client: mock.client
   });
+  await cli(['entry', 'stats', '--from', '2026-01-01', '--by', 'month'], { env, client: mock.client });
 
-  assert.equal(url(mock.requests[0]), '/api/v1/entries/stats?from=2026-09-28&to=2026-09-30&by=day');
+  assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/entries/stats?from=2026-09-28&to=2026-09-30&by=day',
+    '/api/v1/entries/stats?from=2026-01-01&by=month'
+  ]);
 });
 
 test('entry aggregate turns --metric and --by into the JSON the API reads', async () => {
