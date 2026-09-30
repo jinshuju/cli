@@ -76,7 +76,7 @@ export async function runLocal(
     case 'config unset':
       return configUnset(words, options);
     default:
-      return unknown(words, options.output);
+      return unknown(words, options.output, runtime.terminal?.stderr);
   }
 }
 
