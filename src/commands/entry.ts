@@ -517,11 +517,14 @@ export const ENTRY: readonly Command[] = [
   {
     path: ['entry', 'stats'],
     summary: 'Count submissions per form over a date range',
+    // Split, each bucket's forms are the answer; a table of bucket totals drops them.
+    text: { essentialLists: ['data'] },
     description:
       'Not the question `entry count` answers. These are submissions as they happened: an import ' +
       'lands on the day it ran whatever dates its rows carry, and deletions are never subtracted, ' +
       'so this is how much arrived rather than how much is still there. A whole day is the ' +
-      'smallest window; both ends are inclusive and days are cut in the reported time zone.',
+      'smallest window; both ends are inclusive and days are cut in the reported time zone. For a ' +
+      'day-by-day, weekly or monthly answer pass --by once rather than one call per period.',
     options: [
       { name: '--from', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'First day to count, inclusive' },
       {
@@ -541,7 +544,17 @@ export const ENTRY: readonly Command[] = [
         name: '--limit',
         type: 'integer',
         placeholder: '<n>',
-        description: 'How many forms to list, most submissions first (default 100, max 100)'
+        description: 'How many forms to list, most submissions first (default 100, or 10 per bucket with --by; max 100)'
+      },
+      {
+        name: '--by',
+        type: 'string',
+        choices: ['day', 'week', 'month'],
+        placeholder: '<unit>',
+        description:
+          'Also split the range into buckets: every one, empty ones with total 0, --limit per bucket. ' +
+          'Weeks start on Monday; the first and last are clipped to the range. ' +
+          'At most 92 days, 53 weeks or 24 months'
       }
     ],
     request: (input) => ({
@@ -551,12 +564,15 @@ export const ENTRY: readonly Command[] = [
         from: requiredOption(input, 'from'),
         to: input.options.to as string | undefined,
         kind: input.options.kind as string | undefined,
-        limit: input.options.limit === undefined ? undefined : String(input.options.limit)
+        limit: input.options.limit === undefined ? undefined : String(input.options.limit),
+        by: input.options.by as string | undefined
       }
     }),
     examples: [
       'jinshuju entry stats --from 2026-09-01',
-      'jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10'
+      'jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10',
+      'jinshuju entry stats --from 2026-09-28 --by day',
+      'jinshuju entry stats --from 2026-01-01 --by month'
     ]
   },
   {
