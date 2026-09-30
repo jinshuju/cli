@@ -275,11 +275,6 @@ export class JinshujuHttpClient implements HttpClient {
   private async authorizationHeader(): Promise<string> {
     if (this.config.accessToken) return `Bearer ${this.config.accessToken}`;
 
-    if (this.config.apiKey && this.config.apiSecret) {
-      const credentials = Buffer.from(`${this.config.apiKey}:${this.config.apiSecret}`).toString('base64');
-      return `Basic ${credentials}`;
-    }
-
     if (this.config.auth?.access_token) {
       if (shouldRefresh(this.config.auth) && this.config.auth.refresh_token) {
         this.config.auth = await refreshOAuthToken(this.config);
@@ -288,7 +283,7 @@ export class JinshujuHttpClient implements HttpClient {
     }
 
     throw new AuthError(
-      'Missing authentication. Run `jinshuju auth login`, or configure JINSHUJU_ACCESS_TOKEN, or JINSHUJU_API_KEY with JINSHUJU_API_SECRET.'
+      'Missing authentication. Run `jinshuju auth login` or `jinshuju auth login --access-token <token>`, or set JINSHUJU_ACCESS_TOKEN.'
     );
   }
 }

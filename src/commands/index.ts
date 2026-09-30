@@ -30,7 +30,7 @@ export const RESOURCES: readonly Resource[] = [
     name: 'auth',
     summary: 'Manage authentication',
     note:
-      'login is the browser flow. To use a token instead: `jinshuju config set access_token <token>`, ' +
+      'login is the browser flow. To use a token instead: `jinshuju auth login --access-token <token>`, ' +
       'or set JINSHUJU_ACCESS_TOKEN. `auth status --verify` says which account the credential belongs to.'
   },
   { name: 'account', summary: 'Account, members, invoices and what the account paid' },

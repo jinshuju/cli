@@ -131,10 +131,11 @@ and still says the form exists.
 
 `config.loadConfig` reads the command line, the environment and the file, in
 that order of precedence, and records where each value came from so
-`auth status` can say so. The client then picks a credential in this order:
-an access token, an API key and secret, a stored OAuth session. An explicit
-credential always beats a stored login; using last week's session when a
-token was set would be a surprise with no signal.
+`auth status` can say so. The file holds one credential at a time, an OAuth
+session or an access token, and `auth login` of either kind replaces it. The
+client sends `JINSHUJU_ACCESS_TOKEN` if it is set, and the stored credential
+otherwise; using last week's session when a token was set would be a surprise
+with no signal.
 
 OAuth is authorization code with PKCE. The CLI listens on a loopback port,
 checks the returned `state` with a constant-time compare, exchanges the code,

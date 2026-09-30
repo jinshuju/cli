@@ -63,9 +63,9 @@ const LOCAL_HELP: [string[], RegExp][] = [
   [['auth', 'status'], /--verify/],
   [['auth', 'refresh'], /--auth-host/],
   [['auth', 'logout'], /--client-id/],
-  [['config', 'get'], /--show-secret/],
+  [['config', 'get'], /auth login. stores them/],
   [['config', 'set'], /<key> <value>/],
-  [['config', 'unset'], /access_token/]
+  [['config', 'unset'], /config unset host/]
 ];
 
 for (const [path, own] of LOCAL_HELP) {

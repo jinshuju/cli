@@ -1,15 +1,17 @@
-import { loginWithOAuth, refreshOAuthToken, revokeOAuthToken } from './auth.js';
+import { loginWithOAuth, logout, refreshOAuthToken } from './auth.js';
 import { bindOptions } from './args.js';
 import {
   assertConfigKey,
+  CONFIG_KEYS,
   defaultConfigPath,
   getConfig,
   loadConfig,
-  maskSecret,
+  saveAccessToken,
   setConfigValue,
   unsetConfigValue,
   type ConfigKey
 } from './config.js';
+import { AuthError } from './errors.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
 import { format } from './render.js';
@@ -26,15 +28,13 @@ import { isRecord } from './values.js';
 type LocalOptions = {
   output: OutputFormat;
   configPath: string;
-  apiKey?: string;
-  apiSecret?: string;
+  accessToken?: string;
   host?: string;
   authHost?: string;
   clientId?: string;
   scopes?: string;
   noOpen: boolean;
   verify: boolean;
-  showSecret: boolean;
 };
 
 export function localOptions(flags: Record<string, unknown>, stdin: () => string): LocalOptions {
@@ -42,15 +42,13 @@ export function localOptions(flags: Record<string, unknown>, stdin: () => string
   return {
     output: (bound.output as OutputFormat) ?? 'text',
     configPath: (bound.config as string) ?? defaultConfigPath,
-    apiKey: bound.api_key as string | undefined,
-    apiSecret: bound.api_secret as string | undefined,
+    accessToken: bound.access_token as string | undefined,
     host: bound.host as string | undefined,
     authHost: bound.auth_host as string | undefined,
     clientId: bound.client_id as string | undefined,
     scopes: bound.scopes as string | undefined,
     noOpen: Boolean(bound.no_open),
-    verify: Boolean(bound.verify),
-    showSecret: Boolean(bound.show_secret)
+    verify: Boolean(bound.verify)
   };
 }
 
@@ -87,20 +85,15 @@ function requireArg(value: string | undefined, name: string): string {
   return value;
 }
 
-function createClient(options: LocalOptions, runtime: CliRuntime): HttpClient {
-  return (
-    runtime.client ??
-    new JinshujuHttpClient(
-      loadConfig({
-        configPath: options.configPath,
-        env: runtime.env,
-        cli: { apiKey: options.apiKey, apiSecret: options.apiSecret, host: options.host }
-      })
-    )
-  );
+/** A client that sends `accessToken` when one is given, and the configured credential otherwise. */
+function createClient(options: LocalOptions, runtime: CliRuntime, accessToken?: string): HttpClient {
+  if (runtime.client) return runtime.client;
+  const config = loadConfig({ configPath: options.configPath, env: runtime.env, cli: { host: options.host } });
+  return new JinshujuHttpClient(accessToken ? { ...config, accessToken } : config);
 }
 
 async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
+  if (options.accessToken !== undefined) return await tokenLogin(options.accessToken, options, runtime);
   const result = await loginWithOAuth({
     configPath: options.configPath,
     env: runtime.env,
@@ -122,40 +115,35 @@ async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<Cl
   return ok(`Authenticated with OAuth.\nConfig: ${options.configPath}`);
 }
 
+/**
+ * A token is checked before it is stored: one pasted wrong would otherwise sit
+ * in the config until the next command failed with it, far from where it was
+ * typed. The same call says whose token it is.
+ */
+async function tokenLogin(accessToken: string, options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
+  if (!accessToken) throw new UsageError('--access-token needs a token');
+  const account = await identify(createClient(options, runtime, accessToken));
+  saveAccessToken(options.configPath, accessToken);
+  if (options.output !== 'text')
+    return ok(format({ authenticated: true, mode: 'access_token', account }, options.output, 0));
+  return ok(`Authenticated with an access token.${describeAccount(account)}\nConfig: ${options.configPath}`);
+}
+
 async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   const config = loadConfig({
     configPath: options.configPath,
     env: runtime.env,
-    cli: {
-      apiKey: options.apiKey,
-      apiSecret: options.apiSecret,
-      host: options.host,
-      authHost: options.authHost,
-      clientId: options.clientId
-    }
+    cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
   });
-  const authenticated = Boolean(config.accessToken || (config.apiKey && config.apiSecret) || config.auth?.access_token);
-  const mode = config.accessToken
-    ? 'access_token'
-    : config.apiKey && config.apiSecret
-      ? 'api_key_secret'
-      : config.auth?.access_token
-        ? 'oauth'
-        : 'none';
+  const authenticated = Boolean(config.accessToken || config.auth?.access_token);
+  const mode = config.accessToken ? 'access_token' : config.auth?.access_token ? 'oauth' : 'none';
   const payload = {
     authenticated,
     mode,
     host: config.host,
     auth_host: config.authHost,
     sources: config.sources,
-    source:
-      mode === 'access_token'
-        ? config.sources.accessToken
-        : mode === 'api_key_secret'
-          ? config.sources.apiKey
-          : mode === 'oauth'
-            ? config.sources.auth
-            : 'missing',
+    source: mode === 'access_token' ? config.sources.accessToken : mode === 'oauth' ? config.sources.auth : 'missing',
     oauth: config.auth
       ? {
           client_id: config.auth.client_id,
@@ -174,14 +162,18 @@ async function authStatus(options: LocalOptions, runtime: CliRuntime): Promise<C
 
   if (options.output !== 'text') return ok(format(full, options.output, 0));
 
-  const whose = account ? ` Account: ${account.name}${account.plan ? ` (${account.plan})` : ''}.` : '';
+  const whose = describeAccount(account);
   if (mode === 'access_token')
     return ok(`Authenticated with an access token (from ${config.sources.accessToken}).${whose}`);
   if (mode === 'oauth') return ok(`Authenticated with OAuth.${whose}`);
-  if (mode === 'api_key_secret') return ok(`Authenticated with API Key / Secret.${whose}`);
   return ok(
-    'Missing authentication. Run `jinshuju auth login`, or set an access token, or configure API Key / Secret.'
+    'Missing authentication. Run `jinshuju auth login` or `jinshuju auth login --access-token <token>`, ' +
+      'or set JINSHUJU_ACCESS_TOKEN.'
   );
+}
+
+function describeAccount(account: { name?: string; plan?: string } | undefined): string {
+  return account ? ` Account: ${account.name}${account.plan ? ` (${account.plan})` : ''}.` : '';
 }
 
 /**
@@ -205,6 +197,8 @@ async function authRefresh(options: LocalOptions, runtime: CliRuntime): Promise<
     env: runtime.env,
     cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
   });
+  if (!config.auth && config.accessToken)
+    throw new AuthError('An access token cannot be refreshed; log in again with a new one if it stopped working.');
   const auth = await refreshOAuthToken(config);
   if (options.output !== 'text')
     return ok(
@@ -215,7 +209,7 @@ async function authRefresh(options: LocalOptions, runtime: CliRuntime): Promise<
 
 async function authLogout(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   const config = loadConfig({ configPath: options.configPath, env: runtime.env });
-  await revokeOAuthToken(config);
+  await logout(config);
   return ok(options.output !== 'text' ? format({ authenticated: false }, options.output, 0) : 'Logged out.');
 }
 
@@ -223,20 +217,8 @@ function configGet(positionals: readonly string[], options: LocalOptions): CliRe
   const requestedKey = positionals[2];
   if (requestedKey) assertConfigKey(requestedKey);
   const config = getConfig(options.configPath);
-  const secrets = new Set(['access_token', 'api_key', 'api_secret']);
-  const renderValue = (key: string, value: string | undefined) =>
-    options.showSecret || !secrets.has(key) ? value : maskSecret(value);
-  let payload: Record<string, string | undefined>;
-  if (requestedKey) {
-    const configKey = requestedKey as ConfigKey;
-    payload = { [configKey]: renderValue(configKey, config[configKey]) };
-  } else {
-    payload = {
-      access_token: renderValue('access_token', config.access_token),
-      api_key: renderValue('api_key', config.api_key),
-      api_secret: renderValue('api_secret', config.api_secret)
-    };
-  }
+  const keys = requestedKey ? [requestedKey as ConfigKey] : CONFIG_KEYS;
+  const payload = Object.fromEntries(keys.map((key) => [key, config[key]]));
   if (options.output !== 'text') return ok(format(payload, options.output, 0));
   return ok(
     Object.entries(payload)

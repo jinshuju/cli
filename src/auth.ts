@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 
 import { AuthError } from './errors.js';
 import {
-  clearOAuthConfig,
+  clearCredential,
   defaultScopes,
   loadConfig,
   saveOAuthConfig,
@@ -121,16 +121,21 @@ export async function refreshOAuthToken(config: LoadedConfig): Promise<OAuthConf
   return auth;
 }
 
-export async function revokeOAuthToken(config: LoadedConfig): Promise<void> {
-  if (!config.auth?.access_token) return;
-  const url = new URL('/oauth/revoke', config.auth.auth_host);
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({ client_id: config.auth.client_id, token: config.auth.access_token }),
-    signal: AbortSignal.timeout(config.timeoutMs ?? TOKEN_TIMEOUT_MS)
-  }).catch(() => undefined);
-  clearOAuthConfig(config.configPath);
+/**
+ * Revokes a stored OAuth session, then forgets whatever credential is stored.
+ * An access token has no revoke endpoint here; it is only forgotten.
+ */
+export async function logout(config: LoadedConfig): Promise<void> {
+  if (config.auth?.access_token) {
+    const url = new URL('/oauth/revoke', config.auth.auth_host);
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: new URLSearchParams({ client_id: config.auth.client_id, token: config.auth.access_token }),
+      signal: AbortSignal.timeout(config.timeoutMs ?? TOKEN_TIMEOUT_MS)
+    }).catch(() => undefined);
+  }
+  clearCredential(config.configPath);
 }
 
 export function shouldRefresh(auth: OAuthConfig, skewMs = 60_000): boolean {

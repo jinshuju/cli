@@ -22,22 +22,23 @@ function local(...names: string[]): readonly OptionSpec[] {
 export const LOCAL: readonly Command[] = [
   {
     path: ['auth', 'login'],
-    summary: 'Log in through the browser and store the session',
+    summary: 'Log in through the browser, or with an access token, and store the credential',
     description:
-      'Opens the authorization page, waits for the redirect on a loopback port, and writes the ' +
-      'session to the config file. An access token or an API key pair, if configured, still ' +
-      'outranks what this stores.',
-    options: local('--auth-host', '--client-id', '--scopes', '--no-open', '--host'),
-    examples: ['jinshuju auth login', 'jinshuju auth login --no-open']
+      'Without --access-token: opens the authorization page, waits for the redirect on a loopback ' +
+      'port, and writes the session to the config file. With it: checks the token with one call, ' +
+      'then stores it; the OAuth options are ignored. Either replaces whatever credential was stored ' +
+      'before. JINSHUJU_ACCESS_TOKEN, if set, still outranks what this stores.',
+    options: local('--access-token', '--auth-host', '--client-id', '--scopes', '--no-open', '--host'),
+    examples: ['jinshuju auth login', 'jinshuju auth login --no-open', 'jinshuju auth login --access-token <token>']
   },
   {
     path: ['auth', 'status'],
     summary: 'Show which credential is in use, and where it came from',
     description:
-      'The precedence is access token, then API key and secret, then a stored browser login. ' +
+      'The precedence is JINSHUJU_ACCESS_TOKEN, then the credential `auth login` stored. ' +
       '--verify spends one call to confirm the credential still works, and reports the account it ' +
       'belongs to — with more than one configured, nothing else here says which is in play.',
-    options: local('--verify', '--api-key', '--api-secret', '--host', '--auth-host', '--client-id'),
+    options: local('--verify', '--host', '--auth-host', '--client-id'),
     examples: ['jinshuju auth status', 'jinshuju auth status --verify']
   },
   {
@@ -49,34 +50,35 @@ export const LOCAL: readonly Command[] = [
   },
   {
     path: ['auth', 'logout'],
-    summary: 'Revoke the stored browser session and forget it',
-    description: "Leaves an access token or API key pair in the config alone: those are not this command's to drop.",
+    summary: 'Forget the stored credential, revoking it first if it is a browser session',
+    description:
+      'An access token cannot be revoked from here, only forgotten. JINSHUJU_ACCESS_TOKEN is not ' +
+      "this command's to drop.",
     options: local('--auth-host', '--client-id')
   },
   {
     path: ['config', 'get'],
     summary: 'Read one configuration value',
-    description: `Keys: ${CONFIG_KEYS.join(', ')}. Secrets are masked unless --show-secret says otherwise.`,
+    description: `Keys: ${CONFIG_KEYS.join(', ')}. Credentials are not config: \`auth login\` stores them.`,
     args: [{ name: 'key', required: true, description: `One of ${CONFIG_KEYS.join(', ')}` }],
-    options: local('--show-secret'),
-    examples: ['jinshuju config get api_key', 'jinshuju config get access_token --show-secret']
+    examples: ['jinshuju config get host']
   },
   {
     path: ['config', 'set'],
     summary: 'Write one configuration value',
     description:
-      `Keys: ${CONFIG_KEYS.join(', ')}. The file is written with mode 600. Environment variables ` +
-      'of the same name (JINSHUJU_ACCESS_TOKEN, JINSHUJU_API_KEY, …) outrank whatever is stored here.',
+      `Keys: ${CONFIG_KEYS.join(', ')}. The file is written with mode 600. JINSHUJU_HOST, ` +
+      'JINSHUJU_AUTH_HOST and JINSHUJU_OAUTH_CLIENT_ID outrank whatever is stored here.',
     args: [
       { name: 'key', required: true, description: `One of ${CONFIG_KEYS.join(', ')}` },
       { name: 'value', required: true, description: 'The value to store' }
     ],
-    examples: ['jinshuju config set access_token xxx', 'jinshuju config set host https://jinshuju.net']
+    examples: ['jinshuju config set host https://jinshuju.net']
   },
   {
     path: ['config', 'unset'],
     summary: 'Remove one configuration value',
     args: [{ name: 'key', required: true, description: `One of ${CONFIG_KEYS.join(', ')}` }],
-    examples: ['jinshuju config unset api_secret']
+    examples: ['jinshuju config unset host']
   }
 ];

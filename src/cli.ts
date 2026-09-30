@@ -57,11 +57,7 @@ async function runRemote(
       loadConfig({
         configPath: (options.config as string) ?? defaultConfigPath,
         env: runtime.env,
-        cli: {
-          apiKey: options.api_key as string | undefined,
-          apiSecret: options.api_secret as string | undefined,
-          host: options.host as string | undefined
-        }
+        cli: { host: options.host as string | undefined }
       })
     );
 
