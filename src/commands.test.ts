@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,18 +37,6 @@ function createMockClient() {
   };
 }
 
-test('auth status reports configured credentials and supports API key mode', async () => {
-  const result = await cli(['auth', 'status', '--output', 'json'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }
-  });
-
-  assert.equal(result.exitCode, 0);
-  const body = JSON.parse(result.stdout);
-  assert.equal(body.authenticated, true);
-  assert.equal(body.mode, 'api_key_secret');
-  assert.equal(body.sources.apiKey, 'env');
-});
-
 test('form create posts API v1 payload without injecting api_code', async () => {
   const mock = createMockClient();
   const payload = {
@@ -60,7 +48,7 @@ test('form create posts API v1 payload without injecting api_code', async () => 
   };
 
   const result = await cli(['form', 'create', '--json', JSON.stringify(payload), '--output', 'json'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: mock.client
   });
 
@@ -72,7 +60,7 @@ test('form create posts API v1 payload without injecting api_code', async () => 
 });
 
 test('form and table create check the shape of the payload, and leave the type vocabulary to the server', async () => {
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   // A type this CLI has never heard of goes through: the server knows the list.
   const unknownType = createMockClient();
@@ -120,7 +108,7 @@ test('text output for API commands prints a human-readable response instead of J
   };
 
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -147,7 +135,7 @@ test('form get renders its fields as a table in text output', async () => {
   };
 
   const result = await cli(['form', 'get', 'Kp7mQ2', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -177,7 +165,7 @@ test('nested objects are indented instead of dumped as JSON, and long strings ar
   };
 
   const result = await cli(['form', 'get', 'Kp7mQ2', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -205,7 +193,7 @@ test('table columns line up when cells hold full-width characters', async () => 
   };
 
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -236,7 +224,7 @@ test('--labels heads each column with the field label instead of losing the colu
   };
 
   const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--labels', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -269,7 +257,7 @@ test('a summary keeps its buckets, by giving up the table for the rows that carr
   };
 
   const result = await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -294,7 +282,7 @@ test('an empty bucket list is no reason to give up the table', async () => {
   };
 
   const result = await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -320,7 +308,7 @@ test('a listing spends its width on the values, and on timestamps only if they s
     }
   };
   const args = ['entry', 'list', '--form', 'Kp7mQ2', '--output', 'text'];
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   const wide = await cli(args, { env, client, width: 200 });
   assert.equal(wide.exitCode, 0);
@@ -344,7 +332,7 @@ test('entry list forwards the cursor back verbatim', async () => {
   const mock = createMockClient();
 
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--next', '51'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: mock.client
   });
 
@@ -358,11 +346,11 @@ test('form list and a view listing also forward the cursor', async () => {
   const viewEntries = createMockClient();
 
   await cli(['form', 'list', '--next', '60cc514761936ced06123456'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: formList.client
   });
   await cli(['entry', 'list', '--form', 'BaLZpn', '--view', 'Mixqc1', '--next', '51'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: viewEntries.client
   });
 
@@ -374,7 +362,7 @@ test('--limit rides along on listings, including the two without a cursor', asyn
   const entries = createMockClient();
   const folders = createMockClient();
   const members = createMockClient();
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   await cli(['entry', 'list', '--form', 'BaLZpn', '--limit', '5'], { env, client: entries.client });
   await cli(['folder', 'list', '--limit', '5'], { env, client: folders.client });
@@ -388,7 +376,7 @@ test('--limit rides along on listings, including the two without a cursor', asyn
 test('account me asks who is signed in, not what the account holds', async () => {
   const mock = createMockClient();
   await cli(['account', 'me'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: mock.client
   });
 
@@ -483,7 +471,7 @@ test('account invoice, account payment and sms status read their own endpoints',
 
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: createMockClient().client
   });
 
@@ -500,7 +488,7 @@ test('view get names its container flags and its token argument', async () => {
   assert.match(result.stdout, /--table/);
 });
 
-test('an access token is sent as a bearer, and outranks the other credentials', async () => {
+test('an access token is sent as a bearer, and an API key pair is never sent', async () => {
   const seen: (string | undefined)[] = [];
   const fetchMock = async (_url: unknown, init: { headers: Record<string, string> }) => {
     seen.push(init.headers.Authorization);
@@ -510,16 +498,13 @@ test('an access token is sent as a bearer, and outranks the other credentials', 
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   try {
     await cli(['form', 'list'], { env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc' } });
-    // A stored API key must not win over a token the caller set for this run.
-    await cli(['form', 'list'], {
-      env: { JINSHUJU_ACCESS_TOKEN: 'tok_abc', JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }
-    });
-    await cli(['form', 'list'], { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' } });
+    const keyOnly = await cli(['form', 'list'], { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' } });
+    assert.equal(keyOnly.exitCode, 3);
   } finally {
     globalThis.fetch = original;
   }
 
-  assert.deepEqual(seen, ['Bearer tok_abc', 'Bearer tok_abc', `Basic ${Buffer.from('key:secret').toString('base64')}`]);
+  assert.deepEqual(seen, ['Bearer tok_abc']);
 });
 
 test('auth status names the access token and where it came from', async () => {
@@ -531,35 +516,114 @@ test('auth status names the access token and where it came from', async () => {
   assert.equal(body.source, 'env');
 });
 
-test('an access token is masked like the other secrets', async () => {
-  const { mkdtempSync, writeFileSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
+test('config holds no credentials: setting one is a usage error', async () => {
   const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
-  writeFileSync(path, JSON.stringify({ access_token: 'tok_abcdefghijkl' }));
-
-  const masked = await runCli(['config', 'get', '--config', path, '--output', 'json'], { env: {} });
-  assert.equal(JSON.parse(masked.stdout).access_token, 'tok_…ijkl');
-
-  const shown = await runCli(['config', 'get', '--config', path, '--show-secret', '--output', 'json'], { env: {} });
-  assert.equal(JSON.parse(shown.stdout).access_token, 'tok_abcdefghijkl');
+  for (const key of ['access_token', 'api_key', 'api_secret']) {
+    const result = await runCli(['config', 'set', key, 'x', '--config', path], { env: {} });
+    assert.equal(result.exitCode, 2, key);
+  }
 });
 
-test('config set accepts access_token', async () => {
-  const { mkdtempSync, readFileSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
-  const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
+/** A client answering the account lookup `auth login --access-token` spends, or refusing it with 401. */
+function accountClient(status = 200) {
+  const requests: HttpRequest[] = [];
+  return {
+    requests,
+    client: {
+      async request<T>(request: HttpRequest): Promise<T> {
+        requests.push(request);
+        if (status !== 200) throw new HttpError('Unauthorized', status, {});
+        return { id: 'acc1', name: 'Acme', plan: { name: 'Pro' } } as T;
+      }
+    }
+  };
+}
 
-  const result = await runCli(['config', 'set', 'access_token', 'tok_xyz', '--config', path], { env: {} });
+test('auth login --access-token checks the token, stores it in place of an OAuth session, and says whose it is', async () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
+  writeFileSync(
+    path,
+    JSON.stringify({
+      host: 'https://h',
+      auth: { type: 'oauth', auth_host: 'https://a', client_id: 'c', access_token: 'o' }
+    })
+  );
+  const { requests, client } = accountClient();
+
+  const result = await runCli(['auth', 'login', '--access-token', 'tok_new', '--config', path], { env: {}, client });
+
   assert.equal(result.exitCode, 0);
-  assert.equal(JSON.parse(readFileSync(path, 'utf8')).access_token, 'tok_xyz');
+  assert.match(result.stdout, /Account: Acme \(Pro\)/);
+  assert.equal(requests[0].path, '/api/v1/billing_account');
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {
+    host: 'https://h',
+    auth: { type: 'access_token', access_token: 'tok_new' }
+  });
+
+  const status = await runCli(['auth', 'status', '--output', 'json', '--config', path], { env: {} });
+  const body = JSON.parse(status.stdout);
+  assert.equal(body.mode, 'access_token');
+  assert.equal(body.source, 'file');
+});
+
+test('auth login --access-token stores nothing when the token is refused', async () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
+  const result = await runCli(['auth', 'login', '--access-token', 'tok_bad', '--config', path], {
+    env: {},
+    client: accountClient(401).client
+  });
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(existsSync(path), false);
+});
+
+test(
+  'auth login --no-open prints the URL to log in with, instead of waiting in silence',
+  { timeout: 5_000 },
+  async () => {
+    let written = '';
+    const original = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => {
+      written += chunk;
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const login = cli(['auth', 'login', '--no-open'], { env: {} });
+      while (!/https?:\/\/\S+/.test(written)) await new Promise((resolve) => setTimeout(resolve, 10));
+      // Refusing at the authorization server ends the login without a token exchange.
+      const authorize = new URL((written.match(/https?:\/\/\S+/) as RegExpMatchArray)[0]);
+      const redirect = new URL(authorize.searchParams.get('redirect_uri') ?? '');
+      redirect.searchParams.set('state', authorize.searchParams.get('state') ?? '');
+      redirect.searchParams.set('error', 'access_denied');
+      await fetch(redirect);
+      const result = await login;
+
+      assert.match(written, /^Open this URL in a browser to log in:\n/);
+      assert.equal(authorize.pathname, '/oauth/authorize');
+      assert.match(result.stderr, /access_denied/);
+    } finally {
+      process.stderr.write = original;
+    }
+  }
+);
+
+test('auth logout forgets a stored access token, and refresh says a token cannot be renewed', async () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'config.json');
+  writeFileSync(path, JSON.stringify({ host: 'https://h', auth: { type: 'access_token', access_token: 'tok' } }));
+
+  const refresh = await runCli(['auth', 'refresh', '--config', path], { env: {} });
+  assert.equal(refresh.exitCode, 3);
+  assert.match(refresh.stderr, /cannot be refreshed/);
+
+  const result = await runCli(['auth', 'logout', '--config', path], { env: {} });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), { host: 'https://h' });
 });
 
 test('entry count takes one container, or several through the batch endpoint', async () => {
   const one = createMockClient();
   const many = createMockClient();
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   await cli(['entry', 'count', '--table', 'Vn4xR8', '--keyword', '张三'], { env, client: one.client });
   await cli(['entry', 'count', '--form', 'Kp7mQ2', '--form', 'aB3dE9'], { env, client: many.client });
@@ -571,7 +635,7 @@ test('entry count takes one container, or several through the batch endpoint', a
 test('entry count refuses more containers than the endpoint accepts', async () => {
   const tokens = Array.from({ length: 11 }, (_, index) => ['--form', `Kp7mQ${index}`]).flat();
   const result = await cli(['entry', 'count', ...tokens], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: createMockClient().client
   });
 
@@ -599,7 +663,7 @@ test('entry aggregate turns --metric and --by into the JSON the API reads', asyn
       '--limit',
       '5'
     ],
-    { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }, client: mock.client }
+    { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client }
   );
 
   assert.equal(result.exitCode, 0);
@@ -627,7 +691,7 @@ test('entry aggregate reads as a table, while --output json keeps the shape a sc
     }
   };
   const args = ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'count:field_1', '--by', 'field_5'];
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   const asText = await cli([...args, '--output', 'text'], { env, client });
   assert.equal(asText.exitCode, 0);
@@ -657,7 +721,7 @@ test('an aggregate naming one column twice numbers the repeat instead of droppin
 
   const result = await cli(
     ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'count:field_1', '--output', 'text'],
-    { env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' }, client }
+    { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client }
   );
 
   assert.equal(result.exitCode, 0);
@@ -666,7 +730,7 @@ test('an aggregate naming one column twice numbers the repeat instead of droppin
 });
 
 test('entry aggregate needs a metric, and names the buckets a dimension may take', async () => {
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
   const noMetric = await cli(['entry', 'aggregate', '--form', 'Kp7mQ2'], { env, client: createMockClient().client });
   const badBucket = await cli(
     ['entry', 'aggregate', '--form', 'Kp7mQ2', '--metric', 'avg:field_3', '--by', 'created_at:quarter'],
@@ -683,7 +747,7 @@ test('entry summary asks for named fields and can drop the overview', async () =
   const mock = createMockClient();
 
   await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--fields', 'field_3,field_7', '--no-overview'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: mock.client
   });
 
@@ -693,7 +757,7 @@ test('entry summary asks for named fields and can drop the overview', async () =
   );
 });
 
-const WRITE_ENV = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+const WRITE_ENV = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
 test('field verbs all ride on the container PATCH, each in its own operation', async () => {
   const add = createMockClient();
@@ -1386,7 +1450,7 @@ test('entry import-status reads one job under its form', async () => {
 
 test('a global flag may come before the command, as a shell alias makes it', async () => {
   const mock = createMockClient();
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   // What `alias jsjl='jsj --config <path>'` expands to.
   const aliased = await runCli(['--config', NO_CONFIG, 'form', 'list'], { env, client: mock.client });
@@ -1405,7 +1469,7 @@ test('a global flag may come before the command, as a shell alias makes it', asy
 
 test('an unknown flag still ends the search for the command, so it is refused by name', async () => {
   const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--label'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: createMockClient().client
   });
 
@@ -1426,7 +1490,7 @@ test('a list of values is a cell, so a field asked for by name is in the table',
   };
 
   const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--fields', 'field_1,field_6', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -1444,7 +1508,7 @@ test('a column that is an empty list in every row is not a column', async () => 
   };
 
   const result = await cli(['form', 'list', '--output', 'text'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client
   });
 
@@ -1464,7 +1528,7 @@ test('a row the width would leave blank buys back the column that explains it', 
       } as T;
     }
   };
-  const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
   const narrow = await cli(['entry', 'search', '西安', '--output', 'text'], { env, client, width: 60 });
 
@@ -1478,7 +1542,7 @@ test('a row the width would leave blank buys back the column that explains it', 
 test('--fields is refused with --view, rather than accepted and dropped', async () => {
   const mock = createMockClient();
   const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--fields', 'field_1'], {
-    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
     client: mock.client
   });
 
@@ -2101,7 +2165,7 @@ test('help mentions jsj, the exit codes, and what a resource does not have', asy
   assert.match(form.stdout, /There is no delete, on purpose/);
 
   const auth = await cli(['auth', '--help'], { env: {} });
-  assert.match(auth.stdout, /config set access_token/);
+  assert.match(auth.stdout, /auth login --access-token/);
 
   const filter = await cli(['entry', 'list', '--help'], { env: {} });
   assert.match(filter.stdout, /Operators: eq ne gte gt lte lt like not_like/);

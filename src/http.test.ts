@@ -41,7 +41,7 @@ function clientFor(host: string) {
   return new JinshujuHttpClient(
     loadConfig({
       configPath: NO_CONFIG,
-      env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret', JINSHUJU_HOST: host }
+      env: { JINSHUJU_ACCESS_TOKEN: 'tok', JINSHUJU_HOST: host }
     })
   );
 }
@@ -185,7 +185,7 @@ function quickClient(host: string, options: { retries?: number; timeoutMs?: numb
   const client = new JinshujuHttpClient(
     loadConfig({
       configPath: NO_CONFIG,
-      env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret', JINSHUJU_HOST: host }
+      env: { JINSHUJU_ACCESS_TOKEN: 'tok', JINSHUJU_HOST: host }
     }),
     {
       ...options,

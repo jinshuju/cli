@@ -80,7 +80,6 @@ test('loginWithOAuth validates callback state, exchanges token, and stores OAuth
       env: {},
       authHost: authServer.url,
       clientId: 'cli-client',
-      openBrowser: true,
       timeoutMs: 5_000
     },
     async (url) => {

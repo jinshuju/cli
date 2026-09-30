@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 
 import { UsageError } from './errors.js';
 
-export type ConfigKey = 'access_token' | 'api_key' | 'api_secret' | 'host' | 'auth_host' | 'client_id';
+export type ConfigKey = 'host' | 'auth_host' | 'client_id';
 export type ConfigSource = 'cli' | 'env' | 'file' | 'missing';
 
 export type OAuthConfig = {
@@ -17,14 +17,18 @@ export type OAuthConfig = {
   scope?: string;
 };
 
+/** An access token stored by `auth login --access-token`. It takes the same slot as an OAuth session. */
+export type TokenConfig = {
+  type: 'access_token';
+  access_token: string;
+};
+
 export type LoadedConfig = {
   /**
-   * A personal or account access token, sent as a bearer. Goldendata accepts it
-   * on API v1 alongside the API key pair and an OAuth session.
+   * A personal or account access token, sent as a bearer: JINSHUJU_ACCESS_TOKEN,
+   * or the one `auth login --access-token` stored.
    */
   accessToken?: string;
-  apiKey?: string;
-  apiSecret?: string;
   host: string;
   authHost: string;
   clientId?: string;
@@ -34,8 +38,6 @@ export type LoadedConfig = {
   configPath: string;
   sources: {
     accessToken: ConfigSource;
-    apiKey: ConfigSource;
-    apiSecret: ConfigSource;
     host: ConfigSource;
     authHost: ConfigSource;
     clientId: ConfigSource;
@@ -47,9 +49,6 @@ export type LoadConfigOptions = {
   configPath?: string;
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
   cli?: {
-    accessToken?: string;
-    apiKey?: string;
-    apiSecret?: string;
     host?: string;
     authHost?: string;
     clientId?: string;
@@ -62,7 +61,11 @@ export const defaultAuthHost = 'https://account.jinshuju.net';
 export const defaultOAuthClientId = 'jinshuju_cli_public';
 export const defaultScopes = 'public forms read_entries write_entries form_setting read_contacts users';
 
-export type RawConfig = Partial<Record<ConfigKey, string>> & { auth?: OAuthConfig };
+/**
+ * One credential at a time: a login of either kind replaces whatever the last
+ * one stored, so the file never holds two that disagree about who is calling.
+ */
+export type RawConfig = Partial<Record<ConfigKey, string>> & { auth?: OAuthConfig | TokenConfig };
 
 function readConfigFile(configPath: string): RawConfig {
   if (!existsSync(configPath)) return {};
@@ -128,30 +131,27 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
   const configPath = options.configPath ?? defaultConfigPath;
   const env = options.env ?? process.env;
   const file = readConfigFile(configPath);
-  const accessToken = pickValue(options.cli?.accessToken, env.JINSHUJU_ACCESS_TOKEN, file.access_token);
-  const apiKey = pickValue(options.cli?.apiKey, env.JINSHUJU_API_KEY, file.api_key);
-  const apiSecret = pickValue(options.cli?.apiSecret, env.JINSHUJU_API_SECRET, file.api_secret);
+  const auth = file.auth?.type === 'oauth' ? file.auth : undefined;
+  const storedToken = file.auth?.type === 'access_token' ? file.auth.access_token : undefined;
+  const accessToken = pickValue(undefined, env.JINSHUJU_ACCESS_TOKEN, storedToken);
   const host = pickValue(options.cli?.host, env.JINSHUJU_HOST, file.host, defaultHost);
   const authHost = pickValue(
     options.cli?.authHost,
     env.JINSHUJU_AUTH_HOST,
-    file.auth_host ?? file.auth?.auth_host,
+    file.auth_host ?? auth?.auth_host,
     defaultAuthHost
   );
   const defaultClientId = authHost.value === defaultAuthHost ? defaultOAuthClientId : undefined;
   const clientId = pickValue(
     options.cli?.clientId,
     env.JINSHUJU_OAUTH_CLIENT_ID,
-    file.client_id ?? file.auth?.client_id,
+    file.client_id ?? auth?.client_id,
     defaultClientId
   );
-  const auth = file.auth?.type === 'oauth' ? file.auth : undefined;
   const timeoutMs = parseTimeout(env.JINSHUJU_TIMEOUT_MS);
 
   return {
     accessToken: accessToken.value,
-    apiKey: apiKey.value,
-    apiSecret: apiSecret.value,
     host: host.value,
     authHost: authHost.value,
     clientId: clientId.value,
@@ -160,8 +160,6 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     configPath,
     sources: {
       accessToken: accessToken.source,
-      apiKey: apiKey.source,
-      apiSecret: apiSecret.source,
       host: host.source,
       authHost: authHost.source,
       clientId: clientId.source,
@@ -198,7 +196,14 @@ export function saveOAuthConfig(configPath: string, auth: OAuthConfig): void {
   writeConfigFile(configPath, config);
 }
 
-export function clearOAuthConfig(configPath: string): void {
+export function saveAccessToken(configPath: string, accessToken: string): void {
+  const config = readConfigFile(configPath);
+  config.auth = { type: 'access_token', access_token: accessToken };
+  writeConfigFile(configPath, config);
+}
+
+/** Forgets the stored credential, whichever kind it is. */
+export function clearCredential(configPath: string): void {
   const config = readConfigFile(configPath);
   delete config.auth;
   writeConfigFile(configPath, config);
@@ -208,21 +213,8 @@ export function getConfig(configPath: string): RawConfig {
   return readConfigFile(configPath);
 }
 
-export function maskSecret(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  if (value.length <= 8) return '••••';
-  return `${value.slice(0, 4)}…${value.slice(-4)}`;
-}
-
 /** Every key the config file holds, in the order help should list them. */
-export const CONFIG_KEYS: readonly ConfigKey[] = [
-  'access_token',
-  'api_key',
-  'api_secret',
-  'host',
-  'auth_host',
-  'client_id'
-];
+export const CONFIG_KEYS: readonly ConfigKey[] = ['host', 'auth_host', 'client_id'];
 
 export function assertConfigKey(value: string): asserts value is ConfigKey {
   if (!(CONFIG_KEYS as readonly string[]).includes(value)) {

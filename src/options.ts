@@ -49,15 +49,13 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
  * in it is a flag nobody knows about.
  */
 export const LOCAL_OPTIONS: readonly OptionSpec[] = [
-  { name: '--api-key', type: 'string', placeholder: '<key>', description: 'Override API key' },
-  { name: '--api-secret', type: 'string', placeholder: '<secret>', description: 'Override API secret' },
+  { name: '--access-token', type: 'string', placeholder: '<token>', description: 'Log in with an access token' },
   { name: '--host', type: 'string', placeholder: '<url>', description: 'API host' },
   { name: '--auth-host', type: 'string', placeholder: '<url>', description: 'OAuth host' },
   { name: '--client-id', type: 'string', placeholder: '<id>', description: 'OAuth public client id' },
   { name: '--scopes', type: 'string', placeholder: '<scopes>', description: 'Space-separated OAuth scopes' },
   { name: '--no-open', type: 'boolean', description: 'Print the login URL instead of opening a browser' },
-  { name: '--verify', type: 'boolean', description: 'Verify the credentials with a lightweight call' },
-  { name: '--show-secret', type: 'boolean', description: 'Show secrets unmasked' }
+  { name: '--verify', type: 'boolean', description: 'Verify the credentials with a lightweight call' }
 ];
 
 /** The data container a command acts on. Mutually exclusive; both map to form_token. */
@@ -157,7 +155,7 @@ export const MINE_OPTION: OptionSpec = {
 
 export { UsageError } from './errors.js';
 
-/** `--api-key` reads back as `api_key`. */
+/** `--auth-host` reads back as `auth_host`. */
 export function optionKey(spec: OptionSpec): string {
   return spec.name.replace(/^--/, '').replace(/-/g, '_');
 }

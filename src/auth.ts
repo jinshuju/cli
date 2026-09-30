@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 
 import { AuthError } from './errors.js';
 import {
-  clearOAuthConfig,
+  clearCredential,
   defaultScopes,
   loadConfig,
   saveOAuthConfig,
@@ -26,7 +26,6 @@ export type OAuthLoginOptions = LoadConfigOptions & {
   authHost?: string;
   clientId?: string;
   scopes?: string;
-  openBrowser?: boolean;
   timeoutMs?: number;
   port?: number;
 };
@@ -97,7 +96,7 @@ export async function loginWithOAuth(
   // state, a refusal — and a rejection nobody is awaiting yet is reported as
   // unhandled. It is awaited right below; this only says so in the meantime.
   callback.code.catch(() => undefined);
-  if (options.openBrowser !== false) await opener(authorizeUrl);
+  await opener(authorizeUrl);
   const code = await callback.code;
   const token = await exchangeAuthorizationCode(config.authHost, clientId, callback.redirectUri, code, verifier);
   const auth = toOAuthConfig(config, clientId, token);
@@ -121,16 +120,21 @@ export async function refreshOAuthToken(config: LoadedConfig): Promise<OAuthConf
   return auth;
 }
 
-export async function revokeOAuthToken(config: LoadedConfig): Promise<void> {
-  if (!config.auth?.access_token) return;
-  const url = new URL('/oauth/revoke', config.auth.auth_host);
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({ client_id: config.auth.client_id, token: config.auth.access_token }),
-    signal: AbortSignal.timeout(config.timeoutMs ?? TOKEN_TIMEOUT_MS)
-  }).catch(() => undefined);
-  clearOAuthConfig(config.configPath);
+/**
+ * Revokes a stored OAuth session, then forgets whatever credential is stored.
+ * An access token has no revoke endpoint here; it is only forgotten.
+ */
+export async function logout(config: LoadedConfig): Promise<void> {
+  if (config.auth?.access_token) {
+    const url = new URL('/oauth/revoke', config.auth.auth_host);
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: new URLSearchParams({ client_id: config.auth.client_id, token: config.auth.access_token }),
+      signal: AbortSignal.timeout(config.timeoutMs ?? TOKEN_TIMEOUT_MS)
+    }).catch(() => undefined);
+  }
+  clearCredential(config.configPath);
 }
 
 export function shouldRefresh(auth: OAuthConfig, skewMs = 60_000): boolean {

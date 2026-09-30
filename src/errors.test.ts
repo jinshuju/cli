@@ -10,7 +10,7 @@ import { AuthError, RefusedError, UsageError, classify } from './errors.js';
 import { HttpError, TransportError } from './http.js';
 
 const NO_CONFIG = join(mkdtempSync(join(tmpdir(), 'jsj-errors-')), 'config.json');
-const ENV = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
+const ENV = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
 test('every kind of failure has its own exit code', () => {
   assert.equal(classify(new UsageError('x')).exitCode, 2);

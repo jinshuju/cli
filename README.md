@@ -29,30 +29,27 @@ its execute bit — `npm run build` restores it.
 
 ## Authentication
 
-Three kinds of credential are supported: an access token (personal or account),
-an API key and secret pair, and an interactive browser login.
-
-Write them to the config file (`~/.jinshuju/config.json`, mode 600):
+Two kinds of credential are supported: an interactive browser login (OAuth),
+and an access token (personal or account). Both go in through `auth login`:
 
 ```bash
-jinshuju config set access_token xxx     # access token
-jinshuju config set api_key xxx          # or API key / secret
-jinshuju config set api_secret xxx
+jinshuju auth login                          # browser login
+jinshuju auth login --access-token xxx       # access token, checked before it is stored
 ```
 
-Environment variables work just as well, which suits CI and scripts:
+Either one is written to the config file (`~/.jinshuju/config.json`, mode 600)
+and replaces whatever credential was stored before. `jinshuju auth logout`
+forgets it (revoking it first, for a browser session).
+
+For CI and scripts, an environment variable works without touching the file:
 
 ```bash
 export JINSHUJU_ACCESS_TOKEN=xxx
-# or
-export JINSHUJU_API_KEY=xxx
-export JINSHUJU_API_SECRET=xxx
 ```
 
-The **precedence** is access token, then API key and secret, then a stored
-browser login (`jinshuju auth login`). An explicitly configured credential
-always beats a stored session: setting a token and then acting as last week's
-login is a surprise nobody wants. `jinshuju auth status` reports which
+The **precedence** is `JINSHUJU_ACCESS_TOKEN`, then the stored credential. A
+token set for this run always beats a stored login: acting as last week's
+login instead is a surprise nobody wants. `jinshuju auth status` reports which
 credential is in use and where it came from:
 
 ```
@@ -60,8 +57,8 @@ $ jinshuju auth status
 Authenticated with an access token (from env).
 ```
 
-Access tokens are masked in `config get` like any other secret; pass
-`--show-secret` for the full value.
+`config set` holds only `host`, `auth_host` and `client_id`; credentials are
+not config.
 
 ## Creating forms
 
