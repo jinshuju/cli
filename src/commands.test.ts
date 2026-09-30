@@ -281,6 +281,31 @@ test('a summary keeps its buckets, by giving up the table for the rows that carr
   assert.match(result.stdout, /^tz: Asia\/Shanghai$/m);
 });
 
+test('stats by day keeps each day\'s forms in text output', async () => {
+  const row = { token: 'Kp7mQ2', name: '报修单', kind: 'form', fill_count: 8 };
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        total: 8,
+        data: [row],
+        days: [
+          { date: '2026-09-28', total: 8, data: [row] },
+          { date: '2026-09-29', total: 0, data: [] }
+        ]
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'stats', '--from', '2026-09-28', '--to', '2026-09-29', '--by', 'day'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^ {2}date: 2026-09-28$/m);
+  assert.match(result.stdout, /^ {2}Kp7mQ2\s+报修单\s+form\s+8\s*$/m);
+});
+
 test('an empty bucket list is no reason to give up the table', async () => {
   const client = {
     async request<T>(): Promise<T> {
@@ -577,6 +602,17 @@ test('entry count refuses more containers than the endpoint accepts', async () =
 
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /at most 10 containers/);
+});
+
+test('entry stats splits the range by day in one request', async () => {
+  const mock = createMockClient();
+
+  await cli(['entry', 'stats', '--from', '2026-09-28', '--to', '2026-09-30', '--by', 'day'], {
+    env: { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' },
+    client: mock.client
+  });
+
+  assert.equal(url(mock.requests[0]), '/api/v1/entries/stats?from=2026-09-28&to=2026-09-30&by=day');
 });
 
 test('entry aggregate turns --metric and --by into the JSON the API reads', async () => {

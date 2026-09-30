@@ -242,6 +242,7 @@ jinshuju entry search repair --scope-filter 'entries_count gt 100'   # picks whi
 
 jinshuju entry stats --from 2026-09-01                # how much each form received in the period
 jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10
+jinshuju entry stats --from 2026-09-28 --by day       # the same, split into each day, in one call
 ```
 
 A form that could not be searched stays in the result **with the reason**,
