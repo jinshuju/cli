@@ -2226,3 +2226,358 @@ test('help mentions jsj, the exit codes, and what a resource does not have', asy
   const filter = await cli(['entry', 'list', '--help'], { env: {} });
   assert.match(filter.stdout, /Operators: eq ne gte gt lte lt like not_like/);
 });
+
+// --- routine -----------------------------------------------------------------
+
+const ROUTINE_ID = '6ac5f0e2b1d4c3a2f1e0d9c8';
+
+test('each routine verb is the one request it names', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['routine', ...args], { env: WRITE_ENV, client: mock.client });
+
+  for (const args of [
+    ['list'],
+    ['get', ROUTINE_ID],
+    ['create', '--name', '日报'],
+    ['update', ROUTINE_ID, '--name', '日报'],
+    ['pause', ROUTINE_ID],
+    ['resume', ROUTINE_ID],
+    ['run', ROUTINE_ID],
+    ['delete', ROUTINE_ID, '--yes'],
+    ['runs', ROUTINE_ID]
+  ]) {
+    const result = await run(args);
+    assert.equal(result.exitCode, 0, `routine ${args.join(' ')}: ${result.stderr}`);
+  }
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${url(request)}`),
+    [
+      'GET /api/v1/routines',
+      `GET /api/v1/routines/${ROUTINE_ID}`,
+      'POST /api/v1/routines',
+      `PATCH /api/v1/routines/${ROUTINE_ID}`,
+      `POST /api/v1/routines/${ROUTINE_ID}/pause`,
+      `POST /api/v1/routines/${ROUTINE_ID}/resume`,
+      `POST /api/v1/routines/${ROUTINE_ID}/run`,
+      `DELETE /api/v1/routines/${ROUTINE_ID}`,
+      `GET /api/v1/routines/${ROUTINE_ID}/runs`
+    ]
+  );
+  // pause, resume and run say everything in their path.
+  for (const request of mock.requests.slice(4, 7)) assert.equal(request.body, undefined);
+});
+
+test('routine delete refuses until it is confirmed, and sends nothing', async () => {
+  const mock = createMockClient();
+
+  const guarded = await cli(['routine', 'delete', ROUTINE_ID], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(guarded.exitCode, 2);
+  assert.match(guarded.stderr, /Deleting routine 6ac5f0e2b1d4c3a2f1e0d9c8 is permanent; pass --yes/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('routine list filters by state and pages like every listing; runs pages too', async () => {
+  const mock = createMockClient();
+  const env = WRITE_ENV;
+
+  await cli(['routine', 'list', '--state', 'paused', '--limit', '5', '--next', 'abc'], { env, client: mock.client });
+  await cli(['routine', 'runs', ROUTINE_ID, '--limit', '3', '--next', 'r2'], { env, client: mock.client });
+  const wrong = await cli(['routine', 'list', '--state', 'running'], { env, client: mock.client });
+
+  assert.equal(url(mock.requests[0]), '/api/v1/routines?state=paused&limit=5&next=abc');
+  assert.equal(url(mock.requests[1]), `/api/v1/routines/${ROUTINE_ID}/runs?limit=3&next=r2`);
+  assert.equal(wrong.exitCode, 2);
+  assert.match(wrong.stderr, /--state must be one of active, paused/);
+  assert.equal(mock.requests.length, 2);
+});
+
+test('routine list --all and runs --all follow the cursor the API hands back', async () => {
+  for (const args of [
+    ['list', '--state', 'active'],
+    ['runs', ROUTINE_ID]
+  ]) {
+    const requests: HttpRequest[] = [];
+    const client = {
+      async request<T>(request: HttpRequest): Promise<T> {
+        requests.push(request);
+        const page = requests.length;
+        return { data: [{ id: `r${page}` }], next: page < 3 ? `c${page}` : null } as T;
+      }
+    };
+
+    const result = await cli(['routine', ...args, '--all', '--output', 'json'], { env: WRITE_ENV, client });
+
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(
+      requests.map((request) => request.query?.next),
+      [undefined, 'c1', 'c2']
+    );
+    assert.deepEqual(
+      JSON.parse(result.stdout).data.map((row: { id: string }) => row.id),
+      ['r1', 'r2', 'r3']
+    );
+  }
+});
+
+test('--schedule spells each of the six frequencies as the schedule the API reads', async () => {
+  const cases: [string, Record<string, unknown>][] = [
+    ['once 2026-10-12 09:00', { freq: 'once', at: '2026-10-12T09:00' }],
+    ['once 2026-10-12T09:00+08:00', { freq: 'once', at: '2026-10-12T09:00+08:00' }],
+    ['hourly 30', { freq: 'hourly', minute: 30 }],
+    ['daily 09:00', { freq: 'daily', time: '09:00' }],
+    ['workdays 08:30', { freq: 'workdays', time: '08:30' }],
+    ['weekly 1,5 09:00', { freq: 'weekly', weekdays: [1, 5], time: '09:00' }],
+    ['monthly 1,15,-1 18:00', { freq: 'monthly', month_days: [1, 15, -1], time: '18:00' }]
+  ];
+
+  for (const [spec, schedule] of cases) {
+    const mock = createMockClient();
+    const result = await cli(
+      [
+        'routine',
+        'create',
+        '--name',
+        '日报',
+        '--instruction',
+        '汇总昨天新增的报名',
+        '--object',
+        'form:Kp7mQ2',
+        '--schedule',
+        spec
+      ],
+      { env: WRITE_ENV, client: mock.client }
+    );
+
+    assert.equal(result.exitCode, 0, `${spec}: ${result.stderr}`);
+    assert.deepEqual(mock.requests[0].body, {
+      name: '日报',
+      instruction: '汇总昨天新增的报名',
+      objects: [{ kind: 'form', token: 'Kp7mQ2' }],
+      trigger_kind: 'schedule',
+      schedule
+    });
+  }
+});
+
+test('--schedule and --object refuse what they cannot read, before anything is sent', async () => {
+  const mock = createMockClient();
+  const refused: [string[], RegExp][] = [
+    [['--schedule', 'yearly 09:00'], /--schedule must be one of 'once <YYYY-MM-DD> <HH:MM>'/],
+    [['--schedule', 'weekly 09:00'], /--schedule 'weekly' must be 'weekly <weekdays> <HH:MM>'/],
+    [['--schedule', 'daily'], /--schedule 'daily' must be 'daily <HH:MM>'/],
+    [['--schedule', 'monthly 1,last 09:00'], /--schedule monthly days must be whole numbers/],
+    [['--schedule', 'hourly :30'], /--schedule hourly takes the minute/],
+    [['--object', 'Kp7mQ2'], /--object must be '<kind>:<token>'/],
+    [['--object', 'form:'], /--object must be '<kind>:<token>'/],
+    [['--json', '[1]'], /--json must be a JSON object/]
+  ];
+
+  for (const [flags, message] of refused) {
+    const result = await cli(['routine', 'create', ...flags], { env: WRITE_ENV, client: mock.client });
+    assert.equal(result.exitCode, 2, flags.join(' '));
+    assert.match(result.stderr, message);
+  }
+  assert.equal(mock.requests.length, 0);
+});
+
+test('routine flags lay over --json: a given flag wins, and one left out keeps the payload', async () => {
+  const event = {
+    name: '新报名通知',
+    instruction: '有新报名时通知我',
+    objects: [{ kind: 'table', token: 'Vn4xR8' }],
+    trigger_kind: 'event',
+    event: {
+      source_kind: 'form',
+      source_token: 'Kp7mQ2',
+      on: 'matched',
+      scope_conditions: [{ trigger: 'field_5', operator: 'eq', value: 'code_vip', group_index: 0 }],
+      include_bulk: true
+    }
+  };
+  const kept = createMockClient();
+  const renamed = createMockClient();
+  const rescheduled = createMockClient();
+
+  await cli(['routine', 'create', '--json', JSON.stringify(event)], { env: WRITE_ENV, client: kept.client });
+  await cli(['routine', 'create', '--json', JSON.stringify(event), '--name', 'VIP 报名', '--object', 'form:Kp7mQ2'], {
+    env: WRITE_ENV,
+    client: renamed.client
+  });
+  await cli(['routine', 'update', ROUTINE_ID, '--json', JSON.stringify(event), '--schedule', 'daily 09:00'], {
+    env: WRITE_ENV,
+    client: rescheduled.client
+  });
+
+  assert.deepEqual(kept.requests[0].body, event);
+  assert.deepEqual(renamed.requests[0].body, {
+    ...event,
+    name: 'VIP 报名',
+    objects: [{ kind: 'form', token: 'Kp7mQ2' }]
+  });
+  const switched = rescheduled.requests[0].body as Record<string, unknown>;
+  assert.equal(switched.trigger_kind, 'schedule');
+  assert.deepEqual(switched.schedule, { freq: 'daily', time: '09:00' });
+  assert.equal(switched.instruction, event.instruction);
+});
+
+test('routine update sends only what was named', async () => {
+  const mock = createMockClient();
+
+  await cli(['routine', 'update', ROUTINE_ID, '--instruction', '改为按周汇总'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  await cli(['routine', 'update', ROUTINE_ID, '--object', 'form:Kp7mQ2', '--object', 'view:aB3dE9'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.deepEqual(mock.requests[0].body, { instruction: '改为按周汇总' });
+  assert.deepEqual(mock.requests[1].body, {
+    objects: [
+      { kind: 'form', token: 'Kp7mQ2' },
+      { kind: 'view', token: 'aB3dE9' }
+    ]
+  });
+});
+
+test('delete_authorized has no flag, and in --json it goes to the server to refuse', async () => {
+  const mock = createMockClient();
+
+  const flag = await cli(['routine', 'create', '--name', '清理', '--delete-authorized'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const payload = await cli(['routine', 'update', ROUTINE_ID, '--json', '{"delete_authorized":false}'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(flag.exitCode, 2);
+  assert.match(flag.stderr, /does not take --delete-authorized/);
+  assert.equal(payload.exitCode, 0);
+  assert.equal(mock.requests.length, 1);
+  assert.deepEqual(mock.requests[0].body, { delete_authorized: false });
+});
+
+test("a routine refused by the server exits as refused, in the page's own words", async () => {
+  const failing = (status: number, body: Record<string, unknown>) => ({
+    async request(): Promise<never> {
+      throw new HttpError(String(body.error_description), status, body);
+    }
+  });
+  const full = {
+    error_description: '最多同时启用 20 个自动任务，请先暂停或删除一些',
+    errors: [{ code: 'active_limit', message: '最多同时启用 20 个自动任务，请先暂停或删除一些' }]
+  };
+
+  const refused = await cli(['routine', 'resume', ROUTINE_ID, '--output', 'json'], {
+    env: WRITE_ENV,
+    client: failing(422, full)
+  });
+  const missing = await cli(['routine', 'get', ROUTINE_ID], {
+    env: WRITE_ENV,
+    client: failing(404, { error_description: 'Not found' })
+  });
+  const running = await cli(['routine', 'create', '--name', 'x'], {
+    env: WRITE_ENV,
+    client: failing(403, { error_description: '自动任务运行时不能管理自动任务' })
+  });
+
+  assert.equal(refused.exitCode, 5);
+  const error = JSON.parse(refused.stderr).error;
+  assert.equal(error.kind, 'refused');
+  assert.equal(error.body.errors[0].code, 'active_limit');
+  assert.equal(missing.exitCode, 4);
+  assert.equal(running.exitCode, 3);
+  assert.match(running.stderr, /自动任务运行时不能管理自动任务/);
+});
+
+const ROUTINE = {
+  id: ROUTINE_ID,
+  name: '每周报名汇总',
+  instruction: '汇总上周报名表新增的数据，按渠道统计条数',
+  state: 'active',
+  paused_reason: null,
+  trigger_kind: 'schedule',
+  trigger_text: '每周一 09:00',
+  schedule: { freq: 'weekly', weekdays: [1], time: '09:00', tz: 'Asia/Shanghai' },
+  next_runs: ['2026-10-12T09:00:00+08:00', '2026-10-19T09:00:00+08:00'],
+  event: null,
+  objects: [{ kind: 'form', token: 'Kp7mQ2', name: '报名表', parent_name: null }],
+  delete_authorized: false,
+  runs_count: 0,
+  last_run: null,
+  url: `https://jinshuju.net/jiri/routines/${ROUTINE_ID}`,
+  created_at: '2026-10-07T10:00:00+08:00',
+  updated_at: '2026-10-07T10:00:00+08:00'
+};
+
+test('routine list reads as id, name, state, trigger and next run, one page or all of them', async () => {
+  const paused = {
+    ...ROUTINE,
+    id: 'f00d',
+    name: '月报',
+    state: 'paused',
+    trigger_text: '每月最后一天 18:00',
+    next_runs: []
+  };
+  const answering = (body: unknown) => ({
+    async request<T>(): Promise<T> {
+      return body as T;
+    }
+  });
+  const listing = { total: 2, count: 2, data: [ROUTINE, paused], next: null };
+
+  const page = await cli(['routine', 'list'], { env: WRITE_ENV, client: answering(listing) });
+  const all = await cli(['routine', 'list', '--all'], { env: WRITE_ENV, client: answering(listing) });
+  const json = await cli(['routine', 'list', '--output', 'json'], { env: WRITE_ENV, client: answering(listing) });
+
+  for (const { stdout } of [page, all]) {
+    assert.match(stdout, /id\s+name\s+state\s+trigger\s+next_run/);
+    assert.match(
+      stdout,
+      new RegExp(`${ROUTINE_ID}\\s+每周报名汇总\\s+active\\s+每周一 09:00\\s+2026-10-12T09:00:00\\+08:00`)
+    );
+    assert.match(stdout, /f00d\s+月报\s+paused\s+每月最后一天 18:00/);
+    assert.doesNotMatch(stdout, /汇总上周报名表/);
+  }
+  // json is what the API answered, every key of it.
+  assert.deepEqual(JSON.parse(json.stdout), listing);
+});
+
+test('routine get shows when it runs, the next runs, its objects and the link to the page', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return ROUTINE as T;
+    }
+  };
+
+  const result = await cli(['routine', 'get', ROUTINE_ID], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^trigger_text: 每周一 09:00$/m);
+  assert.match(result.stdout, /^next_runs:\n {2}2026-10-12T09:00:00\+08:00\n {2}2026-10-19T09:00:00\+08:00$/m);
+  assert.match(result.stdout, /^objects:\n {2}token\s+name\s+kind/m);
+  assert.match(result.stdout, /Kp7mQ2\s+报名表\s+form/);
+  assert.match(result.stdout, new RegExp(`^url: https://jinshuju.net/jiri/routines/${ROUTINE_ID}$`, 'm'));
+});
+
+test('routine create --help spells out every frequency, event and condition', async () => {
+  const { stdout } = await cli(['routine', 'create', '--help'], { env: {} });
+
+  for (const freq of ['once', 'hourly', 'daily', 'workdays', 'weekly', 'monthly']) {
+    assert.match(stdout, new RegExp(`\\n {4}${freq} `), `${freq} is not described`);
+  }
+  assert.match(stdout, /Beijing time/);
+  assert.match(stdout, /1 is Monday, 7 is Sunday/);
+  assert.match(stdout, /-1 for the last day/);
+  assert.match(stdout, /on created/);
+  assert.match(stdout, /on updated/);
+  assert.match(stdout, /on matched/);
+  assert.match(stdout, /group_index/);
+  assert.match(stdout, /delete_authorized cannot be set here/);
+  assert.match(stdout, /--schedule 'weekly 1 09:00'/);
+});

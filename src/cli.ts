@@ -89,7 +89,10 @@ async function runRemote(
     }
     const rows: unknown[] = [];
     await readAllPages(client, request, command.paginate, progress(), (page) => rows.push(...page));
-    return ok(format({ count: rows.length, data: rows }, output, width, hints));
+    const listing = { count: rows.length, data: rows };
+    // Every page read is still one listing, and reads the way a single page does.
+    if (output === 'text' && command.render) return ok(format(command.render(listing), output, width, hints));
+    return ok(format(listing, output, width, hints));
   }
 
   const result = await client.request(request);
