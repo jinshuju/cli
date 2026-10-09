@@ -32,7 +32,7 @@ src/
     shared.ts       what more than one resource builds requests from: paths, filters, paging
     upload.ts       a file on disk as a multipart request
     account.ts folder.ts form.ts table.ts field.ts view.ts entry.ts comment.ts opensearch.ts
-    trade.ts sms.ts
+    routine.ts trade.ts sms.ts
                     one table of commands per resource
     local.ts        the auth and config commands, in the table so they have help
   local.ts          runs the auth and config commands (they never reach the API)
@@ -174,3 +174,6 @@ the suite never reads the developer's own credentials.
   publishing. No token is stored anywhere.
 - `VERSION` is read from `package.json` at runtime, so a release bumps one
   file.
+- A new OAuth scope in `defaultScopes` is released only after goldendata has
+  deployed it: the authorization server refuses a login that asks for a scope
+  it does not know, so releasing first would break every browser login.

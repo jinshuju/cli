@@ -267,6 +267,42 @@ you need no permission on the form itself. Flags that only make sense from an
 owner's point of view (`--sort`, `--view`, `--scope-filter` and the like) are
 rejected when combined with `--mine`.
 
+## Routines (自动任务)
+
+A routine is an instruction Jiri carries out on a schedule, or when the data of
+a form or table changes. One created here is active at once, the same as one
+created on the 自动任务 page, and is held to that page's rules and words.
+
+```bash
+jinshuju routine create --name 每周报名汇总 --instruction '汇总上周报名表新增的数据' \
+  --object form:Kp7mQ2 --schedule 'weekly 1 09:00'
+jinshuju routine create --json @routine.json         # an event trigger and its conditions
+jinshuju routine list --state active
+jinshuju routine get 6ac5f0e2b1d4c3a2f1e0d9c8         # trigger_text, next_runs, objects, url
+jinshuju routine update 6ac5f0e2b1d4c3a2f1e0d9c8 --schedule 'workdays 08:30'
+jinshuju routine pause 6ac5f0e2b1d4c3a2f1e0d9c8
+jinshuju routine resume 6ac5f0e2b1d4c3a2f1e0d9c8
+jinshuju routine run 6ac5f0e2b1d4c3a2f1e0d9c8          # once, now
+jinshuju routine runs 6ac5f0e2b1d4c3a2f1e0d9c8
+jinshuju routine delete 6ac5f0e2b1d4c3a2f1e0d9c8 --yes
+```
+
+`--schedule` is Beijing time and covers the six frequencies: `once 2026-10-12
+09:00`, `hourly 30`, `daily 09:00`, `workdays 09:00`, `weekly 1,5 09:00` (1 is
+Monday) and `monthly 1,-1 09:00` (-1 is the last day). `--object kind:token`
+names a form, table, view or public query, and given, it is the whole list.
+Flags lay over `--json`; `routine create --help` shows the full payload, events
+and conditions included.
+
+Letting a routine delete data (`delete_authorized`) is turned on on the
+自动任务 page only. There is no flag for it, and the API refuses the key in a
+payload, true or false. A routine's own run cannot create or change routines;
+it may read them.
+
+A browser login asks for the `routines` OAuth scope. A login made with an
+older version has no such scope, and the routine commands answer it with 403
+(exit 3); run `jinshuju auth login` again to get a token that has it.
+
 ## Working with files
 
 Four commands take a file. The CLI uploads with its own credential; there is no

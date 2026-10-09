@@ -102,6 +102,20 @@ test('loginWithOAuth validates callback state, exchanges token, and stores OAuth
   assert.equal(saved.auth.refresh_token, 'new-refresh');
   authServer.close();
   rmSync(dir, { recursive: true, force: true });
+
+  // Left to its default, a login asks for every scope a command needs: a token
+  // without `routines` is refused by every routine command. Checked once the
+  // server is closed, so a failure here fails the run rather than holding it open.
+  assert.deepEqual(new URL(authorizeUrl).searchParams.get('scope')?.split(' '), [
+    'public',
+    'forms',
+    'read_entries',
+    'write_entries',
+    'form_setting',
+    'read_contacts',
+    'users',
+    'routines'
+  ]);
 });
 
 test('a token endpoint that answers HTML is reported as its status, not as a parse error', async () => {

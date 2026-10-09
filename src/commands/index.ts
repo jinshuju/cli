@@ -16,6 +16,7 @@ import { FOLDER } from './folder.js';
 import { FORM } from './form.js';
 import { LOCAL } from './local.js';
 import { OPENSEARCH } from './opensearch.js';
+import { ROUTINE } from './routine.js';
 import { SMS } from './sms.js';
 import { TABLE } from './table.js';
 import { TRADE } from './trade.js';
@@ -48,6 +49,13 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'entry', summary: 'Manage entries' },
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
+  {
+    name: 'routine',
+    summary: 'Manage routines (自动任务): Jiri at work on a schedule or when data changes',
+    note:
+      'Letting a routine delete data (delete_authorized) is turned on on the 自动任务 page only; ' +
+      'no flag or payload here can set it.'
+  },
   { name: 'merchant', summary: '小金商户: onboarding, balance and settlement' },
   { name: 'transaction', summary: 'Payment orders placed on payment forms' },
   { name: 'refund', summary: 'Refunds of payment orders' },
@@ -67,6 +75,7 @@ export const COMMANDS: readonly Command[] = [
   ...ENTRY,
   ...COMMENT,
   ...OPENSEARCH,
+  ...ROUTINE,
   ...TRADE,
   ...SMS
 ];
