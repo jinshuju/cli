@@ -269,7 +269,7 @@ rejected when combined with `--mine`.
 
 ## Working with files
 
-Three commands take a file. The CLI uploads with its own credential; there is no
+Four commands take a file. The CLI uploads with its own credential; there is no
 ticket to fetch first.
 
 ```bash
@@ -278,6 +278,7 @@ jinshuju entry import --table Vn4xR8 ./rows.csv --map field_1=1 --map field_2=2 
 
 jinshuju entry create --form Kp7mQ2 --json '{"field_1":"Alice"}' --attach field_5=./id-card.jpg
 jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
+jinshuju opensearch edit Qy7nR3 --header ./banner.png
 ```
 
 ```bash

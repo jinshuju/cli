@@ -1,5 +1,7 @@
 import { UsageError } from '../options.js';
-import type { HttpRequest } from '../http.js';
+import type { HttpClient, HttpRequest } from '../http.js';
+import { progress } from '../progress.js';
+import { API } from './shared.js';
 import { readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 
@@ -38,4 +40,21 @@ export function upload(path: string, file: string, extra: Record<string, string>
   form.append('file', new Blob([new Uint8Array(bytes)], type ? { type } : undefined), basename(file));
   for (const [name, value] of Object.entries(extra)) form.append(name, value);
   return { method: 'POST', path, form };
+}
+
+/**
+ * An image that a form's theme or one of its public queries refers to by id, uploaded
+ * with `imageType` saying which (header, wallpaper, opensearch_header).
+ */
+export async function uploadFormImage(client: HttpClient, file: string, imageType: string): Promise<string> {
+  const watching = progress();
+  watching.step(`uploading ${basename(file)}…`);
+  try {
+    const uploaded = await client.request<{ attachment_id: string }>(
+      upload(`${API}/form_image_attachments`, file, { image_type: imageType })
+    );
+    return uploaded.attachment_id;
+  } finally {
+    watching.done();
+  }
 }
