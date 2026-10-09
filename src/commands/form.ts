@@ -23,10 +23,7 @@ import {
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
-import { progress } from '../progress.js';
-import type { HttpClient } from '../http.js';
-import { basename } from 'node:path';
-import { upload } from './upload.js';
+import { uploadFormImage } from './upload.js';
 
 /**
  * The shape behind `--json` on a form, shown rather than described: `fields` is
@@ -115,19 +112,6 @@ function themeBody(input: CommandInput): Record<string, unknown> {
     primary_color: input.options.primary_color,
     secondary_color: input.options.secondary_color
   });
-}
-
-async function uploadImage(client: HttpClient, file: string, imageType: string): Promise<string> {
-  const watching = progress();
-  watching.step(`uploading ${basename(file)}…`);
-  try {
-    const uploaded = await client.request<{ attachment_id: string }>(
-      upload(`${API}/form_image_attachments`, file, { image_type: imageType })
-    );
-    return uploaded.attachment_id;
-  } finally {
-    watching.done();
-  }
 }
 
 /** The scenes a form can be created for, as the API names them. */
@@ -419,11 +403,11 @@ export const FORM: readonly Command[] = [
 
       const body = themeBody(input) as Record<string, Record<string, unknown>>;
       if (wallpaper) {
-        const image = await uploadImage(client, wallpaper, 'wallpaper');
+        const image = await uploadFormImage(client, wallpaper, 'wallpaper');
         body.wallpaper = { ...body.wallpaper, background_image_attachment_id: image };
       }
       if (header) {
-        const image = await uploadImage(client, header, 'header');
+        const image = await uploadFormImage(client, header, 'header');
         body.header = { ...body.header, header_image_attachment_id: image };
       }
       return client.request({ method: 'PATCH', path, body });

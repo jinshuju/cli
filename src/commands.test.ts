@@ -1305,6 +1305,34 @@ test('form theme set uploads an image and hands the theme its id', async () => {
   });
 });
 
+test('opensearch edit --header uploads an image to the query and sets it as the header', async () => {
+  const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'os_1' } });
+
+  await cli(['opensearch', 'edit', 'Qy7nR3', '--header', 'package.json', '--json', '{"name":"成绩查询"}'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].path, '/api/v1/form_image_attachments');
+  assert.equal(mock.requests[0].form?.get('image_type'), 'opensearch_header');
+  assert.equal(mock.requests[1].method, 'PATCH');
+  assert.equal(mock.requests[1].path, '/api/v1/opensearch/queries/Qy7nR3');
+  assert.deepEqual(mock.requests[1].body, {
+    name: '成绩查询',
+    header: { background_image: { attachment_id: 'os_1' } }
+  });
+});
+
+test('opensearch edit without --header is still one request', async () => {
+  const mock = uploadingClient({});
+
+  await cli(['opensearch', 'edit', 'Qy7nR3', '--enable'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(mock.requests.length, 1);
+  assert.deepEqual(mock.requests[0].body, { enabled: true });
+});
+
 test('form create carries the scene, layout and folder the design asks for', async () => {
   const mock = createMockClient();
   const bare = createMockClient();

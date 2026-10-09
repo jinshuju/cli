@@ -1,6 +1,7 @@
 import { JSON_OPTION, UsageError } from '../options.js';
 import { API, overriding, payload } from './shared.js';
 import type { Command } from './types.js';
+import { uploadFormImage } from './upload.js';
 
 export const OPENSEARCH: readonly Command[] = [
   {
@@ -50,24 +51,29 @@ export const OPENSEARCH: readonly Command[] = [
   {
     path: ['opensearch', 'edit'],
     summary: 'Edit a public query, or turn it on and off',
+    description: '--header uploads an image and sets it as the header of the query page in one command.',
     args: [{ name: 'query', required: true, description: 'Public query token' }],
     options: [
       JSON_OPTION,
       { name: '--enable', type: 'boolean', description: 'Turn the query on' },
-      { name: '--disable', type: 'boolean', description: 'Turn the query off' }
+      { name: '--disable', type: 'boolean', description: 'Turn the query off' },
+      { name: '--header', type: 'string', placeholder: '<file>', description: 'Image file to use as the header' }
     ],
-    request: (input) => {
+    run: async (input, client) => {
       if (input.options.enable && input.options.disable) {
         throw new UsageError('--enable and --disable are opposites, pass one');
       }
       const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
       const enabled = input.options.enable ? true : input.options.disable ? false : undefined;
-      return {
-        method: 'PATCH',
-        path: `${API}/opensearch/queries/${input.args.query}`,
-        body: overriding(rest, { enabled })
-      };
+      const body = overriding(rest, { enabled });
+      const header = input.options.header as string | undefined;
+      if (header) {
+        // A query's header goes up as one of its form's images, the way a theme's does.
+        const image = await uploadFormImage(client, header, 'opensearch_header');
+        body.header = { background_image: { attachment_id: image } };
+      }
+      return client.request({ method: 'PATCH', path: `${API}/opensearch/queries/${input.args.query}`, body });
     },
-    examples: ['jinshuju opensearch edit Qy7nR3 --disable']
+    examples: ['jinshuju opensearch edit Qy7nR3 --disable', 'jinshuju opensearch edit Qy7nR3 --header ./banner.png']
   }
 ];
