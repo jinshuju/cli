@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/jinshuju/cli/compare/v0.7.0...v0.8.0) (2026-10-09)
+
+
+### Features
+
+* set a public query's header image with opensearch edit --header ([#43](https://github.com/jinshuju/cli/issues/43)) ([5ec4933](https://github.com/jinshuju/cli/commit/5ec4933a7e24bb162c89299d808055ae67a699d8))
+
 ## [0.7.0](https://github.com/jinshuju/cli/compare/v0.6.0...v0.7.0) (2026-09-30)
 
 
