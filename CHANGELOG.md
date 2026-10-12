@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/jinshuju/cli/compare/v0.8.0...v0.9.0) (2026-10-12)
+
+
+### Features
+
+* submit through a fill link with fill get and fill submit ([#45](https://github.com/jinshuju/cli/issues/45)) ([71b7cd8](https://github.com/jinshuju/cli/commit/71b7cd89ae7a5d2bbdac4a33273debfd54355779))
+
 ## [0.8.0](https://github.com/jinshuju/cli/compare/v0.7.0...v0.8.0) (2026-10-09)
 
 
