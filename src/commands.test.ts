@@ -2254,3 +2254,51 @@ test('help mentions jsj, the exit codes, and what a resource does not have', asy
   const filter = await cli(['entry', 'list', '--help'], { env: {} });
   assert.match(filter.stdout, /Operators: eq ne gte gt lte lt like not_like/);
 });
+
+test('fill get reads the page a fill link points at, from the link as shared or its path', async () => {
+  const mock = createMockClient();
+  const runtime = { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client };
+
+  await cli(['fill', 'get', 'https://acme.jinshuju.net/v/aB3dE9?x_field_1=1'], runtime);
+  await cli(['fill', 'get', 'f/Kp7mQ2'], runtime);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${url(request)}`),
+    ['GET /api/v1/fill/v/aB3dE9', 'GET /api/v1/fill/f/Kp7mQ2']
+  );
+});
+
+test('fill refuses a link that is not a fill page, before sending anything', async () => {
+  const mock = createMockClient();
+  const result = await cli(['fill', 'get', 'https://acme.jinshuju.net/forms/Kp7mQ2/entries'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /Not a fill link/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('fill submit posts the entry and the access password to the page it names', async () => {
+  const mock = createMockClient();
+  await cli(['fill', 'submit', 'v/aB3dE9', '--json', '{"field_1":"张三"}', '--password', '1234'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0]?.method, 'POST');
+  assert.equal(url(mock.requests[0]), '/api/v1/fill/v/aB3dE9/entries');
+  assert.deepEqual(mock.requests[0]?.body, { entry: { field_1: '张三' }, password: '1234' });
+});
+
+test('fill submit without --json is a usage error', async () => {
+  const mock = createMockClient();
+  const result = await cli(['fill', 'submit', 'v/aB3dE9'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.equal(mock.requests.length, 0);
+});
