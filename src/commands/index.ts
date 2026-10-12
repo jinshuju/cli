@@ -12,6 +12,7 @@ import { ACCOUNT } from './account.js';
 import { COMMENT } from './comment.js';
 import { ENTRY } from './entry.js';
 import { FIELD } from './field.js';
+import { FILL } from './fill.js';
 import { FOLDER } from './folder.js';
 import { FORM } from './form.js';
 import { LOCAL } from './local.js';
@@ -48,6 +49,13 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'entry', summary: 'Manage entries' },
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
+  {
+    name: 'fill',
+    summary: 'Fill in a form through its fill link',
+    note:
+      'For a form or a table’s form view you were sent a link to, rather than one you manage. ' +
+      'OAuth sessions need the submit_entries scope: `jinshuju auth login --scopes "… submit_entries"`.'
+  },
   { name: 'merchant', summary: '小金商户: onboarding, balance and settlement' },
   { name: 'transaction', summary: 'Payment orders placed on payment forms' },
   { name: 'refund', summary: 'Refunds of payment orders' },
@@ -67,6 +75,7 @@ export const COMMANDS: readonly Command[] = [
   ...ENTRY,
   ...COMMENT,
   ...OPENSEARCH,
+  ...FILL,
   ...TRADE,
   ...SMS
 ];

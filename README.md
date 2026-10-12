@@ -267,6 +267,22 @@ you need no permission on the form itself. Flags that only make sense from an
 owner's point of view (`--sort`, `--view`, `--scope-filter` and the like) are
 rejected when combined with `--mine`.
 
+## Filling in someone else's form
+
+A fill link — `…/f/<token>` for a form, `…/v/<token>` for a table's form view —
+can be filled from the CLI the way anyone with the link fills it in a browser:
+
+```bash
+jinshuju fill get https://acme.jinshuju.net/v/aB3dE9                          # what it asks for, and whether you can submit
+jinshuju fill submit https://acme.jinshuju.net/v/aB3dE9 --json '{"field_1":"Ada"}'
+```
+
+No role on the form is needed, and only what the page shows its fillers comes
+back. The entry is recorded as yours. A page that asks for something only the
+person at it can do — a captcha, an SMS code, WeChat, a payment — lists it under
+`blockers`, and is refused until it is filled in a browser. An OAuth session
+needs the `submit_entries` scope for these.
+
 ## Working with files
 
 Four commands take a file. The CLI uploads with its own credential; there is no
