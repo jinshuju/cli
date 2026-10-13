@@ -668,6 +668,37 @@ test('entry count refuses more containers than the endpoint accepts', async () =
   assert.match(result.stderr, /at most 10 containers/);
 });
 
+test('entry count, aggregate and summary read through a view when given one', async () => {
+  const mock = createMockClient();
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  await cli(['entry', 'count', '--table', 'Vn4xR8', '--view', 'aB3dE9', '--filter', 'field_3 gte 80'], {
+    env,
+    client: mock.client
+  });
+  await cli(['entry', 'aggregate', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--metric', 'sum:field_5'], {
+    env,
+    client: mock.client
+  });
+  await cli(['entry', 'summary', '--form', 'Kp7mQ2', '--view', 'aB3dE9'], { env, client: mock.client });
+
+  assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/tables/Vn4xR8/views/aB3dE9/entries/count?filters=%5B%7B%22field%22%3A%22field_3%22%2C%22operator%22%3A%22gte%22%2C%22value%22%3A%2280%22%7D%5D',
+    '/api/v1/forms/Kp7mQ2/views/aB3dE9/entries/aggregate?metrics=%5B%7B%22func%22%3A%22sum%22%2C%22field%22%3A%22field_5%22%7D%5D',
+    '/api/v1/forms/Kp7mQ2/views/aB3dE9/entries/summary'
+  ]);
+});
+
+test('entry count refuses a view across several containers', async () => {
+  const result = await cli(['entry', 'count', '--form', 'Kp7mQ2', '--form', 'Vn4xR8', '--view', 'aB3dE9'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: createMockClient().client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /--view belongs to one form or table/);
+});
+
 test('entry stats splits the range by day, week or month in one request', async () => {
   const mock = createMockClient();
   const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
