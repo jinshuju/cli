@@ -1336,6 +1336,22 @@ test('form theme set uploads an image and hands the theme its id', async () => {
   });
 });
 
+test('form image upload sends the image as a description image and answers with its url', async () => {
+  const mock = uploadingClient({
+    '/api/v1/form_image_attachments': { attachment_id: 'di_1', url: 'https://cdn.example/di/1.png' }
+  });
+
+  const result = await cli(['form', 'image', 'upload', 'package.json', '--output', 'json'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(mock.requests[0].path, '/api/v1/form_image_attachments');
+  assert.equal((mock.requests[0].form as FormData).get('image_type'), 'description');
+  assert.equal(JSON.parse(result.stdout).url, 'https://cdn.example/di/1.png');
+});
+
 test('opensearch edit --header uploads an image to the query and sets it as the header', async () => {
   const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'os_1' } });
 
