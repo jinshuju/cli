@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/jinshuju/cli/compare/v0.10.0...v0.11.0) (2026-10-14)
+
+
+### Features
+
+* upload an image for a form or field description ([#49](https://github.com/jinshuju/cli/issues/49)) ([8a5faa4](https://github.com/jinshuju/cli/commit/8a5faa4317b8778263f74fa845b81226aa916e48))
+
 ## [0.10.0](https://github.com/jinshuju/cli/compare/v0.9.0...v0.10.0) (2026-10-14)
 
 
