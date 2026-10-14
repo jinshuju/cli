@@ -23,7 +23,7 @@ import {
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
-import { uploadFormImage } from './upload.js';
+import { upload, uploadFormImage } from './upload.js';
 
 /**
  * The shape behind `--json` on a form, shown rather than described: `fields` is
@@ -416,6 +416,18 @@ export const FORM: readonly Command[] = [
       'jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"',
       'jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png'
     ]
+  },
+  {
+    path: ['form', 'image', 'upload'],
+    summary: 'Upload an image for a form or field description',
+    description:
+      "Answers with a url to put in an <img src> inside a form's description or a field's notes. " +
+      'The image belongs to the first form saved with a description that refers to it; one that no ' +
+      'form takes within 7 days is removed.',
+    args: [{ name: 'file', required: true, description: 'Image file' }],
+    request: (input) =>
+      upload(`${API}/form_image_attachments`, input.args.file as string, { image_type: 'description' }),
+    examples: ['jinshuju form image upload ./venue-map.png']
   },
   {
     path: ['form', 'rule', 'get'],
