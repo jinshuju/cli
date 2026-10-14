@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/jinshuju/cli/compare/v0.9.0...v0.10.0) (2026-10-14)
+
+
+### Features
+
+* count, aggregate and summarise the entries of a view with --view ([#47](https://github.com/jinshuju/cli/issues/47)) ([50ebb88](https://github.com/jinshuju/cli/commit/50ebb8819c537bece18bc185861ad2b6bbb0335d))
+
 ## [0.9.0](https://github.com/jinshuju/cli/compare/v0.8.0...v0.9.0) (2026-10-12)
 
 
