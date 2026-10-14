@@ -160,6 +160,8 @@ jinshuju entry aggregate --form Kp7mQ2 --metric count:field_1 --by created_at:mo
 
 jinshuju entry summary --form Kp7mQ2
 jinshuju entry summary --form Kp7mQ2 --fields field_3,field_7 --no-overview
+
+jinshuju entry count --form Kp7mQ2 --view aB3dE9 --filter 'field_3 gte 80'   # only what the view shows
 ```
 
 `--metric <func>:<field>` is repeatable, 1–20 of them; `--by <field>[:day|week|month]`

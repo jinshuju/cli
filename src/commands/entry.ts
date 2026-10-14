@@ -342,6 +342,19 @@ function batchRows(input: CommandInput): unknown[] | undefined {
   return rows;
 }
 
+const ANALYSIS_VIEW_OPTION: OptionSpec = {
+  name: '--view',
+  type: 'string',
+  placeholder: '<view>',
+  description: 'Only the entries this view shows; a filter narrows them further'
+};
+
+/** Through a view, an analysis covers only the entries that view shows. */
+function analysisPath(input: CommandInput, read: string): string {
+  const view = input.options.view as string | undefined;
+  return `${containerPath(input)}${view ? `/views/${view}` : ''}/entries/${read}`;
+}
+
 /**
  * Batch writes are served under the forms path alone, and it takes a table's
  * token just as well, so a table batches through the same URL.
@@ -439,23 +452,22 @@ export const ENTRY: readonly Command[] = [
     options: [
       ...CONTAINER_LIST_OPTIONS,
       { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
+      ANALYSIS_VIEW_OPTION,
       FILTER_OPTION,
       FILTERS_OPTION
     ],
     request: (input) => {
-      const { tokens, kind } = resolveContainers(input.options, MAX_COUNTED_CONTAINERS);
+      const { tokens } = resolveContainers(input.options, MAX_COUNTED_CONTAINERS);
       const query = { filters: filters(input), keyword: input.options.keyword as string | undefined };
-      if (tokens.length === 1) {
-        return {
-          method: 'GET',
-          path: `${API}/${kind === 'table' ? 'tables' : 'forms'}/${tokens[0]}/entries/count`,
-          query
-        };
+      if (tokens.length === 1) return { method: 'GET', path: analysisPath(input, 'count'), query };
+      if (input.options.view !== undefined) {
+        throw new UsageError('--view belongs to one form or table, so it counts one container, not several');
       }
       return { method: 'GET', path: `${API}/entries/count`, query: { ...query, form_tokens: tokens.join(',') } };
     },
     examples: [
       "jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'",
+      'jinshuju entry count --form Kp7mQ2 --view aB3dE9',
       'jinshuju entry count --form Kp7mQ2 --form Vn4xR8 --form aB3dE9'
     ]
   },
@@ -603,6 +615,7 @@ export const ENTRY: readonly Command[] = [
         placeholder: '<n>',
         description: 'How many groups, ranked by the first metric (default 20, max 200)'
       },
+      ANALYSIS_VIEW_OPTION,
       FILTER_OPTION,
       FILTERS_OPTION
     ],
@@ -612,7 +625,7 @@ export const ENTRY: readonly Command[] = [
       const dimensions = (input.options.by as string[] | undefined) ?? [];
       return {
         method: 'GET',
-        path: `${containerPath(input)}/entries/aggregate`,
+        path: analysisPath(input, 'aggregate'),
         query: {
           metrics: JSON.stringify(metrics.map(parseMetric)),
           dimensions: dimensions.length > 0 ? JSON.stringify(dimensions.map(parseDimension)) : undefined,
@@ -625,6 +638,7 @@ export const ENTRY: readonly Command[] = [
     examples: [
       'jinshuju entry aggregate --form Kp7mQ2 --metric avg:field_3',
       'jinshuju entry aggregate --form Kp7mQ2 --metric count:field_1 --by created_at:month',
+      'jinshuju entry aggregate --form Kp7mQ2 --view aB3dE9 --metric sum:field_5',
       "jinshuju entry aggregate --form Kp7mQ2 --metric sum:field_5 --by field_7 --limit 5 --filter 'created_at within_last 30d'"
     ]
   },
@@ -645,12 +659,13 @@ export const ENTRY: readonly Command[] = [
         description: 'Profile only these fields, at most 60'
       },
       { name: '--no-overview', type: 'boolean', description: 'Leave out the form-level totals' },
+      ANALYSIS_VIEW_OPTION,
       FILTER_OPTION,
       FILTERS_OPTION
     ],
     request: (input) => ({
       method: 'GET',
-      path: `${containerPath(input)}/entries/summary`,
+      path: analysisPath(input, 'summary'),
       query: {
         fields: list(input.options.fields),
         include_overview: input.options.no_overview ? 'false' : undefined,
@@ -659,6 +674,7 @@ export const ENTRY: readonly Command[] = [
     }),
     examples: [
       'jinshuju entry summary --form Kp7mQ2',
+      'jinshuju entry summary --form Kp7mQ2 --view aB3dE9',
       'jinshuju entry summary --form Kp7mQ2 --fields field_3,field_7 --no-overview'
     ]
   },
