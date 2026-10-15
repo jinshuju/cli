@@ -1,5 +1,6 @@
 import { LIMIT_OPTION } from '../options.js';
-import { API, paging } from './shared.js';
+import { bodyChoices, call } from '../spec.js';
+import { given, paging } from './shared.js';
 import type { Command } from './types.js';
 
 export const FOLDER: readonly Command[] = [
@@ -7,7 +8,7 @@ export const FOLDER: readonly Command[] = [
     path: ['folder', 'list'],
     summary: 'List folders',
     options: [LIMIT_OPTION],
-    request: (input) => ({ method: 'GET', path: `${API}/folders`, query: paging(input) })
+    request: (input) => call('listFolders', { query: paging(input) })
   },
   {
     path: ['folder', 'create'],
@@ -18,16 +19,12 @@ export const FOLDER: readonly Command[] = [
       {
         name: '--kind',
         type: 'string',
-        choices: ['form', 'table'],
+        choices: bodyChoices('createFolder', 'kind'),
         placeholder: '<kind>',
         description: 'What the folder holds (default form)'
       }
     ],
-    request: (input) => ({
-      method: 'POST',
-      path: `${API}/folders`,
-      body: { name: input.args.name, kind: input.options.kind }
-    }),
+    request: (input) => call('createFolder', { body: given({ name: input.args.name, kind: input.options.kind }) }),
     examples: ['jinshuju folder create 2026年活动', 'jinshuju folder create 台账 --kind table']
   }
 ];

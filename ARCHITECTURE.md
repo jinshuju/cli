@@ -17,11 +17,22 @@ says what the CLI does; this says how, for whoever changes it next.
   `node:http` are enough. The install is the package and nothing else.
 - **The server owns its vocabulary.** Field types, scenes, operators and
   aggregation functions are the API's to define and to refuse. The CLI checks
-  shapes and passes words through.
+  shapes and passes words through; the words its own flags offer are read from
+  the openapi.yaml the API publishes, never kept by hand.
+- **openapi.yaml says what a request may carry.** Which commands exist is the
+  CLI's decision; which operation sits at which path, which parameters it has
+  and what values they take is the spec's, read from a table generated from it
+  rather than written down a second time.
 
 ## Module map
 
 ```
+spec/openapi.yaml   the published API v1 spec, verbatim; spec-sync keeps it current
+scripts/
+  fetch-spec.mjs    downloads it
+  generate.mjs      spec/openapi.yaml -> src/generated/operations.ts; the one place that reads OpenAPI
+  spec-diff.mjs     what changed between two copies, for the spec-sync pull request
+
 src/
   cli-bin.ts        #!/usr/bin/env node — runs runCli, writes the result, sets the exit code
   cli.ts            runCli: find the command, split the line, dispatch; the --all paging loop
@@ -37,6 +48,12 @@ src/
     local.ts        the auth and config commands, in the table so they have help
   local.ts          runs the auth and config commands (they never reach the API)
   options.ts        the shared option grammar, and the parsers for --filter, --sort, --metric
+  spec.ts           call(): an operation as a request, path and query checked against the spec;
+                    the values a flag takes
+  testing/
+    conformance.ts  the tests' check of a request against the spec; not shipped
+  generated/
+    operations.ts   every operation and the request-side schemas, generated; never edited by hand
   payload.ts        the shape check on a form or table payload
   http.ts           JinshujuHttpClient: auth header, deadline, retry, query serialization
   auth.ts           OAuth with PKCE on a loopback port; refresh; revoke
@@ -51,8 +68,9 @@ src/
 ```
 
 Dependencies point downward: `cli.ts` knows everything, `commands/` knows
-`options`, `http` and `render` types, `http.ts` knows `config`, `auth` and
-`errors`, and `errors.ts`, `values.ts`, `version.ts` know nothing.
+`options`, `spec`, `http` and `render` types, `spec.ts` knows the generated
+table and `errors`, `http.ts` knows `config`, `auth` and `errors`, and
+`errors.ts`, `values.ts`, `version.ts` know nothing.
 
 ## A request, end to end
 
@@ -69,7 +87,8 @@ Dependencies point downward: `cli.ts` knows everything, `commands/` knows
    and `--json` reads inline JSON, `@file` or `-` for stdin right there.
 4. `auth` and `config` go to `local.ts`. Everything else goes to `runRemote`,
    which builds the `HttpClient` from config and either calls the command's
-   `run` or sends its `request`.
+   `run` or sends its `request`. Either way the request was made by
+   `spec.call`, which refuses a parameter or a value the spec would.
 5. `JinshujuHttpClient.request` adds the credential, a `User-Agent` and a
    deadline, serializes the query, and sends. A 401 on a stored OAuth session
    refreshes the token and tries once more. A retryable status is tried again
@@ -92,7 +111,7 @@ A `Command` is data, not a class:
 | `path`                                          | the words that select it: `['entry', 'list']`                                                              |
 | `summary`, `description`, `examples`, `payload` | what help shows; nothing else is                                                                           |
 | `args`, `options`                               | what it accepts; anything not listed is refused                                                            |
-| `request(input)`                                | the one request the command is, for the commands that are one                                              |
+| `request(input)`                                | the one request the command is, for the commands that are one, made with `call`                            |
 | `run(input, client)`                            | for the commands that are more than one request, or must decide how many; returns what to print            |
 | `paginate`                                      | which keys hold the rows and the cursor, so `--all` can follow it                                          |
 | `select`, `render`                              | narrow the payload; reshape it for text only                                                               |
@@ -105,9 +124,60 @@ request needs, and for `entry import --wait`. Each of those says in its error
 exactly what did and did not happen, because "nothing happened" would invite
 the caller to do it again.
 
-Two command files decide **what** is sent; nothing in them decides **how**.
-Query strings, credentials, timeouts, retries and error shapes are the
-client's business, which is why `HttpRequest.query` is values and not a string.
+The command files decide **what** is sent; nothing in them decides **how**.
+Paths and the spelling of a parameter are the spec's, through `call`; query
+strings, credentials, timeouts, retries and error shapes are the client's,
+which is why `HttpRequest.query` is values and not a string.
+
+## The spec
+
+`spec/openapi.yaml` is the published spec, copied verbatim. `npm run generate`
+reads it with `scripts/generate.mjs` and writes `src/generated/operations.ts`:
+every operation's method, path, parameters and request body, and the named
+schemas those refer to, cut down to their constraints. Descriptions, examples
+and responses stay behind. The output is committed so a spec change reaches
+review as a change to what the CLI may send, and CI regenerates it to prove the
+two agree. A schema keyword the generator does not know stops it rather than
+being dropped: the tests hold requests to what it keeps, and a dropped keyword
+would let one through that the spec refuses.
+
+A command names an operation, never a path: `call('listEntries', { path,
+query, body })`. A form and a table are two operations in the spec and one
+command here, and `onContainer` picks between them by `--form` or `--table`.
+`call` checks path and query against the operation before anything is sent —
+a parameter it does not have, a required one left out, a value not of its
+type — and spells a list the way the parameter says it goes on the wire. The flags
+that offer a fixed set of values take them from the spec too, through
+`choices` and `bodyChoices`, so a value the API learns reaches the CLI with the
+next sync instead of being refused by a copy.
+
+A body goes as given. API v1 validates every request against the openapi.yaml
+it runs — the only copy never out of date — and its 400 already says, by
+pointer, what is wrong. A check here would save that round trip, but an
+installed CLI keeps the spec it shipped with until someone upgrades it, and
+from then on it would refuse each field type, key and value the API learns: an
+old client is always stricter than the API it talks to. Path and query are
+different. They come from the CLI's own flags, a new parameter needs a new
+release anyway, and they are held only to their type, never to a range or a
+list that may grow.
+
+The tests hold every request the command tests send, and every example in the
+help, to the spec, the body included, with `src/testing/conformance.ts`, which
+ships with nothing. That is where a body the CLI puts together itself is
+checked, and how a `form edit` example sending an `exam_setting` key the API
+has no use for was found.
+
+When the spec changes under the CLI, the failure is loud: an operation the CLI
+calls that was removed or renamed no longer typechecks, and a value the CLI
+sends that is no longer taken fails a test.
+
+`.github/workflows/spec-sync.yml` fetches the published spec every day. When it
+differs, it regenerates, runs `check` and `test` against it, and opens a pull
+request on `chore/sync-openapi` listing the operations and schemas that moved
+and which of them the CLI calls. Its title comes from the same comparison: a
+change to an operation the CLI calls is a `feat` naming those operations, and
+releases; anything else is a `chore`, and does not. The pull request is opened even when the CLI no
+longer passes, and says so: that is the case that needs a person.
 
 ## Errors and exit codes
 
@@ -159,15 +229,16 @@ character.
 `npm test` builds and runs `node --test` over `dist/`. Most tests call
 `runCli` with a mock `HttpClient` and assert on the request that would have
 been sent and the result that came back: no network, no config file, no
-process state. The HTTP client and OAuth are tested against `node:http`
+process state. The mock also holds every request to the spec — an operation it
+has, a body it takes — and the suite fails if one was not. The HTTP client and OAuth are tested against `node:http`
 servers on a loopback port. A temporary config path is passed everywhere so
 the suite never reads the developer's own credentials.
 
 ## Tooling and release
 
-- `npm run check` is typecheck, `oxlint` and `oxfmt --check`; CI runs the same
-  on Node 20 and 22, then packs the tarball, installs it and starts both
-  binaries.
+- `npm run check` is typecheck, `oxlint` and `oxfmt --check`; CI regenerates
+  `src/generated` and fails on any difference, runs the same checks on Node 20
+  and 22, then packs the tarball, installs it and starts both binaries.
 - Commits are conventional commits, and PRs are squash-merged so each lands as
   one. release-please keeps a release PR open from `feat` and `fix` commits;
   merging it tags, releases and publishes to npm through OIDC trusted

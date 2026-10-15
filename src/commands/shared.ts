@@ -1,3 +1,4 @@
+import type { HttpRequest } from '../http.js';
 import {
   UsageError,
   parseFilter,
@@ -7,16 +8,27 @@ import {
   type OptionSpec,
   type SortRule
 } from '../options.js';
+import { call, type CallParts, type OperationId } from '../spec.js';
 import type { CommandInput, Pagination } from './types.js';
 
 /** What more than one resource's commands build their requests from. */
 
-export const API = '/api/v1';
-
-/** The path segment a container lives under. */
-export function containerPath(input: CommandInput): string {
+/**
+ * The request for whichever container was named. openapi.yaml has a form's
+ * operation and a table's as two, under two paths; the CLI has one command and
+ * `--form` or `--table`, so the flag picks the operation and its token fills
+ * the path.
+ */
+export function onContainer(
+  input: CommandInput,
+  form: OperationId,
+  table: OperationId,
+  parts: CallParts = {}
+): HttpRequest {
   const { token, kind } = resolveContainer(input.options);
-  return `${API}/${kind === 'table' ? 'tables' : 'forms'}/${token}`;
+  return kind === 'table'
+    ? call(table, { ...parts, path: { ...parts.path, table_token: token } })
+    : call(form, { ...parts, path: { ...parts.path, form_token: token } });
 }
 
 /** The conditions themselves. A read sends them as a query string, a write as a body. */
@@ -45,11 +57,8 @@ export function sort(input: CommandInput, key: 'api_code' | 'field'): string | u
   return JSON.stringify(rules.map(parseSort).map((rule: SortRule) => ({ [key]: rule.field, order: rule.order })));
 }
 
-export function paging(input: CommandInput): Record<string, string | undefined> {
-  return {
-    limit: input.options.limit === undefined ? undefined : String(input.options.limit),
-    next: input.options.next as string | undefined
-  };
+export function paging(input: CommandInput): { limit?: number; next?: string } {
+  return { limit: input.options.limit as number | undefined, next: input.options.next as string | undefined };
 }
 
 /** The sort rules as the API's own objects, for a body. */

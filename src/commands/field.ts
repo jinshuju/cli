@@ -1,5 +1,6 @@
 import { CONTAINER_OPTIONS, JSON_OPTION, UsageError, type OptionSpec } from '../options.js';
-import { API, YES_OPTION, confirmed, containerPath, one, payload, requiredOption } from './shared.js';
+import { call } from '../spec.js';
+import { YES_OPTION, confirmed, onContainer, one, payload, requiredOption } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
 /** One field, or a list of them — the same objects `fields` holds above. */
@@ -121,11 +122,12 @@ export const FIELD: readonly Command[] = [
         description: `Only types of this scope: ${FIELD_SCOPES.join(', ')}`
       }
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: input.args.type ? `${API}/field_types/${input.args.type}` : `${API}/field_types`,
-      query: { kind: input.options.kind as string | undefined }
-    }),
+    request: (input) => {
+      const query = { kind: input.options.kind as string | undefined };
+      return input.args.type
+        ? call('getFieldType', { path: { type: input.args.type }, query })
+        : call('listFieldTypes', { query });
+    },
     select: (body, input) => {
       const rows = Array.isArray((body as { data?: unknown }).data)
         ? (body as { data: Record<string, unknown>[] }).data
@@ -146,7 +148,7 @@ export const FIELD: readonly Command[] = [
     summary: 'List the fields of a form or table',
     description: 'Read out of the object structure, the same fields `form get` and `table get` return.',
     options: [...CONTAINER_OPTIONS],
-    request: (input) => ({ method: 'GET', path: containerPath(input) }),
+    request: (input) => onContainer(input, 'getForm', 'getTable'),
     select: (body) => ({ data: selectFields(body) })
   },
   {
@@ -155,11 +157,8 @@ export const FIELD: readonly Command[] = [
     description: 'One field object, or a list of them. Do not pass api_code: the backend generates it.',
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
     payload: FIELD_PAYLOAD,
-    request: (input) => ({
-      method: 'PATCH',
-      path: containerPath(input),
-      body: { fields: { add: one(payload(input)) } }
-    }),
+    request: (input) =>
+      onContainer(input, 'updateForm', 'updateTable', { body: { fields: { add: one(payload(input)) } } }),
     select: (body, input) => {
       const labels = labelsOf(payload(input));
       return touchedFields(body, (field) => labels.has(String(field.label)));
@@ -172,13 +171,12 @@ export const FIELD: readonly Command[] = [
     description: 'The patch is merged onto the field; the api_code comes from the argument, not the payload.',
     args: [{ name: 'api-code', required: true, description: 'Field api_code, e.g. field_3' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
-    request: (input) => ({
-      method: 'PATCH',
-      path: containerPath(input),
-      body: {
-        fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] }
-      }
-    }),
+    request: (input) =>
+      onContainer(input, 'updateForm', 'updateTable', {
+        body: {
+          fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] }
+        }
+      }),
     select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code']),
     examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
   },
@@ -188,15 +186,14 @@ export const FIELD: readonly Command[] = [
     description: 'The payload is the choice operations the field takes, e.g. {add, update, remove}.',
     args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
-    request: (input) => ({
-      method: 'PATCH',
-      path: containerPath(input),
-      body: {
-        fields: {
-          update_choices: [{ ...(payload(input) as Record<string, unknown>), field_api_code: input.args['api-code'] }]
+    request: (input) =>
+      onContainer(input, 'updateForm', 'updateTable', {
+        body: {
+          fields: {
+            update_choices: [{ ...(payload(input) as Record<string, unknown>), field_api_code: input.args['api-code'] }]
+          }
         }
-      }
-    }),
+      }),
     select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code'])
   },
   {
@@ -208,11 +205,10 @@ export const FIELD: readonly Command[] = [
       'this cannot express — a matrix statement, a cascade level — goes through --json.',
     args: [{ name: 'target', required: false, variadic: true, description: 'field api_code, or api_code:choice' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
-    request: (input) => ({
-      method: 'GET',
-      path: `${containerPath(input)}/fields/check`,
-      query: { checks: JSON.stringify(checks(input, parseCheckTarget)) }
-    }),
+    request: (input) =>
+      onContainer(input, 'checkFormFieldData', 'checkTableFieldData', {
+        query: { checks: JSON.stringify(checks(input, parseCheckTarget)) }
+      }),
     examples: [
       'jinshuju field check --form Kp7mQ2 field_3 field_9',
       'jinshuju field check --form Kp7mQ2 field_7:choice_1'
@@ -256,11 +252,9 @@ export const FIELD: readonly Command[] = [
               }
             ]
           : one(input.options.json);
-      return {
-        method: 'GET',
-        path: `${containerPath(input)}/fields/preview_convert`,
+      return onContainer(input, 'previewFormFieldTypeChange', 'previewTableFieldTypeChange', {
         query: { checks: JSON.stringify(inline) }
-      };
+      });
     },
     examples: ['jinshuju field preview-convert --form Kp7mQ2 field_1 --to RadioButton']
   },
@@ -272,7 +266,9 @@ export const FIELD: readonly Command[] = [
     options: [...CONTAINER_OPTIONS, YES_OPTION],
     request: (input) => {
       confirmed(input, `Removing ${input.args['api-code']} and any answers it holds`);
-      return { method: 'PATCH', path: containerPath(input), body: { fields: { remove: [input.args['api-code']] } } };
+      return onContainer(input, 'updateForm', 'updateTable', {
+        body: { fields: { remove: [input.args['api-code']] } }
+      });
     },
     examples: ['jinshuju field remove --form Kp7mQ2 field_9 --yes']
   }

@@ -18,13 +18,12 @@ import {
   type OptionSpec
 } from '../options.js';
 import {
-  API,
   LISTING,
   YES_OPTION,
   confirmed,
-  containerPath,
   filters,
   given,
+  onContainer,
   paging,
   payload,
   refuseWithMine,
@@ -34,7 +33,8 @@ import {
 import type { Command, CommandInput } from './types.js';
 import { RefusedError } from '../errors.js';
 import { progress } from '../progress.js';
-import { TransportError, type HttpClient } from '../http.js';
+import { TransportError, type HttpClient, type HttpRequest } from '../http.js';
+import { call, choices, type CallParts, type OperationId } from '../spec.js';
 import { isRecord } from '../values.js';
 import { basename } from 'node:path';
 import { upload } from './upload.js';
@@ -47,8 +47,8 @@ function list(value: unknown): string | undefined {
   return values && values.length > 0 ? values.join(',') : undefined;
 }
 
-function labels(input: CommandInput): string | undefined {
-  return input.options.labels ? 'true' : undefined;
+function labels(input: CommandInput): boolean | undefined {
+  return input.options.labels ? true : undefined;
 }
 
 /**
@@ -249,10 +249,7 @@ export async function awaitImport(
   for (;;) {
     let job: ImportJob;
     try {
-      job = await client.request<ImportJob>({
-        method: 'GET',
-        path: `${API}/forms/${token}/entry_imports/${jobId}`
-      });
+      job = await client.request<ImportJob>(call('getEntryImport', { path: { form_token: token, id: jobId } }));
     } catch (error) {
       throw recoverable(`the import started, but asking how it is going failed: ${(error as Error).message}`, error);
     }
@@ -297,7 +294,8 @@ async function withUploads(
       watching.step(`uploading ${basename(file)}…`);
       const uploaded = await client.request<{ id: string }>(
         upload(
-          `${API}/forms/${token}/entry_attachments`,
+          'uploadEntryAttachment',
+          { form_token: token },
           file,
           dimension === undefined ? { field_api_code: field } : { field_api_code: field, dimension_api_code: dimension }
         )
@@ -349,19 +347,43 @@ const ANALYSIS_VIEW_OPTION: OptionSpec = {
   description: 'Only the entries this view shows; a filter narrows them further'
 };
 
+/** The four operations an analysis is: of a form or a table, whole or through one of its views. */
+type Analysis = { form: OperationId; table: OperationId; formView: OperationId; tableView: OperationId };
+
+const COUNT: Analysis = {
+  form: 'countEntries',
+  table: 'countTableEntries',
+  formView: 'countFormViewEntries',
+  tableView: 'countTableViewEntries'
+};
+const AGGREGATE: Analysis = {
+  form: 'aggregateEntries',
+  table: 'aggregateTableEntries',
+  formView: 'aggregateFormViewEntries',
+  tableView: 'aggregateTableViewEntries'
+};
+const SUMMARY: Analysis = {
+  form: 'summarizeEntries',
+  table: 'summarizeTableEntries',
+  formView: 'summarizeFormViewEntries',
+  tableView: 'summarizeTableViewEntries'
+};
+
 /** Through a view, an analysis covers only the entries that view shows. */
-function analysisPath(input: CommandInput, read: string): string {
+function analysis(input: CommandInput, ops: Analysis, query: CallParts['query']): HttpRequest {
   const view = input.options.view as string | undefined;
-  return `${containerPath(input)}${view ? `/views/${view}` : ''}/entries/${read}`;
+  return view
+    ? onContainer(input, ops.formView, ops.tableView, { path: { view_token: view }, query })
+    : onContainer(input, ops.form, ops.table, { query });
 }
 
 /**
  * Batch writes are served under the forms path alone, and it takes a table's
- * token just as well, so a table batches through the same URL.
+ * token just as well, so a table batches through the same operation.
  */
-function batchPath(input: CommandInput): string {
+function batch(input: CommandInput, id: 'createEntriesBatch' | 'patchEntriesBatch', entries: unknown[]): HttpRequest {
   const { token } = resolveContainer(input.options);
-  return `${API}/forms/${token}/entries/batch`;
+  return call(id, { path: { form_token: token }, body: { entries } });
 }
 
 export const ENTRY: readonly Command[] = [
@@ -386,9 +408,8 @@ export const ENTRY: readonly Command[] = [
       if (input.options.mine) {
         refuseWithMine(input, ['view', 'sort']);
         const { token } = resolveContainer(input.options);
-        return {
-          method: 'GET',
-          path: `${API}/my/forms/${token}/entries`,
+        return call('listMySubmittedEntries', {
+          path: { form_token: token },
           query: {
             filters: filters(input),
             keyword: input.options.keyword as string | undefined,
@@ -396,7 +417,7 @@ export const ENTRY: readonly Command[] = [
             include_labels: labels(input),
             ...paging(input)
           }
-        };
+        });
       }
       const view = input.options.view as string | undefined;
       if (view) {
@@ -415,15 +436,16 @@ export const ENTRY: readonly Command[] = [
               'Change them with `view edit --columns`, or read the form without --view.'
           );
         }
-        return {
-          method: 'GET',
-          path: `${containerPath(input)}/views/${view}/entries`,
-          query: { include_labels: labels(input), ...paging(input) }
-        };
+        // A view is read fifty rows a page, and the API takes no page size for it.
+        if (input.options.limit !== undefined) {
+          throw new UsageError('--limit cannot be combined with --view: a view is read 50 rows a page');
+        }
+        return onContainer(input, 'listFormViewEntries', 'listTableViewEntries', {
+          path: { view_token: view },
+          query: { include_labels: labels(input), next: input.options.next as string | undefined }
+        });
       }
-      return {
-        method: 'GET',
-        path: `${containerPath(input)}/entries`,
+      return onContainer(input, 'listEntries', 'listTableEntries', {
         query: {
           filters: filters(input),
           keyword: input.options.keyword as string | undefined,
@@ -432,7 +454,7 @@ export const ENTRY: readonly Command[] = [
           sort: sort(input, 'api_code'),
           ...paging(input)
         }
-      };
+      });
     },
     paginate: LISTING,
     examples: [
@@ -458,12 +480,17 @@ export const ENTRY: readonly Command[] = [
     ],
     request: (input) => {
       const { tokens } = resolveContainers(input.options, MAX_COUNTED_CONTAINERS);
-      const query = { filters: filters(input), keyword: input.options.keyword as string | undefined };
-      if (tokens.length === 1) return { method: 'GET', path: analysisPath(input, 'count'), query };
+      const keyword = input.options.keyword as string | undefined;
+      if (tokens.length === 1) return analysis(input, COUNT, { filters: filters(input), keyword });
       if (input.options.view !== undefined) {
         throw new UsageError('--view belongs to one form or table, so it counts one container, not several');
       }
-      return { method: 'GET', path: `${API}/entries/count`, query: { ...query, form_tokens: tokens.join(',') } };
+      if (keyword !== undefined) {
+        throw new UsageError(
+          '--keyword searches the fields of one form or table, so it counts one container, not several'
+        );
+      }
+      return call('countEntriesAcrossForms', { query: { filters: filters(input), form_tokens: tokens.join(',') } });
     },
     examples: [
       "jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'",
@@ -499,25 +526,21 @@ export const ENTRY: readonly Command[] = [
       const { tokens } = namedContainers(input.options);
       if (input.options.mine) {
         refuseWithMine(input, ['table', 'scope_filter']);
-        return {
-          method: 'GET',
-          path: `${API}/my/search`,
+        return call('searchMySubmittedEntries', {
           query: {
             keyword: input.args.keyword,
             form_tokens: tokens.length > 0 ? tokens.join(',') : undefined
           }
-        };
+        });
       }
       const scope = (input.options.scope_filter as string[] | undefined) ?? [];
-      return {
-        method: 'GET',
-        path: `${API}/entries/search`,
+      return call('searchEntriesAcrossForms', {
         query: {
           keyword: input.args.keyword,
           form_tokens: tokens.length > 0 ? tokens.join(',') : undefined,
           filters: scope.length > 0 ? JSON.stringify(scope.map(parseFilter)) : undefined
         }
-      };
+      });
     },
     examples: [
       'jinshuju entry search 某某公司',
@@ -548,7 +571,7 @@ export const ENTRY: readonly Command[] = [
       {
         name: '--kind',
         type: 'string',
-        choices: ['form', 'table'],
+        choices: choices('getEntryStats', 'kind'),
         placeholder: '<kind>',
         description: 'Count only forms, or only tables'
       },
@@ -561,7 +584,7 @@ export const ENTRY: readonly Command[] = [
       {
         name: '--by',
         type: 'string',
-        choices: ['day', 'week', 'month'],
+        choices: choices('getEntryStats', 'by'),
         placeholder: '<unit>',
         description:
           'Also split the range into buckets: every one, empty ones with total 0, --limit per bucket. ' +
@@ -569,17 +592,16 @@ export const ENTRY: readonly Command[] = [
           'At most 92 days, 53 weeks or 24 months'
       }
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/entries/stats`,
-      query: {
-        from: requiredOption(input, 'from'),
-        to: input.options.to as string | undefined,
-        kind: input.options.kind as string | undefined,
-        limit: input.options.limit === undefined ? undefined : String(input.options.limit),
-        by: input.options.by as string | undefined
-      }
-    }),
+    request: (input) =>
+      call('getEntryStats', {
+        query: {
+          from: requiredOption(input, 'from'),
+          to: input.options.to as string | undefined,
+          kind: input.options.kind as string | undefined,
+          limit: input.options.limit as number | undefined,
+          by: input.options.by as string | undefined
+        }
+      }),
     examples: [
       'jinshuju entry stats --from 2026-09-01',
       'jinshuju entry stats --from 2026-09-01 --to 2026-09-07 --kind form --limit 10',
@@ -623,16 +645,12 @@ export const ENTRY: readonly Command[] = [
       const metrics = (input.options.metric as string[] | undefined) ?? [];
       if (metrics.length === 0) throw new UsageError('--metric <func>:<field> is required, up to 20');
       const dimensions = (input.options.by as string[] | undefined) ?? [];
-      return {
-        method: 'GET',
-        path: analysisPath(input, 'aggregate'),
-        query: {
-          metrics: JSON.stringify(metrics.map(parseMetric)),
-          dimensions: dimensions.length > 0 ? JSON.stringify(dimensions.map(parseDimension)) : undefined,
-          limit: input.options.limit === undefined ? undefined : String(input.options.limit),
-          filters: filters(input)
-        }
-      };
+      return analysis(input, AGGREGATE, {
+        metrics: JSON.stringify(metrics.map(parseMetric)),
+        dimensions: dimensions.length > 0 ? JSON.stringify(dimensions.map(parseDimension)) : undefined,
+        limit: input.options.limit as number | undefined,
+        filters: filters(input)
+      });
     },
     render: aggregateTable,
     examples: [
@@ -663,15 +681,12 @@ export const ENTRY: readonly Command[] = [
       FILTER_OPTION,
       FILTERS_OPTION
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: analysisPath(input, 'summary'),
-      query: {
+    request: (input) =>
+      analysis(input, SUMMARY, {
         fields: list(input.options.fields),
-        include_overview: input.options.no_overview ? 'false' : undefined,
+        include_overview: input.options.no_overview ? false : undefined,
         filters: filters(input)
-      }
-    }),
+      }),
     examples: [
       'jinshuju entry summary --form Kp7mQ2',
       'jinshuju entry summary --form Kp7mQ2 --view aB3dE9',
@@ -690,15 +705,15 @@ export const ENTRY: readonly Command[] = [
     options: [...CONTAINER_OPTIONS, JSON_OPTION, BATCH_OPTION, ATTACH_OPTION],
     run: async (input, client) => {
       const attached = attachments(input);
-      const batch = batchRows(input);
+      const rows = batchRows(input);
       if (attached.length === 0) {
-        if (batch) return client.request({ method: 'POST', path: batchPath(input), body: { entries: batch } });
-        return client.request({ method: 'POST', path: `${containerPath(input)}/entries`, body: payload(input) });
+        if (rows) return client.request(batch(input, 'createEntriesBatch', rows));
+        return client.request(onContainer(input, 'createEntry', 'createTableEntry', { body: payload(input) }));
       }
-      if (batch !== undefined) throw new UsageError('--attach cannot be combined with --batch');
+      if (rows !== undefined) throw new UsageError('--attach cannot be combined with --batch');
 
       const body = await withUploads(input, client, attached);
-      return await client.request({ method: 'POST', path: `${containerPath(input)}/entries`, body });
+      return await client.request(onContainer(input, 'createEntry', 'createTableEntry', { body }));
     },
     examples: [
       'jinshuju entry create --form Kp7mQ2 --json \'{"field_1":"张三"}\'',
@@ -733,13 +748,13 @@ export const ENTRY: readonly Command[] = [
     // that arrived without one had no way to gain one. The upload happens first
     // and its id joins the patch, exactly as it does on create.
     run: async (input, client) => {
-      const batch = batchRows(input);
+      const rows = batchRows(input);
       const attached = attachments(input);
-      if (batch) {
+      if (rows) {
         if (input.args.serial) throw new UsageError('--batch carries its own serial numbers, so <serial> is not taken');
         if (input.options.replace) throw new UsageError('--replace cannot be combined with --batch');
         if (attached.length > 0) throw new UsageError('--attach cannot be combined with --batch');
-        return client.request({ method: 'PATCH', path: batchPath(input), body: { entries: batch } });
+        return client.request(batch(input, 'patchEntriesBatch', rows));
       }
       if (!input.args.serial) {
         throw new UsageError(
@@ -749,11 +764,12 @@ export const ENTRY: readonly Command[] = [
         );
       }
       const body = attached.length > 0 ? await withUploads(input, client, attached) : payload(input);
-      return client.request({
-        method: input.options.replace ? 'PUT' : 'PATCH',
-        path: `${containerPath(input)}/entries/${input.args.serial}`,
-        body
-      });
+      const path = { serial_number: input.args.serial };
+      return client.request(
+        input.options.replace
+          ? onContainer(input, 'replaceEntry', 'replaceTableEntry', { path, body })
+          : onContainer(input, 'updateEntry', 'updateTableEntry', { path, body })
+      );
     },
     examples: [
       'jinshuju entry update --form Kp7mQ2 12 --json \'{"field_1":"李四"}\'',
@@ -806,20 +822,21 @@ export const ENTRY: readonly Command[] = [
       try {
         watching.step(`uploading ${basename(input.args.file as string)}…`);
         const uploaded = await client.request<{ id: string }>(
-          upload(`${API}/forms/${token}/import_files`, input.args.file as string)
+          upload('uploadImportFile', { form_token: token }, input.args.file as string)
         );
 
         watching.step('starting the import…');
-        const started = await client.request<ImportJob>({
-          method: 'POST',
-          path: `${API}/forms/${token}/entry_imports`,
-          body: given({
-            attachment_id: uploaded.id,
-            columns: mappings.map(parseColumnMapping),
-            header_row_index: input.options.header_row,
-            unique_field_code: input.options.unique
+        const started = await client.request<ImportJob>(
+          call('createEntryImport', {
+            path: { form_token: token },
+            body: given({
+              attachment_id: uploaded.id,
+              columns: mappings.map(parseColumnMapping),
+              header_row_index: input.options.header_row,
+              unique_field_code: input.options.unique
+            })
           })
-        });
+        );
         if (!input.options.wait) return started;
 
         return await awaitImport(client, token, started.job_id, watching);
@@ -843,7 +860,7 @@ export const ENTRY: readonly Command[] = [
     options: [...CONTAINER_OPTIONS],
     request: (input) => {
       const { token } = resolveContainer(input.options);
-      return { method: 'GET', path: `${API}/forms/${token}/entry_imports/${input.args.job}` };
+      return call('getEntryImport', { path: { form_token: token, id: input.args.job } });
     },
     examples: ['jinshuju entry import-status --form Kp7mQ2 6ab12edb3134316548d106a9']
   },
@@ -854,7 +871,7 @@ export const ENTRY: readonly Command[] = [
     options: [...CONTAINER_OPTIONS, YES_OPTION],
     request: (input) => {
       confirmed(input, `Deleting entry ${input.args.serial}`);
-      return { method: 'DELETE', path: `${containerPath(input)}/entries/${input.args.serial}` };
+      return onContainer(input, 'deleteEntry', 'deleteTableEntry', { path: { serial_number: input.args.serial } });
     },
     examples: ['jinshuju entry delete --form Kp7mQ2 12 --yes']
   },
@@ -868,10 +885,10 @@ export const ENTRY: readonly Command[] = [
       { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' },
       LABELS_OPTION
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${containerPath(input)}/entries/${input.args.serial}`,
-      query: { fields: list(input.options.fields), include_labels: labels(input) }
-    })
+    request: (input) =>
+      onContainer(input, 'getEntry', 'getTableEntry', {
+        path: { serial_number: input.args.serial },
+        query: { fields: list(input.options.fields), include_labels: labels(input) }
+      })
   }
 ];

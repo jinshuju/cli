@@ -1,0 +1,127 @@
+name: Sync openapi.yaml
+
+# Once a day the published openapi.yaml is fetched. When it differs from
+# spec/openapi.yaml, src/generated is regenerated from it and a pull request
+# opened, so what API v1 now takes reaches the CLI through review rather than
+# through a user's error.
+#
+# The commands are not generated: which ones exist stays the CLI's decision.
+# What follows the spec is what a request may carry — paths, parameters, the
+# values a flag takes — so the pull request is where someone sees what moved.
+#
+# A pull request is opened even when the CLI no longer builds or passes against
+# the new spec, and says so. That is the case that needs a person most: an
+# operation the CLI calls was removed or renamed, or a value it sends is no
+# longer taken. The run then fails as well, so it does not pass unnoticed.
+on:
+  schedule:
+    - cron: '17 1 * * *' # 09:17 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: spec-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Fetch openapi.yaml and open a pull request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch openapi.yaml
+        shell: bash
+        run: |
+          cp spec/openapi.yaml "${RUNNER_TEMP}/openapi.before.yaml"
+          node scripts/fetch-spec.mjs
+
+      - name: Regenerate src/generated
+        id: generate
+        continue-on-error: true
+        shell: bash
+        run: npm run generate 2>&1 | tee "${RUNNER_TEMP}/generate.log"
+
+      - name: Check the CLI against the new spec
+        id: check
+        if: steps.generate.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          npm run check 2>&1 | tee "${RUNNER_TEMP}/check.log"
+          npm test 2>&1 | tail -n 60 | tee -a "${RUNNER_TEMP}/check.log"
+
+      - name: Describe the change
+        id: describe
+        shell: bash
+        env:
+          GENERATED: ${{ steps.generate.outcome }}
+          CHECKED: ${{ steps.check.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # A change to an operation the CLI calls is a feat and names it, so the
+          # changelog says what moved; anything else is a chore and releases nothing.
+          title="$(node scripts/spec-diff.mjs --title "${RUNNER_TEMP}/openapi.before.yaml" spec/openapi.yaml)" ||
+            title='feat: follow openapi.yaml'
+          delimiter="EOF_$(openssl rand -hex 8)"
+          {
+            echo "title=${title}"
+            echo "body<<${delimiter}"
+            echo 'The published openapi.yaml changed, and `src/generated` was regenerated from it.'
+            echo
+            node scripts/spec-diff.mjs "${RUNNER_TEMP}/openapi.before.yaml" spec/openapi.yaml ||
+              echo '- The two copies could not be compared; read the diff of `spec/openapi.yaml`.'
+            echo
+            if [ "${GENERATED}" != 'success' ]; then
+              echo '**`npm run generate` failed**, so `src/generated` still describes the old spec:'
+              echo
+              echo '```'
+              tail -n 30 "${RUNNER_TEMP}/generate.log"
+              echo '```'
+            elif [ "${CHECKED}" != 'success' ]; then
+              echo '**The CLI does not pass against the new spec.** Fix it on this branch before merging:'
+              echo
+              echo '```'
+              grep -E 'error|✖|not ok|AssertionError|expected|actual' "${RUNNER_TEMP}/check.log" | head -n 40 || true
+              echo '```'
+            else
+              echo '`npm run check` and `npm test` pass against the new spec.'
+            fi
+            echo
+            echo "Run: ${RUN_URL}"
+            echo "${delimiter}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Open or update the pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # A pull request opened with GITHUB_TOKEN does not trigger other
+          # workflows, so CI would not run on it. The PAT release-please uses
+          # (contents and pull-requests write) fixes that, as it does there;
+          # without it the pull request still opens and simply shows no checks.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: chore/sync-openapi
+          commit-message: ${{ steps.describe.outputs.title }}
+          title: ${{ steps.describe.outputs.title }}
+          body: ${{ steps.describe.outputs.body }}
+          labels: openapi-sync
+          delete-branch: true
+
+      - name: Fail the run when the CLI does not follow the new spec
+        if: steps.generate.outcome != 'success' || steps.check.outcome == 'failure'
+        run: |
+          echo '::error::the CLI does not build or pass against the new openapi.yaml; see the pull request'
+          exit 1

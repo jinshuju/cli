@@ -1,5 +1,6 @@
 import { FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, PAGINATION_OPTIONS, SORT_OPTION } from '../options.js';
-import { API, FOLDER_OPTION, LISTING, filters, keywords, overriding, paging, payload, sort } from './shared.js';
+import { bodyChoices, call } from '../spec.js';
+import { FOLDER_OPTION, LISTING, filters, keywords, overriding, paging, payload, sort } from './shared.js';
 import type { Command } from './types.js';
 import { validateContainerPayload } from '../payload.js';
 
@@ -8,19 +9,7 @@ import { validateContainerPayload } from '../payload.js';
  * Worth naming in the help rather than leaving to a rejected create: the absence
  * of TextField is the one nobody guesses.
  */
-const TABLE_FIELD_TYPES = [
-  'TextArea',
-  'RadioButton',
-  'CheckBox',
-  'BooleanField',
-  'MobileField',
-  'NumberField',
-  'DateTimeField',
-  'EmailField',
-  'LinkField',
-  'AttachmentField',
-  'FormulaField'
-] as const;
+const TABLE_FIELD_TYPES = bodyChoices('createTable', 'fields[].type');
 
 export const TABLE: readonly Command[] = [
   {
@@ -39,11 +28,15 @@ export const TABLE: readonly Command[] = [
       SORT_OPTION,
       ...PAGINATION_OPTIONS
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/tables`,
-      query: { q: keywords(input.options.name), filters: filters(input), sort: sort(input, 'field'), ...paging(input) }
-    }),
+    request: (input) =>
+      call('listTables', {
+        query: {
+          q: keywords(input.options.name),
+          filters: filters(input),
+          sort: sort(input, 'field'),
+          ...paging(input)
+        }
+      }),
     paginate: LISTING,
     examples: ['jinshuju table list --name 台账', 'jinshuju entry list --table Vn4xR8']
   },
@@ -51,7 +44,7 @@ export const TABLE: readonly Command[] = [
     path: ['table', 'get'],
     summary: 'Show a table: columns, types, choices',
     args: [{ name: 'table', required: true, description: 'Table token, six letters and digits, e.g. Vn4xR8' }],
-    request: (input) => ({ method: 'GET', path: `${API}/tables/${input.args.table}` }),
+    request: (input) => call('getTable', { path: { table_token: input.args.table } }),
     examples: ['jinshuju table get Vn4xR8']
   },
   {
@@ -59,7 +52,8 @@ export const TABLE: readonly Command[] = [
     summary: 'Create a table',
     description:
       'Column types use the API v1 names, but a table takes fewer of them than a form: ' +
-      `${TABLE_FIELD_TYPES.join(', ')}. There is no TextField — a single line of text is a ` +
+      `${TABLE_FIELD_TYPES?.join(', ') ?? 'see `jinshuju field types --kind table`'}. ` +
+      'There is no TextField — a single line of text is a ' +
       'TextArea here. Do not pass api_code: the backend generates it.',
     options: [
       JSON_OPTION,
@@ -70,14 +64,13 @@ export const TABLE: readonly Command[] = [
         description: 'Seed a few blank rows, as the UI does. Leave it off when rows follow'
       }
     ],
-    request: (input) => ({
-      method: 'POST',
-      path: `${API}/tables`,
-      body: overriding(validateContainerPayload(payload(input), 'table'), {
-        folder_token: input.options.folder,
-        with_default_entries: input.options.with_default_entries ? true : undefined
-      })
-    }),
+    request: (input) =>
+      call('createTable', {
+        body: overriding(validateContainerPayload(payload(input), 'table'), {
+          folder_token: input.options.folder,
+          with_default_entries: input.options.with_default_entries ? true : undefined
+        })
+      }),
     examples: ['jinshuju table create --json @table.json']
   },
   {
@@ -86,11 +79,11 @@ export const TABLE: readonly Command[] = [
     description: 'The folder must be a table folder; a form folder cannot hold a table.',
     args: [{ name: 'table', required: true, description: 'Table token' }],
     options: [FOLDER_OPTION],
-    request: (input) => ({
-      method: 'PATCH',
-      path: `${API}/tables/${input.args.table}/folder`,
-      body: { folder_token: (input.options.folder as string | undefined) ?? '' }
-    }),
+    request: (input) =>
+      call('moveTableToFolder', {
+        path: { table_token: input.args.table },
+        body: { folder_token: (input.options.folder as string | undefined) ?? '' }
+      }),
     examples: ['jinshuju table move Vn4xR8 --folder Nf7mDC', 'jinshuju table move Vn4xR8']
   },
   {
@@ -101,6 +94,6 @@ export const TABLE: readonly Command[] = [
       'fields: {add, update, update_choices, remove}.',
     args: [{ name: 'table', required: true, description: 'Table token' }],
     options: [JSON_OPTION],
-    request: (input) => ({ method: 'PATCH', path: `${API}/tables/${input.args.table}`, body: payload(input) })
+    request: (input) => call('updateTable', { path: { table_token: input.args.table }, body: payload(input) })
   }
 ];

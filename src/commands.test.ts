@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { runCli, type CliRuntime } from './cli.js';
 import { awaitImport } from './commands/entry.js';
 import { HttpError, TransportError, withQuery, type HttpRequest } from './http.js';
+import { unansweredLookups } from './spec.js';
+import { nonconformities } from './testing/conformance.js';
 
 /** What the client would have put on the wire: the path with its query. */
 const url = (request: HttpRequest): string => withQuery(request.path, request.query);
@@ -24,13 +26,32 @@ function cli(args: string[], runtime: CliRuntime = {}) {
   return runCli([...args, '--config', NO_CONFIG], runtime);
 }
 
-function createMockClient() {
+/**
+ * What the suite sent that openapi.yaml would not take. `call` checks every
+ * request it builds; this catches one that was built some other way — a path
+ * written out by hand, a body added after — and so never was.
+ */
+const nonconforming: string[] = [];
+
+function conform(request: HttpRequest): void {
+  nonconforming.push(...nonconformities(request));
+}
+
+after(() => assert.deepEqual(nonconforming, [], 'requests openapi.yaml would refuse'));
+
+/**
+ * A client that answers every request, and keeps it. `lenient` is for the tests
+ * whose point is a request this copy of the spec does not describe, sent anyway
+ * because the API may have learned it since.
+ */
+function createMockClient({ lenient = false }: { lenient?: boolean } = {}) {
   const requests: HttpRequest[] = [];
   return {
     requests,
     client: {
       async request<T>(request: HttpRequest): Promise<T> {
         requests.push(request);
+        if (!lenient) conform(request);
         return { ok: true, request } as T;
       }
     }
@@ -62,8 +83,10 @@ test('form create posts API v1 payload without injecting api_code', async () => 
 test('form and table create check the shape of the payload, and leave the type vocabulary to the server', async () => {
   const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
-  // A type this CLI has never heard of goes through: the server knows the list.
-  const unknownType = createMockClient();
+  // A type this CLI's copy of the spec does not list goes through: the server
+  // may have learned it since this CLI was installed, and `field types`, which
+  // asks the server, would already be listing it.
+  const unknownType = createMockClient({ lenient: true });
   const sent = await cli(['form', 'create', '--json', '{"name":"x","fields":[{"type":"HologramField","label":"h"}]}'], {
     env,
     client: unknownType.client
@@ -409,7 +432,7 @@ test('account me asks who is signed in, not what the account holds', async () =>
   assert.equal(url(mock.requests[0]), '/api/v1/me');
 });
 
-test('merchant, transaction, refund and payout ask the 小金商户 endpoints, a list of statuses as one parameter each', async () => {
+test('merchant, transaction, refund and payout ask the 小金商户 endpoints, a list of statuses comma-joined as the spec spells it', async () => {
   const mock = createMockClient();
   const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
 
@@ -440,7 +463,7 @@ test('merchant, transaction, refund and payout ask the 小金商户 endpoints, a
   assert.deepEqual(mock.requests.map(url), [
     '/api/v1/trade/merchant',
     '/api/v1/trade/transactions?start_date=2026-09-01&end_date=2026-09-28' +
-      '&paid_status%5B%5D=refunded&paid_status%5B%5D=partial_refunded&form_token=Kp7mQ2&limit=20',
+      '&paid_status=refunded%2Cpartial_refunded&form_token=Kp7mQ2&limit=20',
     '/api/v1/trade/transactions/aggregate?group_by=payment_channel',
     '/api/v1/trade/refunds?status=success&include=stats',
     '/api/v1/trade/payouts?next=2'
@@ -845,7 +868,7 @@ test('field verbs all ride on the container PATCH, each in its own operation', a
     env: WRITE_ENV,
     client: update.client
   });
-  await cli(['field', 'update-choices', '--form', 'Kp7mQ2', 'field_7', '--json', '{"add":[{"label":"丙"}]}'], {
+  await cli(['field', 'update-choices', '--form', 'Kp7mQ2', 'field_7', '--json', '{"add":[{"name":"丙"}]}'], {
     env: WRITE_ENV,
     client: choices.client
   });
@@ -857,7 +880,7 @@ test('field verbs all ride on the container PATCH, each in its own operation', a
   assert.equal(update.requests[0].path, '/api/v1/tables/Vn4xR8');
   assert.deepEqual(update.requests[0].body, { fields: { update: [{ required: true, api_code: 'field_3' }] } });
   assert.deepEqual(choices.requests[0].body, {
-    fields: { update_choices: [{ add: [{ label: '丙' }], field_api_code: 'field_7' }] }
+    fields: { update_choices: [{ add: [{ name: '丙' }], field_api_code: 'field_7' }] }
   });
   assert.deepEqual(remove.requests[0].body, { fields: { remove: ['field_9'] } });
 });
@@ -1032,16 +1055,29 @@ test('table move and --with-default-entries reach their own endpoints', async ()
 
   await cli(['table', 'move', 'Vn4xR8', '--folder', 'Nf7mDC'], { env: WRITE_ENV, client: moved.client });
   await cli(['table', 'move', 'Vn4xR8'], { env: WRITE_ENV, client: rooted.client });
-  await cli(['table', 'create', '--json', '{"name":"台账","fields":[]}', '--with-default-entries'], {
-    env: WRITE_ENV,
-    client: seeded.client
-  });
+  await cli(
+    [
+      'table',
+      'create',
+      '--json',
+      '{"name":"台账","fields":[{"type":"TextArea","label":"事项"}]}',
+      '--with-default-entries'
+    ],
+    {
+      env: WRITE_ENV,
+      client: seeded.client
+    }
+  );
 
   assert.equal(moved.requests[0].method, 'PATCH');
   assert.equal(moved.requests[0].path, '/api/v1/tables/Vn4xR8/folder');
   assert.deepEqual(moved.requests[0].body, { folder_token: 'Nf7mDC' });
   assert.deepEqual(rooted.requests[0].body, { folder_token: '' });
-  assert.deepEqual(seeded.requests[0].body, { name: '台账', fields: [], with_default_entries: true });
+  assert.deepEqual(seeded.requests[0].body, {
+    name: '台账',
+    fields: [{ type: 'TextArea', label: '事项' }],
+    with_default_entries: true
+  });
 });
 
 test('form get --include names the blocks, and setting is honoured by already being there', async () => {
@@ -1221,6 +1257,7 @@ function uploadingClient(responses: Record<string, unknown>) {
     client: {
       async request<T>(request: HttpRequest): Promise<T> {
         requests.push(request);
+        conform(request);
         const key = Object.keys(responses).find((path) => request.path.startsWith(path));
         return (key ? responses[key] : { ok: true }) as T;
       }
@@ -1458,15 +1495,15 @@ test('a settings block travels to its own endpoint, on create and on edit', asyn
       '--type',
       'exam',
       '--json',
-      '{"name":"考试","fields":[{"type":"TextField","label":"姓名"}],"exam_setting":{"total_score":100}}'
+      '{"name":"考试","fields":[{"type":"TextField","label":"姓名"}],"exam_setting":{"limited_time":30}}'
     ],
     { env: WRITE_ENV, client: created.client }
   );
-  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"exam_setting":{"total_score":90}}'], {
+  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"exam_setting":{"limited_time":45}}'], {
     env: WRITE_ENV,
     client: edited.client
   });
-  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"name":"改名","exam_setting":{"total_score":90}}'], {
+  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"name":"改名","exam_setting":{"limited_time":45}}'], {
     env: WRITE_ENV,
     client: editedBoth.client
   });
@@ -1475,7 +1512,7 @@ test('a settings block travels to its own endpoint, on create and on edit', asyn
   assert.equal(created.requests[0].path, '/api/v1/forms');
   assert.equal((created.requests[0].body as Record<string, unknown>).exam_setting, undefined);
   assert.equal(created.requests[1].path, '/api/v1/forms/Kp7mQ2/exam_setting');
-  assert.deepEqual(created.requests[1].body, { total_score: 100 });
+  assert.deepEqual(created.requests[1].body, { limited_time: 30 });
 
   // A block on its own never touches the generic update, which would drop it.
   assert.equal(edited.requests.length, 2);
@@ -2349,3 +2386,154 @@ test('fill submit without --json is a usage error', async () => {
   assert.equal(result.exitCode, 2);
   assert.equal(mock.requests.length, 0);
 });
+
+test('a flag combination the operation behind it cannot take is refused, saying why', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+  const mock = createMockClient();
+
+  const viewLimit = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--limit', '10'], {
+    env,
+    client: mock.client
+  });
+  assert.equal(viewLimit.exitCode, 2);
+  assert.match(viewLimit.stderr, /--limit cannot be combined with --view/);
+
+  const severalKeyword = await cli(['entry', 'count', '--form', 'Kp7mQ2', '--form', 'Vn4xR8', '--keyword', '张三'], {
+    env,
+    client: mock.client
+  });
+  assert.equal(severalKeyword.exitCode, 2);
+  assert.match(severalKeyword.stderr, /--keyword .* counts one container/);
+
+  const notSerial = await cli(['entry', 'get', '--form', 'Kp7mQ2', 'twelve'], { env, client: mock.client });
+  assert.equal(notSerial.exitCode, 2);
+  assert.match(notSerial.stderr, /serial_number must be an integer/);
+
+  assert.equal(mock.requests.length, 0);
+});
+
+test('what the API may have learned since this CLI was installed is sent, for the server to judge', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+  const mock = createMockClient({ lenient: true });
+
+  // Every CLI already installed keeps the spec it shipped with. A key, a field
+  // type, a longer list or a higher limit the API learns later must still get
+  // through; the API judges the body against the spec it runs, and its 400
+  // says what is wrong just as precisely.
+  const sent = await Promise.all([
+    cli(['form', 'create', '--json', '{"name":"x","fields":[{"type":"TextField","label":"a","future_option":true}]}'], {
+      env,
+      client: mock.client
+    }),
+    cli(['folder', 'list', '--limit', '500'], { env, client: mock.client }),
+    cli(['table', 'create', '--json', '{"name":"t","fields":[]}'], { env, client: mock.client }),
+    cli(['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"TextField"}'], { env, client: mock.client }),
+    cli(['comment', 'create', '--form', 'Kp7mQ2', '--entry', '12', 'x'.repeat(2001)], { env, client: mock.client })
+  ]);
+
+  assert.deepEqual(
+    sent.map((result) => result.exitCode),
+    [0, 0, 0, 0, 0]
+  );
+  assert.equal(mock.requests.length, 5);
+});
+
+test('every list of values a flag reads off the spec is there', () => {
+  // A lookup that comes back empty leaves its flag open rather than crashing
+  // every command as it loads; this is where a spec that dropped one fails.
+  assert.deepEqual(unansweredLookups(), []);
+});
+
+test('the values a flag takes are the ones openapi.yaml lists', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+  const mock = createMockClient();
+
+  // Each of these was missing from the copy the CLI used to keep.
+  await cli(['view', 'create', '--form', 'Kp7mQ2', '填写页', '--type', 'form'], { env, client: mock.client });
+  await cli(
+    [
+      'form',
+      'create',
+      '--json',
+      '{"name":"收款","fields":[{"type":"TextField","label":"姓名"}]}',
+      '--scene',
+      'quickpay'
+    ],
+    {
+      env,
+      client: mock.client
+    }
+  );
+
+  assert.deepEqual(
+    mock.requests.map((request) => request.body),
+    [
+      { view_type: 'form', name: '填写页' },
+      { name: '收款', fields: [{ type: 'TextField', label: '姓名' }], scene: 'quickpay' }
+    ]
+  );
+  const help = await cli(['table', 'create', '--help']);
+  assert.match(help.stdout, /RelationField/);
+});
+
+/**
+ * An example is what a caller copies, and an agent copies it exactly. One that
+ * the API refuses — an exam setting it has no key for — teaches the refusal.
+ */
+test('every example in the help sends requests openapi.yaml takes', async () => {
+  const { COMMANDS } = await import('./commands/index.js');
+  // A file the example names is one this checkout does not have.
+  const readsAFile = (line: string) => /[\s=](@|\.\/)|\scat\s|\|/.test(line);
+  const answers = {
+    token: 'Kp7mQ2',
+    id: 'att_1',
+    attachment_id: 'img_1',
+    job_id: 'job_1',
+    status: 'success',
+    data: []
+  };
+
+  let ran = 0;
+  for (const command of COMMANDS) {
+    if (command.path[0] === 'auth' || command.path[0] === 'config') continue;
+    for (const example of command.examples ?? []) {
+      if (readsAFile(example)) continue;
+      const words = shellWords(example).slice(1);
+      const mock = createMockClient();
+      const answering = {
+        async request<T>(request: HttpRequest): Promise<T> {
+          await mock.client.request(request);
+          return answers as T;
+        }
+      };
+      const result = await cli([...words, '--output', 'json'], { env: WRITE_ENV, client: answering });
+      assert.equal(result.exitCode, 0, `${example}\n${result.stderr}`);
+      assert.ok(mock.requests.length > 0, example);
+      ran += 1;
+    }
+  }
+  assert.ok(ran > 30, `only ${ran} examples ran`);
+});
+
+/** A command line split the way a shell splits it, as far as the examples quote. */
+function shellWords(line: string): string[] {
+  const words: string[] = [];
+  let word: string | undefined;
+  let quote: string | undefined;
+  for (const char of line) {
+    if (quote) {
+      if (char === quote) quote = undefined;
+      else word = (word ?? '') + char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      word ??= '';
+    } else if (/\s/.test(char)) {
+      if (word !== undefined) words.push(word);
+      word = undefined;
+    } else {
+      word = (word ?? '') + char;
+    }
+  }
+  if (word !== undefined) words.push(word);
+  return words;
+}

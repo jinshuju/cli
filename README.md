@@ -415,4 +415,10 @@ npm install
 npm test
 npm run check       # typecheck + oxlint + oxfmt --check, what CI runs
 npm run fmt         # format in place with oxfmt
+npm run generate    # src/generated from spec/openapi.yaml
+npm run spec:update # fetch the published openapi.yaml, then generate
 ```
+
+What a request may carry — paths, parameters, the values a flag takes — follows
+`spec/openapi.yaml`, a copy of the published API v1 spec. A daily workflow
+fetches it and opens a pull request when it changes.
