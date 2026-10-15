@@ -229,6 +229,8 @@ jinshuju entry delete --form Kp7mQ2 12 --yes
 jinshuju view create --form Kp7mQ2 "High scores" --filter 'field_3 gte 80' --sort created_at:desc
 jinshuju comment create --form Kp7mQ2 --entry 12 "Contacted, awaiting reply"
 jinshuju opensearch edit Qy7nR3 --disable
+jinshuju checkin create --form Kp7mQ2             # needs the check-in plugin enabled for the account
+jinshuju checkin edit 42 --disable
 ```
 
 Deletion always requires `--yes`. This CLI is non-interactive — stdin belongs to

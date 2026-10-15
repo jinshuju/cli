@@ -1024,6 +1024,74 @@ test('opensearch edit turns a query on or off, but not both', async () => {
   assert.match(both.stderr, /--enable and --disable are opposites/);
 });
 
+test('checkin create turns check-in on for a form, sending only what was named', async () => {
+  const plain = createMockClient();
+  const named = createMockClient();
+  const missing = await cli(['checkin', 'create'], { env: WRITE_ENV, client: createMockClient().client });
+
+  await cli(['checkin', 'create', '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: plain.client });
+  await cli(
+    [
+      'checkin',
+      'create',
+      '--form',
+      'Kp7mQ2',
+      '--name',
+      '年会签到',
+      '--check-in-field',
+      'field_2',
+      '--display-field',
+      'field_1',
+      '--no-check-in-code',
+      '--unique-check-in-field',
+      '--json',
+      '{"geo_location":{"longitude":108.9,"latitude":34.2,"range":500}}'
+    ],
+    { env: WRITE_ENV, client: named.client }
+  );
+
+  assert.equal(plain.requests[0].method, 'POST');
+  assert.equal(plain.requests[0].path, '/api/v1/plugins/checkin/campaigns');
+  assert.deepEqual(plain.requests[0].body, { form_token: 'Kp7mQ2' });
+  assert.deepEqual(named.requests[0].body, {
+    geo_location: { longitude: 108.9, latitude: 34.2, range: 500 },
+    form_token: 'Kp7mQ2',
+    name: '年会签到',
+    checkin_field_api_code: 'field_2',
+    display_field_api_code: 'field_1',
+    enable_checkin_code: false,
+    checkin_field_required_unique: true
+  });
+  assert.equal(missing.exitCode, 2);
+  assert.match(missing.stderr, /--form is required/);
+});
+
+test('checkin list, get, edit and delete address the campaign', async () => {
+  const list = createMockClient();
+  const get = createMockClient();
+  const edit = createMockClient();
+  const remove = createMockClient();
+
+  await cli(['checkin', 'list', '--form', 'Kp7mQ2', '--limit', '5'], { env: WRITE_ENV, client: list.client });
+  await cli(['checkin', 'get', '42'], { env: WRITE_ENV, client: get.client });
+  await cli(['checkin', 'edit', '42', '--disable', '--name', '暂停'], { env: WRITE_ENV, client: edit.client });
+  const guarded = await cli(['checkin', 'delete', '42'], { env: WRITE_ENV, client: createMockClient().client });
+  await cli(['checkin', 'delete', '42', '--yes'], { env: WRITE_ENV, client: remove.client });
+  const both = await cli(['checkin', 'edit', '42', '--enable', '--disable'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  assert.equal(url(list.requests[0]), '/api/v1/plugins/checkin/campaigns?limit=5&form_token=Kp7mQ2');
+  assert.equal(get.requests[0].path, '/api/v1/plugins/checkin/campaigns/42');
+  assert.equal(edit.requests[0].method, 'PATCH');
+  assert.deepEqual(edit.requests[0].body, { name: '暂停', enabled: false });
+  assert.match(guarded.stderr, /pass --yes/);
+  assert.equal(remove.requests[0].method, 'DELETE');
+  assert.equal(remove.requests[0].path, '/api/v1/plugins/checkin/campaigns/42');
+  assert.equal(both.exitCode, 2);
+});
+
 test('several --name keywords stay separate, so the API matches any of them', async () => {
   const forms = createMockClient();
   const tables = createMockClient();
@@ -2338,6 +2406,10 @@ test('help mentions jsj, the exit codes, and what a resource does not have', asy
 
   const form = await cli(['form', '--help'], { env: {} });
   assert.match(form.stdout, /There is no delete, on purpose/);
+
+  const checkin = await cli(['checkin', '--help'], { env: {} });
+  assert.match(checkin.stdout, /Check-in rides on a form/);
+  assert.match(checkin.stdout, /`checkin create --form <token>` turns it on/);
 
   const auth = await cli(['auth', '--help'], { env: {} });
   assert.match(auth.stdout, /auth login --access-token/);
