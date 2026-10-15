@@ -9,6 +9,7 @@
  */
 
 import { ACCOUNT } from './account.js';
+import { CHECKIN } from './checkin.js';
 import { COMMENT } from './comment.js';
 import { ENTRY } from './entry.js';
 import { FIELD } from './field.js';
@@ -50,6 +51,21 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
   {
+    name: 'checkin',
+    summary: 'Check-in campaigns: registrants of a form check in on site',
+    note: [
+      'Check-in rides on a form: people register by filling the form in, then check in on site.',
+      '  1. The form needs a mobile or name field to check in with (`field list --form <token>`),',
+      '     and its after-submit action must be the default message.',
+      '  2. `checkin create --form <token>` turns it on. Registrants then see a check-in code after submitting.',
+      "  3. Share the form's fill link for registration. On site, show `checkin_url` as a QR code",
+      '     for registrants to check themselves in, and send `verifier_invite_url` to staff who verify them.',
+      '  4. `checkin edit --disable` pauses check-in; records are kept.',
+      'The check-in plugin has to be enabled for the account in the plugin center first.',
+      'You see and change only the campaigns you created.'
+    ].join('\n')
+  },
+  {
     name: 'fill',
     summary: 'Fill in a form through its fill link',
     note:
@@ -75,6 +91,7 @@ export const COMMANDS: readonly Command[] = [
   ...ENTRY,
   ...COMMENT,
   ...OPENSEARCH,
+  ...CHECKIN,
   ...FILL,
   ...TRADE,
   ...SMS
