@@ -18,7 +18,8 @@
   "files": [
     "dist",
     "!dist/**/*.test.js",
-    "!dist/**/*.test.d.ts"
+    "!dist/**/*.test.d.ts",
+    "!dist/testing"
   ],
   "type": "module",
   "publishConfig": {
@@ -34,13 +35,16 @@
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "npm run typecheck && npm run lint && npm run fmt:check"
+    "check": "npm run typecheck && npm run lint && npm run fmt:check",
+    "generate": "node scripts/generate.mjs && oxfmt src/generated",
+    "spec:update": "node scripts/fetch-spec.mjs && npm run generate"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "yaml": "^2.9.1"
   },
   "engines": {
     "node": ">=20"

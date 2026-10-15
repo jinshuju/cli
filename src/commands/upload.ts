@@ -1,7 +1,7 @@
 import { UsageError } from '../options.js';
 import type { HttpClient, HttpRequest } from '../http.js';
 import { progress } from '../progress.js';
-import { API } from './shared.js';
+import { call, type OperationId } from '../spec.js';
 import { readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 
@@ -24,11 +24,23 @@ const UPLOAD_TYPES: Record<string, string> = {
 };
 
 /**
+ * What the CLI uploads a form image as. A test holds the list to the spec's
+ * `image_type`, which is where it would otherwise drift.
+ */
+export const FORM_IMAGE_TYPES = ['description', 'header', 'wallpaper', 'opensearch_header'] as const;
+export type FormImageType = (typeof FORM_IMAGE_TYPES)[number];
+
+/**
  * A file on disk, as multipart. The three endpoints that take one authenticate
  * like every other request, so there is no ticket to fetch first: the file goes
  * up in one call and comes back with an id to refer to it by.
  */
-export function upload(path: string, file: string, extra: Record<string, string> = {}): HttpRequest {
+export function upload(
+  id: OperationId,
+  path: Record<string, string>,
+  file: string,
+  extra: Record<string, string> = {}
+): HttpRequest {
   const form = new FormData();
   let bytes: Buffer;
   try {
@@ -39,19 +51,19 @@ export function upload(path: string, file: string, extra: Record<string, string>
   const type = UPLOAD_TYPES[extname(file).toLowerCase()];
   form.append('file', new Blob([new Uint8Array(bytes)], type ? { type } : undefined), basename(file));
   for (const [name, value] of Object.entries(extra)) form.append(name, value);
-  return { method: 'POST', path, form };
+  return call(id, { path, form });
 }
 
 /**
  * An image that a form's theme or one of its public queries refers to by id, uploaded
  * with `imageType` saying which (header, wallpaper, opensearch_header).
  */
-export async function uploadFormImage(client: HttpClient, file: string, imageType: string): Promise<string> {
+export async function uploadFormImage(client: HttpClient, file: string, imageType: FormImageType): Promise<string> {
   const watching = progress();
   watching.step(`uploading ${basename(file)}…`);
   try {
     const uploaded = await client.request<{ attachment_id: string }>(
-      upload(`${API}/form_image_attachments`, file, { image_type: imageType })
+      upload('uploadFormImage', {}, file, { image_type: imageType })
     );
     return uploaded.attachment_id;
   } finally {

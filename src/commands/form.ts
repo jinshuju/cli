@@ -9,7 +9,6 @@ import {
   type OptionSpec
 } from '../options.js';
 import {
-  API,
   FOLDER_OPTION,
   LISTING,
   filters,
@@ -23,6 +22,7 @@ import {
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
+import { bodyChoices, call, type OperationId } from '../spec.js';
 import { upload, uploadFormImage } from './upload.js';
 
 /**
@@ -92,16 +92,16 @@ const INCLUDE_OPTION: OptionSpec = {
   description: `Extra blocks to carry: ${Object.keys(FORM_INCLUDES).join(', ')}. The setting is always there`
 };
 
-function includes(input: CommandInput): Record<string, string | undefined> {
+function includes(input: CommandInput): Record<string, boolean> {
   const asked = (input.options.include as string[] | undefined) ?? [];
-  const query: Record<string, string | undefined> = {};
+  const query: Record<string, boolean> = {};
   for (const name of asked) {
     const parameter = FORM_INCLUDES[name];
     if (parameter === '') continue;
     if (!parameter) {
       throw new UsageError(`--include takes ${Object.keys(FORM_INCLUDES).join(', ')}, got ${JSON.stringify(name)}`);
     }
-    query[parameter] = 'true';
+    query[parameter] = true;
   }
   return query;
 }
@@ -115,16 +115,7 @@ function themeBody(input: CommandInput): Record<string, unknown> {
 }
 
 /** The scenes a form can be created for, as the API names them. */
-const FORM_SCENES = [
-  'survey',
-  'registry',
-  'vote',
-  'exam',
-  'reservation',
-  'customer_acquisition',
-  'evaluation',
-  'online_payment'
-] as const;
+const FORM_SCENES = bodyChoices('createForm', 'scene');
 
 /**
  * A form's type picks both the scene it is created in and the settings block
@@ -133,20 +124,27 @@ const FORM_SCENES = [
  * drop the block on the floor, since the form update only reads name,
  * description, setting, fields and field_rules.
  */
-const FORM_TYPES: Record<string, { scene?: string; settingKey?: string; path?: string }> = {
+const FORM_TYPES: Record<string, { scene?: string; settingKey?: string; operation?: OperationId }> = {
   normal: {},
-  exam: { scene: 'exam', settingKey: 'exam_setting', path: 'exam_setting' },
-  evaluation: { scene: 'evaluation', settingKey: 'evaluation_setting', path: 'evaluation_setting' }
+  exam: { scene: 'exam', settingKey: 'exam_setting', operation: 'updateExamSetting' },
+  evaluation: { scene: 'evaluation', settingKey: 'evaluation_setting', operation: 'updateEvaluationSetting' }
 };
 
-/** Which settings block a payload carries, and where it has to be sent. */
-function settingsBlock(body: Record<string, unknown>): { key: string; path: string; value: unknown } | undefined {
-  for (const { settingKey, path } of Object.values(FORM_TYPES)) {
-    if (settingKey && path && body[settingKey] !== undefined) {
-      return { key: settingKey, path, value: body[settingKey] };
+type SettingsBlock = { key: string; operation: OperationId; value: unknown };
+
+/** Which settings block a payload carries, and which operation it has to be sent to. */
+function settingsBlock(body: Record<string, unknown>): SettingsBlock | undefined {
+  for (const { settingKey, operation } of Object.values(FORM_TYPES)) {
+    if (settingKey && operation && body[settingKey] !== undefined) {
+      return { key: settingKey, operation, value: body[settingKey] };
     }
   }
   return undefined;
+}
+
+/** A settings block, sent to the form it belongs to. */
+function saveSettings(form: string, settings: SettingsBlock) {
+  return call(settings.operation, { path: { form_token: form }, body: settings.value });
 }
 
 /** The scene a --type implies, refusing a --scene that contradicts it. */
@@ -160,10 +158,7 @@ function sceneFor(input: CommandInput): string | undefined {
   return implied ?? scene;
 }
 
-function createFormBody(input: CommandInput): {
-  body: Record<string, unknown>;
-  settings?: { key: string; path: string; value: unknown };
-} {
+function createFormBody(input: CommandInput): { body: Record<string, unknown>; settings?: SettingsBlock } {
   const payloadBody = { ...validateContainerPayload(payload(input), 'form') };
   const settings = settingsBlock(payloadBody);
   if (settings) delete payloadBody[settings.key];
@@ -201,19 +196,17 @@ export const FORM: readonly Command[] = [
     request: (input) => {
       if (input.options.mine) {
         refuseWithMine(input, ['name', 'with_transactions', 'filter', 'filters', 'sort']);
-        return { method: 'GET', path: `${API}/my/forms`, query: paging(input) };
+        return call('listMyFilledForms', { query: paging(input) });
       }
-      return {
-        method: 'GET',
-        path: `${API}/forms`,
+      return call('listForms', {
         query: {
           q: keywords(input.options.name),
-          include_transactions: input.options.with_transactions ? 'true' : undefined,
+          include_transactions: input.options.with_transactions ? true : undefined,
           filters: filters(input),
           sort: sort(input, 'field'),
           ...paging(input)
         }
-      };
+      });
     },
     paginate: LISTING,
     examples: [
@@ -233,11 +226,7 @@ export const FORM: readonly Command[] = [
       'answers the same fields flattened, with api_code on each.',
     args: [{ name: 'form', required: true, description: 'Form token, six letters and digits, e.g. Kp7mQ2' }],
     options: [INCLUDE_OPTION],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/forms/${input.args.form}`,
-      query: includes(input)
-    }),
+    request: (input) => call('getForm', { path: { form_token: input.args.form }, query: includes(input) }),
     examples: ['jinshuju form get Kp7mQ2', 'jinshuju form get Kp7mQ2 --include theme,rules,analytics']
   },
   {
@@ -264,12 +253,12 @@ export const FORM: readonly Command[] = [
         type: 'string',
         choices: FORM_SCENES,
         placeholder: '<scene>',
-        description: `What the form is for: ${FORM_SCENES.join(', ')}`
+        description: FORM_SCENES ? `What the form is for: ${FORM_SCENES.join(', ')}` : 'What the form is for'
       },
       {
         name: '--layout',
         type: 'string',
-        choices: ['classic', 'card'],
+        choices: bodyChoices('createForm', 'layout'),
         placeholder: '<layout>',
         description: 'classic shows every field at once, card one page at a time'
       },
@@ -277,15 +266,11 @@ export const FORM: readonly Command[] = [
     ],
     run: async (input, client) => {
       const { body, settings } = createFormBody(input);
-      if (!settings) return client.request({ method: 'POST', path: `${API}/forms`, body });
+      if (!settings) return client.request(call('createForm', { body }));
 
-      const form = await client.request<{ token: string }>({ method: 'POST', path: `${API}/forms`, body });
+      const form = await client.request<{ token: string }>(call('createForm', { body }));
       try {
-        await client.request({
-          method: 'PATCH',
-          path: `${API}/forms/${form.token}/${settings.path}`,
-          body: settings.value
-        });
+        await client.request(saveSettings(form.token, settings));
       } catch (error) {
         // The form exists; saying so beats an error that reads as though
         // nothing happened and inviting a second one to be created.
@@ -295,7 +280,7 @@ export const FORM: readonly Command[] = [
           { cause: error }
         );
       }
-      return client.request({ method: 'GET', path: `${API}/forms/${form.token}` });
+      return client.request(call('getForm', { path: { form_token: form.token } }));
     },
     examples: [
       'jinshuju form create --json @form.json',
@@ -313,24 +298,20 @@ export const FORM: readonly Command[] = [
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
     run: async (input, client) => {
+      const form = input.args.form as string;
       const body = { ...(payload(input) as Record<string, unknown>) };
       const settings = settingsBlock(body);
-      if (!settings) return client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
+      if (!settings) return client.request(call('updateForm', { path: { form_token: form }, body }));
 
       delete body[settings.key];
       // The settings go first: they are the half that can be refused for what
       // the form is, so leading with them is what keeps a refusal from landing
       // after the rest was already written.
-      await client.request({
-        method: 'PATCH',
-        path: `${API}/forms/${input.args.form}/${settings.path}`,
-        body: settings.value
-      });
-      if (Object.keys(body).length === 0)
-        return client.request({ method: 'GET', path: `${API}/forms/${input.args.form}` });
+      await client.request(saveSettings(form, settings));
+      if (Object.keys(body).length === 0) return client.request(call('getForm', { path: { form_token: form } }));
 
       try {
-        return await client.request({ method: 'PATCH', path: `${API}/forms/${input.args.form}`, body });
+        return await client.request(call('updateForm', { path: { form_token: form }, body }));
       } catch (error) {
         // Ordering cannot make two requests atomic; it only chooses which half
         // fails first. When the second one fails the first has landed, and an
@@ -346,7 +327,7 @@ export const FORM: readonly Command[] = [
     examples: [
       'jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"setting":{"daily_repeat_close_rule":{"time_periods":[{"start_time":{"hour":11,"minute":0},"end_time":{"hour":12,"minute":40}}]}}}\'',
-      'jinshuju form edit Kp7mQ2 --json \'{"exam_setting":{"total_score":100}}\''
+      'jinshuju form edit Kp7mQ2 --json \'{"exam_setting":{"limited_time":30}}\''
     ]
   },
   {
@@ -357,22 +338,22 @@ export const FORM: readonly Command[] = [
       { name: '--name', type: 'string', placeholder: '<name>', description: 'Name for the copy' },
       FOLDER_OPTION
     ],
-    request: (input) => ({
-      method: 'POST',
-      path: `${API}/forms/${input.args.form}/copy`,
-      body: given({ name: input.options.name, folder_token: input.options.folder })
-    })
+    request: (input) =>
+      call('copyForm', {
+        path: { form_token: input.args.form },
+        body: given({ name: input.options.name, folder_token: input.options.folder })
+      })
   },
   {
     path: ['form', 'move'],
     summary: 'Move a form into a folder, or out of one',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [FOLDER_OPTION],
-    request: (input) => ({
-      method: 'PATCH',
-      path: `${API}/forms/${input.args.form}/folder`,
-      body: { folder_token: (input.options.folder as string | undefined) ?? '' }
-    }),
+    request: (input) =>
+      call('moveFormToFolder', {
+        path: { form_token: input.args.form },
+        body: { folder_token: (input.options.folder as string | undefined) ?? '' }
+      }),
     examples: ['jinshuju form move Kp7mQ2 --folder Fd2xK8', 'jinshuju form move Kp7mQ2']
   },
   {
@@ -398,8 +379,8 @@ export const FORM: readonly Command[] = [
     run: async (input, client) => {
       const wallpaper = input.options.wallpaper as string | undefined;
       const header = input.options.header as string | undefined;
-      const path = `${API}/forms/${input.args.form}/theme`;
-      if (!wallpaper && !header) return client.request({ method: 'PATCH', path, body: themeBody(input) });
+      const path = { form_token: input.args.form as string };
+      if (!wallpaper && !header) return client.request(call('updateFormTheme', { path, body: themeBody(input) }));
 
       const body = themeBody(input) as Record<string, Record<string, unknown>>;
       if (wallpaper) {
@@ -410,7 +391,7 @@ export const FORM: readonly Command[] = [
         const image = await uploadFormImage(client, header, 'header');
         body.header = { ...body.header, header_image_attachment_id: image };
       }
-      return client.request({ method: 'PATCH', path, body });
+      return client.request(call('updateFormTheme', { path, body }));
     },
     examples: [
       'jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"',
@@ -425,15 +406,14 @@ export const FORM: readonly Command[] = [
       'The image belongs to the first form saved with a description that refers to it; one that no ' +
       'form takes within 7 days is removed.',
     args: [{ name: 'file', required: true, description: 'Image file' }],
-    request: (input) =>
-      upload(`${API}/form_image_attachments`, input.args.file as string, { image_type: 'description' }),
+    request: (input) => upload('uploadFormImage', {}, input.args.file as string, { image_type: 'description' }),
     examples: ['jinshuju form image upload ./venue-map.png']
   },
   {
     path: ['form', 'rule', 'get'],
     summary: 'Show the field display rules of a form',
     args: [{ name: 'form', required: true, description: 'Form token' }],
-    request: (input) => ({ method: 'GET', path: `${API}/forms/${input.args.form}/field_rules` })
+    request: (input) => call('listFieldRules', { path: { form_token: input.args.form } })
   },
   {
     path: ['form', 'rule', 'edit'],
@@ -441,16 +421,13 @@ export const FORM: readonly Command[] = [
     description: 'The payload is {add, update, remove}; a rule is targeted by the index `form rule get` shows.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
-    request: (input) => ({
-      method: 'PATCH',
-      path: `${API}/forms/${input.args.form}`,
-      body: { field_rules: payload(input) }
-    })
+    request: (input) =>
+      call('updateForm', { path: { form_token: input.args.form }, body: { field_rules: payload(input) } })
   },
   {
     path: ['form', 'cooperator', 'list'],
     summary: 'List the cooperators of a form',
     args: [{ name: 'form', required: true, description: 'Form token' }],
-    request: (input) => ({ method: 'GET', path: `${API}/forms/${input.args.form}/cooperators` })
+    request: (input) => call('listFormCooperators', { path: { form_token: input.args.form } })
   }
 ];

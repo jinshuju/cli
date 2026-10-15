@@ -1,5 +1,6 @@
 import { JSON_OPTION, UsageError } from '../options.js';
-import { API, overriding, payload } from './shared.js';
+import { call } from '../spec.js';
+import { overriding, payload } from './shared.js';
 import type { Command } from './types.js';
 import { uploadFormImage } from './upload.js';
 
@@ -8,17 +9,14 @@ export const OPENSEARCH: readonly Command[] = [
     path: ['opensearch', 'list'],
     summary: 'List public queries',
     options: [{ name: '--form', type: 'string', placeholder: '<token>', description: 'Only the queries of this form' }],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/opensearch/queries`,
-      query: { form_token: input.options.form as string | undefined }
-    })
+    request: (input) =>
+      call('listOpensearchQueries', { query: { form_token: input.options.form as string | undefined } })
   },
   {
     path: ['opensearch', 'get'],
     summary: 'Show a public query',
     args: [{ name: 'query', required: true, description: 'Public query token' }],
-    request: (input) => ({ method: 'GET', path: `${API}/opensearch/queries/${input.args.query}` })
+    request: (input) => call('getOpensearchQuery', { path: { query_token: input.args.query } })
   },
   {
     path: ['opensearch', 'fields'],
@@ -27,7 +25,7 @@ export const OPENSEARCH: readonly Command[] = [
     request: (input) => {
       const form = input.options.form as string | undefined;
       if (!form) throw new UsageError('--form <token> is required');
-      return { method: 'GET', path: `${API}/opensearch/query_suggestions`, query: { form_token: form } };
+      return call('listOpensearchQuerySuggestions', { query: { form_token: form } });
     }
   },
   {
@@ -41,11 +39,9 @@ export const OPENSEARCH: readonly Command[] = [
     request: (input) => {
       const form = input.options.form as string | undefined;
       if (!form) throw new UsageError('--form <token> is required');
-      return {
-        method: 'POST',
-        path: `${API}/opensearch/queries`,
+      return call('createOpensearchQuery', {
         body: overriding(payload(input) as Record<string, unknown>, { form_token: form })
-      };
+      });
     }
   },
   {
@@ -72,7 +68,7 @@ export const OPENSEARCH: readonly Command[] = [
         const image = await uploadFormImage(client, header, 'opensearch_header');
         body.header = { background_image: { attachment_id: image } };
       }
-      return client.request({ method: 'PATCH', path: `${API}/opensearch/queries/${input.args.query}`, body });
+      return client.request(call('updateOpensearchQuery', { path: { query_token: input.args.query }, body }));
     },
     examples: ['jinshuju opensearch edit Qy7nR3 --disable', 'jinshuju opensearch edit Qy7nR3 --header ./banner.png']
   }

@@ -12,6 +12,6 @@
     "unicorn/consistent-function-scoping": "off",
     "unicorn/no-array-sort": "off"
   },
-  "ignorePatterns": ["dist"],
+  "ignorePatterns": ["dist", "src/generated"],
   "env": { "builtin": true }
 }

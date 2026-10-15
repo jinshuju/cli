@@ -1,5 +1,6 @@
 import { PAGINATION_OPTIONS, type OptionSpec } from '../options.js';
-import { API, paging } from './shared.js';
+import { call, choices, type OperationId, type QueryValue } from '../spec.js';
+import { paging } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
 /**
@@ -8,9 +9,6 @@ import type { Command, CommandInput } from './types.js';
  * (直连) has none of this in 金数据, and the reads below say so rather than
  * answering with zeroes.
  */
-
-const PAID_STATUSES = ['paid', 'unpaid', 'refunded', 'refunding', 'partial_refunded'];
-const RECORD_STATUSES = ['processing', 'success', 'error'];
 
 const DATE_OPTIONS: readonly OptionSpec[] = [
   {
@@ -22,7 +20,10 @@ const DATE_OPTIONS: readonly OptionSpec[] = [
   { name: '--to', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'Last day, inclusive; give it with --from' }
 ];
 
-/** The CLI spells a dimension as its flag is spelled; the API names it by its parameter. */
+/**
+ * The CLI spells a dimension as its flag is spelled; the API names it by its
+ * parameter, and the spec says which of those it groups by.
+ */
 const GROUP_BY: Record<string, string> = { time: 'time', 'paid-status': 'paid_status', channel: 'payment_channel' };
 
 const ORDER_FILTER_OPTIONS: readonly OptionSpec[] = [
@@ -30,27 +31,41 @@ const ORDER_FILTER_OPTIONS: readonly OptionSpec[] = [
     name: '--status',
     type: 'string',
     repeatable: true,
-    choices: PAID_STATUSES,
+    choices: choices('listTradeTransactions', 'paid_status'),
     placeholder: '<status>',
     description: 'Keep only these payment statuses, repeatable. Omitted, every status, unpaid included'
   },
   {
     name: '--channel',
     type: 'string',
-    choices: ['wxpay', 'alipay'],
+    choices: choices('listTradeTransactions', 'payment_channel'),
     placeholder: '<channel>',
     description: 'Keep only orders paid through this channel: wxpay (微信) or alipay (支付宝)'
   },
   { name: '--form', type: 'string', placeholder: '<token>', description: 'Keep only orders of this payment form' }
 ];
 
-const INCLUDE_OPTION: OptionSpec = {
-  name: '--include',
-  type: 'string',
-  choices: ['both', 'stats', 'records'],
-  placeholder: '<what>',
-  description: 'both (default), stats for the statistics alone, or records for the rows alone'
-};
+/** What a refund or payout listing carries, as the operation behind it allows. */
+function includeOption(id: OperationId): OptionSpec {
+  return {
+    name: '--include',
+    type: 'string',
+    choices: choices(id, 'include'),
+    placeholder: '<what>',
+    description: 'both (default), stats for the statistics alone, or records for the rows alone'
+  };
+}
+
+/** Which state a refund or a payout is in, as the operation behind it names them. */
+function recordStatusOption(id: OperationId, what: string): OptionSpec {
+  return {
+    name: '--status',
+    type: 'string',
+    choices: choices(id, 'status'),
+    placeholder: '<status>',
+    description: `Keep only ${what} in this state`
+  };
+}
 
 const DETAIL_LIMITS =
   'Rows are capped at 90 days and 200 matching records per query; past either, no rows come back, ' +
@@ -63,7 +78,7 @@ function dates(input: CommandInput): Record<string, string | undefined> {
   };
 }
 
-function orderFilters(input: CommandInput): Record<string, string | readonly string[] | undefined> {
+function orderFilters(input: CommandInput): Record<string, QueryValue> {
   const statuses = (input.options.status as string[] | undefined) ?? [];
   return {
     paid_status: statuses.length > 0 ? statuses : undefined,
@@ -79,7 +94,7 @@ export const TRADE: readonly Command[] = [
     description:
       'Answers without a merchant too: merchant_stage says where the application stands. Bank card, phone, ' +
       'email and ID numbers come back masked, as the product shows them.',
-    request: () => ({ method: 'GET', path: `${API}/trade/merchant` })
+    request: () => call('getTradeMerchant')
   },
   {
     path: ['transaction', 'list'],
@@ -99,16 +114,15 @@ export const TRADE: readonly Command[] = [
       },
       ...PAGINATION_OPTIONS
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/trade/transactions`,
-      query: {
-        ...dates(input),
-        ...orderFilters(input),
-        order_no: input.options.order_no as string | undefined,
-        ...paging(input)
-      }
-    }),
+    request: (input) =>
+      call('listTradeTransactions', {
+        query: {
+          ...dates(input),
+          ...orderFilters(input),
+          order_no: input.options.order_no as string | undefined,
+          ...paging(input)
+        }
+      }),
     paginate: { items: 'transactions', cursor: 'next' },
     examples: [
       'jinshuju transaction list --from 2026-09-01 --to 2026-09-28',
@@ -132,11 +146,10 @@ export const TRADE: readonly Command[] = [
       },
       ...ORDER_FILTER_OPTIONS
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/trade/transactions/aggregate`,
-      query: { ...dates(input), group_by: GROUP_BY[input.options.group_by as string], ...orderFilters(input) }
-    }),
+    request: (input) =>
+      call('aggregateTradeTransactions', {
+        query: { ...dates(input), group_by: GROUP_BY[input.options.group_by as string], ...orderFilters(input) }
+      }),
     examples: ['jinshuju transaction aggregate --from 2026-09-01 --to 2026-09-28 --group-by channel']
   },
   {
@@ -145,28 +158,21 @@ export const TRADE: readonly Command[] = [
     description: 'Defaults to the last 90 days; --refund-no alone searches all time. ' + DETAIL_LIMITS,
     options: [
       ...DATE_OPTIONS,
-      {
-        name: '--status',
-        type: 'string',
-        choices: RECORD_STATUSES,
-        placeholder: '<status>',
-        description: 'Keep only refunds in this state'
-      },
+      recordStatusOption('listTradeRefunds', 'refunds'),
       { name: '--refund-no', type: 'string', placeholder: '<no>', description: 'Exact match on 退款流水号' },
-      INCLUDE_OPTION,
+      includeOption('listTradeRefunds'),
       ...PAGINATION_OPTIONS
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/trade/refunds`,
-      query: {
-        ...dates(input),
-        status: input.options.status as string | undefined,
-        refund_no: input.options.refund_no as string | undefined,
-        include: input.options.include as string | undefined,
-        ...paging(input)
-      }
-    }),
+    request: (input) =>
+      call('listTradeRefunds', {
+        query: {
+          ...dates(input),
+          status: input.options.status as string | undefined,
+          refund_no: input.options.refund_no as string | undefined,
+          include: input.options.include as string | undefined,
+          ...paging(input)
+        }
+      }),
     paginate: { items: 'refunds', cursor: 'next' }
   },
   {
@@ -175,26 +181,19 @@ export const TRADE: readonly Command[] = [
     description: 'Defaults to the last 90 days. ' + DETAIL_LIMITS,
     options: [
       ...DATE_OPTIONS,
-      {
-        name: '--status',
-        type: 'string',
-        choices: RECORD_STATUSES,
-        placeholder: '<status>',
-        description: 'Keep only payouts in this state'
-      },
-      INCLUDE_OPTION,
+      recordStatusOption('listTradePayouts', 'payouts'),
+      includeOption('listTradePayouts'),
       ...PAGINATION_OPTIONS
     ],
-    request: (input) => ({
-      method: 'GET',
-      path: `${API}/trade/payouts`,
-      query: {
-        ...dates(input),
-        status: input.options.status as string | undefined,
-        include: input.options.include as string | undefined,
-        ...paging(input)
-      }
-    }),
+    request: (input) =>
+      call('listTradePayouts', {
+        query: {
+          ...dates(input),
+          status: input.options.status as string | undefined,
+          include: input.options.include as string | undefined,
+          ...paging(input)
+        }
+      }),
     paginate: { items: 'payouts', cursor: 'next' }
   }
 ];

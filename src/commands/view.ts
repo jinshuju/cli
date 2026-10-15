@@ -6,7 +6,8 @@ import {
   SORT_OPTION,
   type OptionSpec
 } from '../options.js';
-import { YES_OPTION, confirmed, containerPath, filterConditions, overriding, sortRules } from './shared.js';
+import { bodyChoices } from '../spec.js';
+import { YES_OPTION, confirmed, filterConditions, onContainer, overriding, sortRules } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
 /** What `view create` and `view edit` both take, beyond the name. */
@@ -14,7 +15,7 @@ const VIEW_OPTIONS: readonly OptionSpec[] = [
   {
     name: '--type',
     type: 'string',
-    choices: ['grid', 'kanban', 'stats'],
+    choices: bodyChoices('createFormView', 'view_type'),
     placeholder: '<type>',
     description: 'View type'
   },
@@ -40,14 +41,14 @@ export const VIEW: readonly Command[] = [
     path: ['view', 'list'],
     summary: 'List the views of a form or table',
     options: [...CONTAINER_OPTIONS],
-    request: (input) => ({ method: 'GET', path: `${containerPath(input)}/views` })
+    request: (input) => onContainer(input, 'listFormViews', 'listTableViews')
   },
   {
     path: ['view', 'get'],
     summary: 'Show a view',
     args: [{ name: 'view', required: true, description: 'View token, six letters and digits, e.g. aB3dE9' }],
     options: [...CONTAINER_OPTIONS],
-    request: (input) => ({ method: 'GET', path: `${containerPath(input)}/views/${input.args.view}` })
+    request: (input) => onContainer(input, 'getFormView', 'getTableView', { path: { view_token: input.args.view } })
   },
   {
     path: ['view', 'create'],
@@ -57,11 +58,8 @@ export const VIEW: readonly Command[] = [
       'Anything without a flag of its own — kanban grouping, visibility — goes through --json.',
     args: [{ name: 'name', required: true, description: 'View name' }],
     options: [...CONTAINER_OPTIONS, ...VIEW_OPTIONS],
-    request: (input) => ({
-      method: 'POST',
-      path: `${containerPath(input)}/views`,
-      body: { ...viewBody(input), name: input.args.name }
-    }),
+    request: (input) =>
+      onContainer(input, 'createFormView', 'createTableView', { body: { ...viewBody(input), name: input.args.name } }),
     examples: ["jinshuju view create --form Kp7mQ2 高分 --filter 'field_3 gte 80' --sort created_at:desc"]
   },
   {
@@ -74,11 +72,11 @@ export const VIEW: readonly Command[] = [
       { name: '--name', type: 'string', placeholder: '<name>', description: 'Rename the view' },
       ...VIEW_OPTIONS
     ],
-    request: (input) => ({
-      method: 'PATCH',
-      path: `${containerPath(input)}/views/${input.args.view}`,
-      body: overriding(viewBody(input), { name: input.options.name })
-    })
+    request: (input) =>
+      onContainer(input, 'updateFormView', 'updateTableView', {
+        path: { view_token: input.args.view },
+        body: overriding(viewBody(input), { name: input.options.name })
+      })
   },
   {
     path: ['view', 'delete'],
@@ -87,7 +85,7 @@ export const VIEW: readonly Command[] = [
     options: [...CONTAINER_OPTIONS, YES_OPTION],
     request: (input) => {
       confirmed(input, `Deleting view ${input.args.view}`);
-      return { method: 'DELETE', path: `${containerPath(input)}/views/${input.args.view}` };
+      return onContainer(input, 'deleteFormView', 'deleteTableView', { path: { view_token: input.args.view } });
     }
   }
 ];
