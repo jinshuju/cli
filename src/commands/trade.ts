@@ -1,5 +1,5 @@
 import { PAGINATION_OPTIONS, type OptionSpec } from '../options.js';
-import { call, choices, type OperationId, type QueryValue } from '../spec.js';
+import { call, choices, type QueryValue } from '../spec.js';
 import { paging } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
@@ -45,23 +45,27 @@ const ORDER_FILTER_OPTIONS: readonly OptionSpec[] = [
   { name: '--form', type: 'string', placeholder: '<token>', description: 'Keep only orders of this payment form' }
 ];
 
-/** What a refund or payout listing carries, as the operation behind it allows. */
-function includeOption(id: OperationId): OptionSpec {
+/**
+ * What a refund or payout listing carries, as the operation behind it allows.
+ * The lookup is spelled out at each call, because scripts/spec-diff.mjs reads
+ * it off the source to tell whether a spec change moved what a flag offers.
+ */
+function includeOption(values: readonly string[] | undefined): OptionSpec {
   return {
     name: '--include',
     type: 'string',
-    choices: choices(id, 'include'),
+    choices: values,
     placeholder: '<what>',
     description: 'both (default), stats for the statistics alone, or records for the rows alone'
   };
 }
 
 /** Which state a refund or a payout is in, as the operation behind it names them. */
-function recordStatusOption(id: OperationId, what: string): OptionSpec {
+function recordStatusOption(values: readonly string[] | undefined, what: string): OptionSpec {
   return {
     name: '--status',
     type: 'string',
-    choices: choices(id, 'status'),
+    choices: values,
     placeholder: '<status>',
     description: `Keep only ${what} in this state`
   };
@@ -158,9 +162,14 @@ export const TRADE: readonly Command[] = [
     description: 'Defaults to the last 90 days; --refund-no alone searches all time. ' + DETAIL_LIMITS,
     options: [
       ...DATE_OPTIONS,
-      recordStatusOption('listTradeRefunds', 'refunds'),
-      { name: '--refund-no', type: 'string', placeholder: '<no>', description: 'Exact match on 退款流水号' },
-      includeOption('listTradeRefunds'),
+      recordStatusOption(choices('listTradeRefunds', 'status'), 'refunds'),
+      {
+        name: '--refund-no',
+        type: 'string',
+        placeholder: '<no>',
+        description: 'Exact match on 退款流水号'
+      },
+      includeOption(choices('listTradeRefunds', 'include')),
       ...PAGINATION_OPTIONS
     ],
     request: (input) =>
@@ -181,8 +190,8 @@ export const TRADE: readonly Command[] = [
     description: 'Defaults to the last 90 days. ' + DETAIL_LIMITS,
     options: [
       ...DATE_OPTIONS,
-      recordStatusOption('listTradePayouts', 'payouts'),
-      includeOption('listTradePayouts'),
+      recordStatusOption(choices('listTradePayouts', 'status'), 'payouts'),
+      includeOption(choices('listTradePayouts', 'include')),
       ...PAGINATION_OPTIONS
     ],
     request: (input) =>
