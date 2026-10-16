@@ -680,15 +680,22 @@ test('entry count takes one container, or several through the batch endpoint', a
   assert.equal(url(many.requests[0]), '/api/v1/entries/count?form_tokens=Kp7mQ2%2CaB3dE9');
 });
 
-test('entry count refuses more containers than the endpoint accepts', async () => {
+test('entry count leaves how many containers it may name to the API', async () => {
+  // The API says 10 in its prose, not its schema, and answers more with a 400
+  // that says so; a CLI refusing an eleventh would go on refusing after the
+  // API took more.
+  const mock = createMockClient();
   const tokens = Array.from({ length: 11 }, (_, index) => ['--form', `Kp7mQ${index}`]).flat();
   const result = await cli(['entry', 'count', ...tokens], {
     env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
-    client: createMockClient().client
+    client: mock.client
   });
 
-  assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /at most 10 containers/);
+  assert.equal(result.exitCode, 0);
+  assert.equal(
+    mock.requests[0]?.query?.form_tokens,
+    Array.from({ length: 11 }, (_, index) => `Kp7mQ${index}`).join(',')
+  );
 });
 
 test('entry count, aggregate and summary read through a view when given one', async () => {
