@@ -72,8 +72,10 @@ jobs:
           CHECKED: ${{ steps.check.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # A change to an operation the CLI calls is a feat and names it, so the
-          # changelog says what moved; anything else is a chore and releases nothing.
+          # A change to what the CLI checks or offers — the parameters of an
+          # operation it calls, a list of values a flag reads — is a feat naming
+          # it, so the changelog says what moved. A body the CLI sends as given,
+          # an operation it does not call, or prose is a chore: nothing to release.
           title="$(node scripts/spec-diff.mjs --title "${RUNNER_TEMP}/openapi.before.yaml" spec/openapi.yaml)" ||
             title='feat: follow openapi.yaml'
           delimiter="EOF_$(openssl rand -hex 8)"
