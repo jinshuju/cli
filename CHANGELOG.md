@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.12.0](https://github.com/jinshuju/cli/compare/v0.11.0...v0.12.0) (2026-10-16)
+
+
+### Features
+
+* follow openapi.yaml, and sync it daily by pull request ([c480893](https://github.com/jinshuju/cli/commit/c4808937cfad1fbdde8e236a77e84d233de72c3c))
+* set up check-in for a form from the command line ([6675484](https://github.com/jinshuju/cli/commit/66754849df26d94f14a345f1dc74a60dd9c03816))
+
+
+### Fixes
+
+* leave how many containers entry count may name to the API ([2ae3056](https://github.com/jinshuju/cli/commit/2ae30563e9148163049778a8c340d74feb2959e3))
+
 ## [0.11.0](https://github.com/jinshuju/cli/compare/v0.10.0...v0.11.0) (2026-10-14)
 
 
