@@ -39,9 +39,6 @@ import { isRecord } from '../values.js';
 import { basename } from 'node:path';
 import { upload } from './upload.js';
 
-/** What the batch count endpoint accepts, and what the design document states. */
-const MAX_COUNTED_CONTAINERS = 10;
-
 function list(value: unknown): string | undefined {
   const values = value as string[] | undefined;
   return values && values.length > 0 ? values.join(',') : undefined;
@@ -479,7 +476,7 @@ export const ENTRY: readonly Command[] = [
       FILTERS_OPTION
     ],
     request: (input) => {
-      const { tokens } = resolveContainers(input.options, MAX_COUNTED_CONTAINERS);
+      const { tokens } = resolveContainers(input.options);
       const keyword = input.options.keyword as string | undefined;
       if (tokens.length === 1) return analysis(input, COUNT, { filters: filters(input), keyword });
       if (input.options.view !== undefined) {

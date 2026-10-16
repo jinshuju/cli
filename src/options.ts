@@ -341,12 +341,14 @@ export function namedContainers(options: Record<string, unknown>): Containers {
   return { tokens: forms.length > 0 ? forms : tables, kind: forms.length > 0 ? 'form' : 'table' };
 }
 
-/** The repeatable form of resolveContainer, for a read that answers about several. */
-export function resolveContainers(options: Record<string, unknown>, max: number): Containers {
+/**
+ * The repeatable form of resolveContainer, for a read that answers about
+ * several. How many it may name is the API's to say: the number is in its
+ * prose rather than its schema, and a copy enforced here would go on refusing
+ * after the API took more.
+ */
+export function resolveContainers(options: Record<string, unknown>): Containers {
   const containers = namedContainers(options);
   if (containers.tokens.length === 0) throw new UsageError('one of --form <token> or --table <token> is required');
-  if (containers.tokens.length > max) {
-    throw new UsageError(`at most ${max} containers can be asked about in one call, got ${containers.tokens.length}`);
-  }
   return containers;
 }
