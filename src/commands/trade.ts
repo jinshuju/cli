@@ -40,7 +40,7 @@ const ORDER_FILTER_OPTIONS: readonly OptionSpec[] = [
     type: 'string',
     choices: choices('listTradeTransactions', 'payment_channel'),
     placeholder: '<channel>',
-    description: 'Keep only orders paid through this channel: wxpay (微信) or alipay (支付宝)'
+    description: 'Keep only orders paid through this channel: wxpay (WeChat Pay) or alipay (Alipay)'
   },
   { name: '--form', type: 'string', placeholder: '<token>', description: 'Keep only orders of this payment form' }
 ];
@@ -114,7 +114,9 @@ export const TRADE: readonly Command[] = [
         name: '--order-no',
         type: 'string',
         placeholder: '<no>',
-        description: 'Exact match on 交易单号, 商户订单号 or 金数据单号'
+        description:
+          'Exact match on the transaction number (trade_no), the merchant order number ' +
+          '(merchant_out_trade_no) or the Jinshuju order number (out_trade_no)'
       },
       ...PAGINATION_OPTIONS
     ],
@@ -167,7 +169,7 @@ export const TRADE: readonly Command[] = [
         name: '--refund-no',
         type: 'string',
         placeholder: '<no>',
-        description: 'Exact match on 退款流水号'
+        description: 'Exact match on the refund number (refund_no)'
       },
       includeOption(choices('listTradeRefunds', 'include')),
       ...PAGINATION_OPTIONS
@@ -186,7 +188,7 @@ export const TRADE: readonly Command[] = [
   },
   {
     path: ['payout', 'list'],
-    summary: 'List payouts (提现) to the settlement account, with their statistics',
+    summary: 'List payouts to the settlement account, with their statistics',
     description: 'Defaults to the last 90 days. ' + DETAIL_LIMITS,
     options: [
       ...DATE_OPTIONS,
