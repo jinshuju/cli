@@ -174,9 +174,14 @@ sends that is no longer taken fails a test.
 `.github/workflows/spec-sync.yml` fetches the published spec every day. When it
 differs, it regenerates, runs `check` and `test` against it, and opens a pull
 request on `chore/sync-openapi` listing the operations and schemas that moved
-and which of them the CLI calls. Its title comes from the same comparison: a
-change to an operation the CLI calls is a `feat` naming those operations, and
-releases; anything else is a `chore`, and does not. The pull request is opened even when the CLI no
+and which of them the CLI calls. Its title comes from the same comparison, and
+follows what the CLI does with the spec at run time: a change to the method,
+path or parameters of an operation it calls, or to a list of values a flag
+reads, is a `feat` naming it, and releases. A request body changing is a
+`chore`, since the CLI sends bodies as given and only its tests read their
+schemas; so is an operation it does not call, and so is prose. `spec-diff`
+reads the lookups off the source, which is why each names its operation and
+field in literals. The pull request is opened even when the CLI no
 longer passes, and says so: that is the case that needs a person.
 
 ## Errors and exit codes
