@@ -2254,16 +2254,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
               items: {
                 properties: {
                   type: {
-                    not: {
-                      enum: [
-                        'PageBreak',
-                        'GoodsField',
-                        'MultipleBlanksField',
-                        'WidgetContact',
-                        'WidgetVideo',
-                        'WidgetButton'
-                      ]
-                    }
+                    not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo', 'WidgetButton'] }
                   }
                 }
               }
