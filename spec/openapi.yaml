@@ -14295,7 +14295,6 @@ components:
                     not:
                       enum:
                       - PageBreak
-                      - GoodsField
                       - MultipleBlanksField
                       - WidgetContact
                       - WidgetVideo
