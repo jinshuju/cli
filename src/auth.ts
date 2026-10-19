@@ -2,15 +2,18 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { execFile } from 'node:child_process';
 
-import { AuthError } from './errors.js';
+import { AuthError, PendingError, UsageError } from './errors.js';
 import {
   clearCredential,
   defaultScopes,
   loadConfig,
+  loadPendingDeviceLogin,
   saveOAuthConfig,
+  savePendingDeviceLogin,
   type LoadConfigOptions,
   type LoadedConfig,
-  type OAuthConfig
+  type OAuthConfig,
+  type PendingDeviceLogin
 } from './config.js';
 
 export type TokenResponse = {
@@ -102,6 +105,165 @@ export async function loginWithOAuth(
   const auth = toOAuthConfig(config, clientId, token);
   saveOAuthConfig(config.configPath, auth);
   return { authorizeUrl, callbackUrl: callback.redirectUri, token: auth };
+}
+
+export const DEVICE_CODE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
+
+export type DeviceLoginOptions = LoginTarget & {
+  /** How to wait between polls; a test passes one that does not. */
+  sleep?: (ms: number) => Promise<void>;
+};
+
+type LoginTarget = LoadConfigOptions & {
+  host?: string;
+  authHost?: string;
+  clientId?: string;
+  scopes?: string;
+};
+
+/**
+ * RFC 8628. The CLI only ever calls out: it asks for a code, a person enters
+ * it on whatever device has a browser — a phone will do — and the CLI polls
+ * until they have approved it. Nothing has to reach back into this machine,
+ * which is what a server over SSH or an agent's sandbox cannot offer the
+ * loopback login.
+ */
+export async function loginWithDevice(
+  options: DeviceLoginOptions,
+  onCode: (pending: PendingDeviceLogin) => void
+): Promise<OAuthConfig> {
+  const { config, pending } = await requestDeviceCode(options);
+  onCode(pending);
+  return await finishDeviceLogin(config, pending, Date.parse(pending.expires_at), options.sleep);
+}
+
+/**
+ * The first half of a device login, for a caller that cannot wait: an agent
+ * whose commands are cut off after a minute or two. The code is stored, the
+ * person is sent to approve it, and `resumeDeviceLogin` collects the session.
+ */
+export async function startDeviceLogin(options: LoginTarget): Promise<PendingDeviceLogin> {
+  const { config, pending } = await requestDeviceCode(options);
+  savePendingDeviceLogin(config.configPath, pending);
+  return pending;
+}
+
+/** Waits up to `waitMs` for the stored device login to be approved; still waiting after that is a PendingError. */
+export async function resumeDeviceLogin(options: DeviceLoginOptions & { waitMs?: number }): Promise<OAuthConfig> {
+  const config = loadConfig({ configPath: options.configPath, env: options.env });
+  const pending = loadPendingDeviceLogin(config.configPath);
+  if (!pending) throw new UsageError('No device login is waiting. Start one with `jinshuju auth login --no-wait`.');
+  const deadline = Math.min(Date.parse(pending.expires_at), Date.now() + (options.waitMs ?? 60_000));
+  return await finishDeviceLogin(config, pending, deadline, options.sleep);
+}
+
+async function requestDeviceCode(options: LoginTarget): Promise<{ config: LoadedConfig; pending: PendingDeviceLogin }> {
+  const config = loadConfig({
+    configPath: options.configPath,
+    env: options.env,
+    cli: { host: options.host, authHost: options.authHost, clientId: options.clientId }
+  });
+  const clientId = options.clientId ?? config.clientId;
+  if (!clientId) throw new AuthError('Missing OAuth client id. Set JINSHUJU_OAUTH_CLIENT_ID or config client_id.');
+
+  const response = await fetch(new URL('/oauth/device_authorization', config.authHost), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({ client_id: clientId, scope: options.scopes ?? defaultScopes }),
+    signal: AbortSignal.timeout(config.timeoutMs ?? TOKEN_TIMEOUT_MS)
+  });
+  const body = parseTokenBody(await response.text(), response) as
+    | (Partial<DeviceAuthorizationResponse> & { error?: string; error_description?: string })
+    | undefined;
+  if (!response.ok || !body?.device_code || !body.user_code || !body.verification_uri) {
+    throw new AuthError(
+      body?.error_description ??
+        body?.error ??
+        `${response.status} ${response.statusText} from the device authorization endpoint`.trim()
+    );
+  }
+  return {
+    config,
+    pending: {
+      auth_host: config.authHost,
+      client_id: clientId,
+      device_code: body.device_code,
+      user_code: body.user_code,
+      verification_uri: body.verification_uri,
+      verification_uri_complete: body.verification_uri_complete,
+      interval: body.interval ?? 5,
+      expires_at: new Date(Date.now() + (body.expires_in ?? 900) * 1000).toISOString()
+    }
+  };
+}
+
+type DeviceAuthorizationResponse = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval?: number;
+};
+
+/**
+ * Polls at the interval the server asked for, five seconds slower each time it
+ * says `slow_down`, as RFC 8628 has it. A refusal or an expired code ends the
+ * login; running out of `deadline` while the code is still good does not, it
+ * only stops this wait.
+ */
+async function finishDeviceLogin(
+  config: LoadedConfig,
+  pending: PendingDeviceLogin,
+  deadline: number,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+): Promise<OAuthConfig> {
+  let interval = pending.interval;
+  for (;;) {
+    const answer = await pollDeviceToken(pending, config.timeoutMs);
+    if ('token' in answer) {
+      const auth = toOAuthConfig({ ...config, authHost: pending.auth_host }, pending.client_id, answer.token);
+      saveOAuthConfig(config.configPath, auth);
+      return auth;
+    }
+    if (answer.error === 'slow_down') interval += 5;
+    else if (answer.error === 'access_denied') throw new AuthError('The login was refused on the authorization page.');
+    else if (answer.error === 'expired_token' || answer.error === 'invalid_grant')
+      throw new AuthError('The login code expired before it was approved. Start a new login.');
+    else if (answer.error !== 'authorization_pending') throw new AuthError(answer.description ?? answer.error);
+
+    if (Date.now() + interval * 1000 >= deadline) {
+      if (deadline >= Date.parse(pending.expires_at))
+        throw new AuthError('The login code expired before it was approved. Start a new login.');
+      throw new PendingError(
+        `Still waiting for the code ${pending.user_code} to be approved at ` +
+          `${pending.verification_uri_complete ?? pending.verification_uri}. Run \`jinshuju auth login --resume\` again.`
+      );
+    }
+    await sleep(interval * 1000);
+  }
+}
+
+async function pollDeviceToken(
+  pending: PendingDeviceLogin,
+  timeoutMs = TOKEN_TIMEOUT_MS
+): Promise<{ token: TokenResponse } | { error: string; description?: string }> {
+  const response = await fetch(new URL('/oauth/token', pending.auth_host), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({
+      grant_type: DEVICE_CODE_GRANT_TYPE,
+      client_id: pending.client_id,
+      device_code: pending.device_code
+    }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  const body = parseTokenBody(await response.text(), response);
+  if (response.ok && body?.access_token) return { token: body as TokenResponse };
+  return {
+    error: body?.error ?? `${response.status} ${response.statusText}`.trim(),
+    description: body?.error_description
+  };
 }
 
 export async function refreshOAuthToken(config: LoadedConfig): Promise<OAuthConfig> {
@@ -294,8 +456,18 @@ function safeEqual(a: string, b: string): boolean {
   return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
+/**
+ * A browser that cannot be opened — no xdg-open on a server, no display —
+ * says so with the URL, rather than leaving the login to wait out its timeout
+ * in silence for a page nobody will ever see.
+ */
 async function openUrl(url: string): Promise<void> {
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
   const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
-  await new Promise<void>((resolve) => execFile(command, args, (error) => (error ? resolve() : resolve())));
+  const opened = await new Promise<boolean>((resolve) => execFile(command, args, (error) => resolve(!error)));
+  if (!opened)
+    process.stderr.write(
+      `Could not open a browser. Open this URL to log in:\n${url}\n` +
+        'Without a browser on this machine, `jinshuju auth login --device` logs in from another device instead.\n'
+    );
 }

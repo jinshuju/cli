@@ -25,11 +25,33 @@ export const LOCAL: readonly Command[] = [
     summary: 'Log in through the browser, or with an access token, and store the credential',
     description:
       'Without --access-token: opens the authorization page, waits for the redirect on a loopback ' +
-      'port, and writes the session to the config file. With it: checks the token with one call, ' +
-      'then stores it; the OAuth options are ignored. Either replaces whatever credential was stored ' +
-      'before. JINSHUJU_ACCESS_TOKEN, if set, still outranks what this stores.',
-    options: local('--access-token', '--auth-host', '--client-id', '--scopes', '--no-open', '--host'),
-    examples: ['jinshuju auth login', 'jinshuju auth login --no-open', 'jinshuju auth login --access-token <token>']
+      'port, and writes the session to the config file. With --device, or over SSH or on a Linux box ' +
+      'without a display: prints a link and a short code to approve on any other device, and waits ' +
+      'for that instead; nothing has to reach this machine. --no-wait prints the link and code and ' +
+      'exits, for an agent whose commands cannot wait; --resume then waits for the approval, a minute ' +
+      'or --timeout seconds, exiting 9 while it is still pending. With --access-token: checks the token with one ' +
+      'call, then stores it; the OAuth options are ignored. Each replaces whatever credential was ' +
+      'stored before. JINSHUJU_ACCESS_TOKEN, if set, still outranks what this stores.',
+    options: local(
+      '--access-token',
+      '--auth-host',
+      '--client-id',
+      '--scopes',
+      '--no-open',
+      '--device',
+      '--no-wait',
+      '--resume',
+      '--timeout',
+      '--host'
+    ),
+    examples: [
+      'jinshuju auth login',
+      'jinshuju auth login --no-open',
+      'jinshuju auth login --device',
+      'jinshuju auth login --no-wait --output json',
+      'jinshuju auth login --resume',
+      'jinshuju auth login --access-token <token>'
+    ]
   },
   {
     path: ['auth', 'status'],

@@ -23,6 +23,22 @@ export type TokenConfig = {
   access_token: string;
 };
 
+/**
+ * A device login `auth login --no-wait` started and `auth login --resume`
+ * finishes: the code a person is entering on another device, and the device
+ * code that turns into a session once they have.
+ */
+export type PendingDeviceLogin = {
+  auth_host: string;
+  client_id: string;
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  interval: number;
+  expires_at: string;
+};
+
 export type LoadedConfig = {
   /**
    * A personal or account access token, sent as a bearer: JINSHUJU_ACCESS_TOKEN,
@@ -65,7 +81,10 @@ export const defaultScopes = 'public forms read_entries write_entries form_setti
  * One credential at a time: a login of either kind replaces whatever the last
  * one stored, so the file never holds two that disagree about who is calling.
  */
-export type RawConfig = Partial<Record<ConfigKey, string>> & { auth?: OAuthConfig | TokenConfig };
+export type RawConfig = Partial<Record<ConfigKey, string>> & {
+  auth?: OAuthConfig | TokenConfig;
+  pending_device?: PendingDeviceLogin;
+};
 
 function readConfigFile(configPath: string): RawConfig {
   if (!existsSync(configPath)) return {};
@@ -188,18 +207,31 @@ export function unsetConfigValue(configPath: string, key: ConfigKey): void {
   writeConfigFile(configPath, config);
 }
 
+/** A login of either kind settles any device login still waiting: what it was waiting for is decided. */
 export function saveOAuthConfig(configPath: string, auth: OAuthConfig): void {
   const config = readConfigFile(configPath);
   config.auth = auth;
   config.auth_host = auth.auth_host;
   config.client_id = auth.client_id;
+  delete config.pending_device;
   writeConfigFile(configPath, config);
 }
 
 export function saveAccessToken(configPath: string, accessToken: string): void {
   const config = readConfigFile(configPath);
   config.auth = { type: 'access_token', access_token: accessToken };
+  delete config.pending_device;
   writeConfigFile(configPath, config);
+}
+
+export function savePendingDeviceLogin(configPath: string, pending: PendingDeviceLogin): void {
+  const config = readConfigFile(configPath);
+  config.pending_device = pending;
+  writeConfigFile(configPath, config);
+}
+
+export function loadPendingDeviceLogin(configPath: string): PendingDeviceLogin | undefined {
+  return readConfigFile(configPath).pending_device;
 }
 
 /** Forgets the stored credential, whichever kind it is. */

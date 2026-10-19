@@ -5,9 +5,19 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildAuthorizationUrl, createPkcePair, loginWithOAuth, refreshOAuthToken } from './auth.js';
+import {
+  buildAuthorizationUrl,
+  createPkcePair,
+  DEVICE_CODE_GRANT_TYPE,
+  loginWithDevice,
+  loginWithOAuth,
+  refreshOAuthToken,
+  resumeDeviceLogin,
+  startDeviceLogin
+} from './auth.js';
 import { loadConfig, saveOAuthConfig } from './config.js';
-import { AuthError } from './errors.js';
+import { runCli } from './cli.js';
+import { AuthError, PendingError, UsageError } from './errors.js';
 
 function listenOnce(
   handler: (req: IncomingMessage, res: ServerResponse) => void
@@ -189,4 +199,145 @@ test('a request for any other path on the callback server is a 404 and the login
 
   assert.ok(error instanceof Error);
   assert.match(error.message, /timed out/);
+});
+
+/**
+ * An authorization server that hands out one device code and answers each
+ * poll with the next of `answers` — an OAuth error name, or 'token'.
+ */
+async function deviceServer(answers: string[]) {
+  const polls: URLSearchParams[] = [];
+  const server = await listenOnce((req, res) => {
+    let body = '';
+    req.on('data', (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/oauth/device_authorization') {
+        res.end(
+          JSON.stringify({
+            device_code: 'device-1',
+            user_code: 'BCDF-GHJK',
+            verification_uri: 'https://account.example.com/oauth/device',
+            verification_uri_complete: 'https://account.example.com/oauth/device?user_code=BCDF-GHJK',
+            expires_in: 900,
+            interval: 0
+          })
+        );
+        return;
+      }
+      polls.push(new URLSearchParams(body));
+      const answer = answers.shift() ?? 'authorization_pending';
+      if (answer === 'token') {
+        res.end(JSON.stringify({ access_token: 'device-access', refresh_token: 'device-refresh', expires_in: 7200 }));
+      } else {
+        res.writeHead(400).end(JSON.stringify({ error: answer }));
+      }
+    });
+  });
+  const dir = mkdtempSync(join(tmpdir(), 'jsj-device-'));
+  const configPath = join(dir, 'config.json');
+  return {
+    ...server,
+    polls,
+    configPath,
+    target: { configPath, env: {}, authHost: server.url, clientId: 'cli' },
+    cleanup: () => {
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+}
+
+test('a device login polls until approved, slowing down when asked, and stores the session', async () => {
+  const auth = await deviceServer(['authorization_pending', 'slow_down', 'token']);
+  const waits: number[] = [];
+  let shown = '';
+  const token = await loginWithDevice({ ...auth.target, sleep: async (ms) => void waits.push(ms) }, (pending) => {
+    shown = pending.user_code;
+  });
+  const saved = JSON.parse(readFileSync(auth.configPath, 'utf8'));
+  auth.cleanup();
+
+  assert.equal(shown, 'BCDF-GHJK');
+  assert.deepEqual(waits, [0, 5000]);
+  assert.equal(auth.polls[0]?.get('grant_type'), DEVICE_CODE_GRANT_TYPE);
+  assert.equal(auth.polls[0]?.get('device_code'), 'device-1');
+  assert.equal(auth.polls[0]?.get('client_id'), 'cli');
+  assert.equal(token.access_token, 'device-access');
+  assert.equal(saved.auth.refresh_token, 'device-refresh');
+  assert.equal(saved.pending_device, undefined);
+});
+
+test('a device login the person refused ends with an auth error', async () => {
+  const auth = await deviceServer(['access_denied']);
+  const error = await loginWithDevice({ ...auth.target, sleep: async () => {} }, () => {}).catch((e: Error) => e);
+  auth.cleanup();
+
+  assert.ok(error instanceof AuthError);
+  assert.match(error.message, /refused/);
+});
+
+test('a device login started without waiting is finished by resume, which says when it is still pending', async () => {
+  const auth = await deviceServer(['authorization_pending', 'token']);
+  const pending = await startDeviceLogin(auth.target);
+  const stored = JSON.parse(readFileSync(auth.configPath, 'utf8'));
+
+  const early = await resumeDeviceLogin({ ...auth.target, waitMs: 0 }).catch((e: Error) => e);
+  const token = await resumeDeviceLogin({ ...auth.target, waitMs: 0 });
+  const saved = JSON.parse(readFileSync(auth.configPath, 'utf8'));
+  auth.cleanup();
+
+  assert.equal(pending.user_code, 'BCDF-GHJK');
+  assert.equal(stored.pending_device.device_code, 'device-1');
+  assert.equal(stored.auth, undefined);
+  assert.ok(early instanceof PendingError);
+  assert.match(early.message, /BCDF-GHJK/);
+  assert.equal(token.access_token, 'device-access');
+  assert.equal(saved.pending_device, undefined);
+});
+
+test('resume with no device login waiting says how to start one', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'jsj-device-none-'));
+  const error = await resumeDeviceLogin({ configPath: join(dir, 'config.json'), env: {} }).catch((e: Error) => e);
+  rmSync(dir, { recursive: true, force: true });
+
+  assert.ok(error instanceof UsageError);
+  assert.match(error.message, /--no-wait/);
+});
+
+test('auth login --no-wait prints the link and code for an agent, and --resume exits 9 while pending', async () => {
+  const auth = await deviceServer(['authorization_pending']);
+  const env = { JINSHUJU_AUTH_HOST: auth.url, JINSHUJU_OAUTH_CLIENT_ID: 'cli' };
+
+  const started = await runCli(['auth', 'login', '--no-wait', '--output', 'json', '--config', auth.configPath], {
+    env
+  });
+  const resumed = await runCli(
+    ['auth', 'login', '--resume', '--timeout', '0', '--output', 'json', '--config', auth.configPath],
+    { env }
+  );
+  const both = await runCli(['auth', 'login', '--no-wait', '--resume', '--config', auth.configPath], { env });
+  auth.cleanup();
+
+  assert.equal(started.exitCode, 0);
+  assert.deepEqual(
+    {
+      ...JSON.parse(started.stdout),
+      expires_at: undefined
+    },
+    {
+      authenticated: false,
+      pending: true,
+      user_code: 'BCDF-GHJK',
+      verification_uri: 'https://account.example.com/oauth/device',
+      verification_uri_complete: 'https://account.example.com/oauth/device?user_code=BCDF-GHJK',
+      expires_at: undefined,
+      resume: 'jinshuju auth login --resume'
+    }
+  );
+  assert.equal(resumed.exitCode, 9);
+  assert.equal(JSON.parse(resumed.stderr).error.kind, 'pending');
+  assert.equal(both.exitCode, 2);
 });

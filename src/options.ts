@@ -55,6 +55,23 @@ export const LOCAL_OPTIONS: readonly OptionSpec[] = [
   { name: '--client-id', type: 'string', placeholder: '<id>', description: 'OAuth public client id' },
   { name: '--scopes', type: 'string', placeholder: '<scopes>', description: 'Space-separated OAuth scopes' },
   { name: '--no-open', type: 'boolean', description: 'Print the login URL instead of opening a browser' },
+  {
+    name: '--device',
+    type: 'boolean',
+    description: 'Log in by entering a short code on any other device; no browser or open port needed here'
+  },
+  {
+    name: '--no-wait',
+    type: 'boolean',
+    description: 'Start a device login, print its link and code, and exit; finish it with --resume'
+  },
+  { name: '--resume', type: 'boolean', description: 'Finish the device login --no-wait started' },
+  {
+    name: '--timeout',
+    type: 'string',
+    placeholder: '<seconds>',
+    description: 'How long --resume waits for the approval before exiting 9 (default 60)'
+  },
   { name: '--verify', type: 'boolean', description: 'Verify the credentials with a lightweight call' }
 ];
 

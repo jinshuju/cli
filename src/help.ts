@@ -44,7 +44,7 @@ export function rootHelp(commands: readonly Command[] = COMMANDS, style: Style =
       `${EXIT_CODES.unexpected} unexpected, ${EXIT_CODES.usage} usage, ${EXIT_CODES.auth} authentication, ` +
       `${EXIT_CODES.not_found} not found, ${EXIT_CODES.refused} refused by the API, ${EXIT_CODES.server} server failure, ` +
       `${EXIT_CODES.transport} no connection or timed out, ${EXIT_CODES.rate_limited} rate limited (wait and retry; ` +
-      '--output json carries retry_after).',
+      `--output json carries retry_after), ${EXIT_CODES.pending} a device login still waiting for approval.`,
     ''
   ].join('\n');
 }
