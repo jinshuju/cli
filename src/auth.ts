@@ -9,6 +9,7 @@ import {
   loadConfig,
   loadPendingDeviceLogin,
   saveOAuthConfig,
+  saveOAuthLogin,
   savePendingDeviceLogin,
   type LoadConfigOptions,
   type LoadedConfig,
@@ -103,7 +104,7 @@ export async function loginWithOAuth(
   const code = await callback.code;
   const token = await exchangeAuthorizationCode(config.authHost, clientId, callback.redirectUri, code, verifier);
   const auth = toOAuthConfig(config, clientId, token);
-  saveOAuthConfig(config.configPath, auth);
+  saveOAuthLogin(config.configPath, auth);
   return { authorizeUrl, callbackUrl: callback.redirectUri, token: auth };
 }
 
@@ -219,11 +220,28 @@ async function finishDeviceLogin(
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 ): Promise<OAuthConfig> {
   let interval = pending.interval;
+  const outOfTime = () => {
+    if (deadline >= Date.parse(pending.expires_at))
+      return new AuthError('The login code expired before it was approved. Start a new login.');
+    return new PendingError(
+      `Still waiting for the code ${pending.user_code} to be approved at ` +
+        `${pending.verification_uri_complete ?? pending.verification_uri}. Run \`jinshuju auth login --resume\` again.`
+    );
+  };
+  // The first poll is always made, so `--timeout 0` asks once rather than not at all.
+  let first = true;
   for (;;) {
-    const answer = await pollDeviceToken(pending, config.timeoutMs);
+    const remaining = deadline - Date.now();
+    const answer = await pollDeviceToken(
+      pending,
+      config.timeoutMs ?? TOKEN_TIMEOUT_MS,
+      first && remaining <= 0 ? Number.POSITIVE_INFINITY : remaining
+    );
+    first = false;
+    if ('outOfTime' in answer) throw outOfTime();
     if ('token' in answer) {
       const auth = toOAuthConfig({ ...config, authHost: pending.auth_host }, pending.client_id, answer.token);
-      saveOAuthConfig(config.configPath, auth);
+      saveOAuthLogin(config.configPath, auth);
       return auth;
     }
     if (answer.error === 'slow_down') interval += 5;
@@ -232,32 +250,38 @@ async function finishDeviceLogin(
       throw new AuthError('The login code expired before it was approved. Start a new login.');
     else if (answer.error !== 'authorization_pending') throw new AuthError(answer.description ?? answer.error);
 
-    if (Date.now() + interval * 1000 >= deadline) {
-      if (deadline >= Date.parse(pending.expires_at))
-        throw new AuthError('The login code expired before it was approved. Start a new login.');
-      throw new PendingError(
-        `Still waiting for the code ${pending.user_code} to be approved at ` +
-          `${pending.verification_uri_complete ?? pending.verification_uri}. Run \`jinshuju auth login --resume\` again.`
-      );
-    }
+    if (Date.now() + interval * 1000 >= deadline) throw outOfTime();
     await sleep(interval * 1000);
   }
 }
 
+/**
+ * One poll, held to the time the login has left as well as to its own
+ * timeout: a request still in flight when the --timeout runs out is abandoned,
+ * as `outOfTime`, rather than holding the command past what its caller allowed.
+ */
 async function pollDeviceToken(
   pending: PendingDeviceLogin,
-  timeoutMs = TOKEN_TIMEOUT_MS
-): Promise<{ token: TokenResponse } | { error: string; description?: string }> {
-  const response = await fetch(new URL('/oauth/token', pending.auth_host), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({
-      grant_type: DEVICE_CODE_GRANT_TYPE,
-      client_id: pending.client_id,
-      device_code: pending.device_code
-    }),
-    signal: AbortSignal.timeout(timeoutMs)
-  });
+  timeoutMs: number,
+  remainingMs: number
+): Promise<{ token: TokenResponse } | { error: string; description?: string } | { outOfTime: true }> {
+  if (remainingMs <= 0) return { outOfTime: true };
+  let response: Response;
+  try {
+    response = await fetch(new URL('/oauth/token', pending.auth_host), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: new URLSearchParams({
+        grant_type: DEVICE_CODE_GRANT_TYPE,
+        client_id: pending.client_id,
+        device_code: pending.device_code
+      }),
+      signal: AbortSignal.timeout(Math.min(timeoutMs, remainingMs))
+    });
+  } catch (error) {
+    if ((error as Error).name === 'TimeoutError' && remainingMs <= timeoutMs) return { outOfTime: true };
+    throw error;
+  }
   const body = parseTokenBody(await response.text(), response);
   if (response.ok && body?.access_token) return { token: body as TokenResponse };
   return {

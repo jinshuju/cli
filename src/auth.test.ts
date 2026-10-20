@@ -11,6 +11,7 @@ import {
   DEVICE_CODE_GRANT_TYPE,
   loginWithDevice,
   loginWithOAuth,
+  logout,
   refreshOAuthToken,
   resumeDeviceLogin,
   startDeviceLogin
@@ -205,7 +206,7 @@ test('a request for any other path on the callback server is a 404 and the login
  * An authorization server that hands out one device code and answers each
  * poll with the next of `answers` — an OAuth error name, or 'token'.
  */
-async function deviceServer(answers: string[]) {
+async function deviceServer(answers: string[], delayMs = 0) {
   const polls: URLSearchParams[] = [];
   const server = await listenOnce((req, res) => {
     let body = '';
@@ -229,11 +230,14 @@ async function deviceServer(answers: string[]) {
       }
       polls.push(new URLSearchParams(body));
       const answer = answers.shift() ?? 'authorization_pending';
-      if (answer === 'token') {
-        res.end(JSON.stringify({ access_token: 'device-access', refresh_token: 'device-refresh', expires_in: 7200 }));
-      } else {
-        res.writeHead(400).end(JSON.stringify({ error: answer }));
-      }
+      setTimeout(() => {
+        if (res.destroyed) return;
+        if (answer === 'token') {
+          res.end(JSON.stringify({ access_token: 'device-access', refresh_token: 'device-refresh', expires_in: 7200 }));
+        } else {
+          res.writeHead(400).end(JSON.stringify({ error: answer }));
+        }
+      }, delayMs);
     });
   });
   const dir = mkdtempSync(join(tmpdir(), 'jsj-device-'));
@@ -296,6 +300,53 @@ test('a device login started without waiting is finished by resume, which says w
   assert.match(early.message, /BCDF-GHJK/);
   assert.equal(token.access_token, 'device-access');
   assert.equal(saved.pending_device, undefined);
+});
+
+test('refreshing the session in use leaves a device login started with --no-wait waiting', async () => {
+  const auth = await deviceServer(['token', 'token']);
+  saveOAuthConfig(auth.configPath, {
+    type: 'oauth',
+    auth_host: auth.url,
+    client_id: 'cli',
+    access_token: 'old',
+    refresh_token: 'old-refresh'
+  });
+  await startDeviceLogin(auth.target);
+
+  await refreshOAuthToken(loadConfig({ configPath: auth.configPath, env: {} }));
+  const afterRefresh = JSON.parse(readFileSync(auth.configPath, 'utf8'));
+  const token = await resumeDeviceLogin({ ...auth.target, waitMs: 0 });
+  auth.cleanup();
+
+  assert.equal(afterRefresh.pending_device.device_code, 'device-1');
+  assert.equal(token.access_token, 'device-access');
+});
+
+test('logging out drops a device login still waiting, so approving it later logs nothing in', async () => {
+  const auth = await deviceServer(['token']);
+  await startDeviceLogin(auth.target);
+
+  await logout(loadConfig({ configPath: auth.configPath, env: {} }));
+  const error = await resumeDeviceLogin({ ...auth.target, waitMs: 0 }).catch((e: Error) => e);
+  const saved = JSON.parse(readFileSync(auth.configPath, 'utf8'));
+  auth.cleanup();
+
+  assert.equal(saved.pending_device, undefined);
+  assert.ok(error instanceof UsageError);
+  assert.equal(auth.polls.length, 0);
+});
+
+test('resume stops at its timeout even while a poll is still waiting for an answer', async () => {
+  const auth = await deviceServer(['authorization_pending'], 2_000);
+  await startDeviceLogin(auth.target);
+
+  const started = Date.now();
+  const error = await resumeDeviceLogin({ ...auth.target, waitMs: 300 }).catch((e: Error) => e);
+  const took = Date.now() - started;
+  auth.cleanup();
+
+  assert.ok(error instanceof PendingError);
+  assert.ok(took < 1_000, `took ${took}ms`);
 });
 
 test('resume with no device login waiting says how to start one', async () => {

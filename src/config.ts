@@ -207,14 +207,24 @@ export function unsetConfigValue(configPath: string, key: ConfigKey): void {
   writeConfigFile(configPath, config);
 }
 
-/** A login of either kind settles any device login still waiting: what it was waiting for is decided. */
+/**
+ * Stores a renewed session. A refresh is not a login: a device login started
+ * with --no-wait while the old session was still in use keeps waiting.
+ */
 export function saveOAuthConfig(configPath: string, auth: OAuthConfig): void {
   const config = readConfigFile(configPath);
-  config.auth = auth;
-  config.auth_host = auth.auth_host;
-  config.client_id = auth.client_id;
+  writeConfigFile(configPath, withOAuth(config, auth));
+}
+
+/** A login of either kind settles any device login still waiting: what it was waiting for is decided. */
+export function saveOAuthLogin(configPath: string, auth: OAuthConfig): void {
+  const config = withOAuth(readConfigFile(configPath), auth);
   delete config.pending_device;
   writeConfigFile(configPath, config);
+}
+
+function withOAuth(config: RawConfig, auth: OAuthConfig): RawConfig {
+  return { ...config, auth, auth_host: auth.auth_host, client_id: auth.client_id };
 }
 
 export function saveAccessToken(configPath: string, accessToken: string): void {
@@ -234,10 +244,15 @@ export function loadPendingDeviceLogin(configPath: string): PendingDeviceLogin |
   return readConfigFile(configPath).pending_device;
 }
 
-/** Forgets the stored credential, whichever kind it is. */
+/**
+ * Forgets the stored credential, whichever kind it is, and any device login
+ * still waiting: after a logout, approving that code in a browser must not
+ * log this machine back in.
+ */
 export function clearCredential(configPath: string): void {
   const config = readConfigFile(configPath);
   delete config.auth;
+  delete config.pending_device;
   writeConfigFile(configPath, config);
 }
 

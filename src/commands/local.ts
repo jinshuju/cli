@@ -29,7 +29,7 @@ export const LOCAL: readonly Command[] = [
       'without a display: prints a link and a short code to approve on any other device, and waits ' +
       'for that instead; nothing has to reach this machine. --no-wait prints the link and code and ' +
       'exits, for an agent whose commands cannot wait; --resume then waits for the approval, a minute ' +
-      'or --timeout seconds, exiting 9 while it is still pending. With --access-token: checks the token with one ' +
+      'or --timeout seconds (0 asks once), exiting 9 while it is still pending. With --access-token: checks the token with one ' +
       'call, then stores it; the OAuth options are ignored. Each replaces whatever credential was ' +
       'stored before. JINSHUJU_ACCESS_TOKEN, if set, still outranks what this stores.',
     options: local(
