@@ -21,6 +21,14 @@ export const ACCOUNT: readonly Command[] = [
     request: (input) => call('listBillingAccountUsers', { query: paging(input) })
   },
   {
+    path: ['account', 'feature', 'list'],
+    summary: 'List what the account can use now: entries, attachments, reminders, payments, public search, AI points',
+    description:
+      'For each feature: whether it is available, why not, how to unlock it ' +
+      '(upgrade the plan, buy a package, apply for a 小金商户 or bind a payment account), and the quota left this month.',
+    request: () => call('listBillingAccountFeatures')
+  },
+  {
     path: ['account', 'invoice', 'list'],
     summary: 'List e-invoices, and the amount not invoiced yet',
     description: 'Account admins only, as in the web app; a member is refused with 403.',

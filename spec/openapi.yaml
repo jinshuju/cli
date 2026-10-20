@@ -4398,6 +4398,51 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/billing_account/features":
+    get:
+      tags:
+      - Account
+      summary: List what the account can use
+      operationId: listBillingAccountFeatures
+      description: |
+        Says, in one call, whether the current account can use each feature right now, why not when it cannot, and what to do about it. Check it before planning work that sends notifications, collects payments, opens a public search or spends AI points, so the plan does not stop half way.
+        Each answer comes from the same check the feature runs when it is used: when `available` is true, using it is not refused for the plan or the quota.
+        - `entry_quota` / `storage_quota` / `audio_quota`: entries collected, attachment storage and audio duration; a form stops taking submissions with attachments or audio once that quota is used up, and stops taking any submission once the entries quota is.
+        - `sms` / `active_mail`: reminder rules (`提醒推送`, sent at once, at a set time or repeatedly) and bulk SMS / email sent to entries from the data page; no plan limits when or how often they are sent. SMS also needs an approved template (see `/sms/audit_statuses`). A paid account may keep sending past `quota.balance` while its account balance lasts, so `available` can be true with `quota.balance` 0.
+        - `custom_smtp`: sending email through the account's own SMTP server, which uses no email quota and has no daily limit.
+        - `notification_email` / `weixin_onetime_subscription_message` / `notification_wxwork` / `notification_dingtalk` / `webhook`: reminder rules sent by email, as a WeChat subscription message, to a WeCom group, a DingTalk group or a webhook; plan features, and a rule on a plan without them is not sent.
+        - `advanced_notification_for_entry_update`: reminder rules triggered when an entry is changed to match conditions; a plan without it refuses such a rule.
+        - `merchant_entry_transaction_quota`: collecting payments through the 小金商户. `not_enabled` until the account has one. No single payment limit; a free account may collect 50000 cents (500 yuan) a month, a paid account has no limit.
+        - `entry_transaction_quota`: collecting payments through the account's own WeChat Pay / Alipay accounts. Checked in this order: `plan_not_supported` on a plan without it (the free plan), since a payment form using these accounts cannot be submitted there, whether or not one is bound; then `not_enabled` until one is bound; then, when only an Alipay account is bound, `plan_not_supported` unless the account may take Alipay (`alipay`: the e30 plan, or the Alipay add-on bought on its own); then the monthly quota. A form using an Alipay account cannot be submitted without `alipay`, even when a WeChat Pay account is bound too. Each plan limits a single payment (`limit_per_transaction_in_cent`) and what may be collected a month (`quota`); both are null when these payments are not limited.
+        A payment form uses the 小金商户 when one is set on it, otherwise the account's own accounts.
+        - `opensearch`: public search pages (`对外查询`).
+        - `ai_points`: AI points; they cannot be spent past `quota.balance`, only topped up by buying packages.
+
+        `quota` is this month's quota: `total_quota` (the plan's free quota plus bought packages), `consumed_quota` (used this month) and `balance` (what is left), all in `unit`; for an unlimited quota only `unit`, `unlimited: true` and `consumed_quota` are given. The quota resets on the account's monthly reset date (see `/billing_account`).
+
+        `reason` is null when available, else one of `plan_not_supported`, `quota_insufficient`, `not_enabled`.
+        `action` is null when available or when no plan gives more, else one of:
+        - `upgrade_plan`: upgrade to `plan_code` / `plan_name`, the lowest plan that has the feature or, for a used-up payment quota, the next plan with a larger quota (both null when no higher plan has more).
+        - `buy_package`: buy a package of attachment storage, SMS, email, audio duration or AI points.
+        - `apply_merchant`: apply for a 小金商户.
+        - `bind_payment_account`: bind a WeChat Pay / Alipay account.
+        Only an account admin can upgrade or buy.
+        OAuth scope: users
+      responses:
+        '200':
+          description: Features of the current account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingAccountFeaturesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/trade/merchant":
     get:
       tags:
@@ -5868,6 +5913,7 @@ components:
       - entries_count
       - last_entry_created_at
       - creator
+      - folder_token
       properties:
         name:
           type: string
@@ -5893,6 +5939,11 @@ components:
           description: When the latest entry was received (UTC); null when the form has never received an entry
         creator:
           $ref: '#/components/schemas/Creator'
+        folder_token:
+          type:
+          - string
+          - 'null'
+          description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
         transactions:
           $ref: '#/components/schemas/FormTransactions'
     FormListResponse:
@@ -7223,6 +7274,11 @@ components:
           - rich_text
         entry_submit_mode:
           type: string
+          enum:
+          - show_message
+          - redirect
+          - reports
+          - exam_score
         success_redirect_url:
           type: string
         success_redirect_fields:
@@ -7231,6 +7287,10 @@ components:
             type: string
         open_entry_action:
           type: string
+          enum:
+          - hide
+          - view
+          - edit
         open_entry_message:
           type: string
         open_entry_cancel_reservation:
@@ -7320,6 +7380,14 @@ components:
           type: string
         allowed_audience:
           type: string
+          enum:
+          - public
+          - internal
+          - private
+          - weixin_qiye_followers_only
+          - weixin_followers_only
+          - submitter_only
+          - gd_user_only
         weixin_limited:
           type: boolean
         submission_region_limited:
@@ -14295,7 +14363,6 @@ components:
                     not:
                       enum:
                       - PageBreak
-                      - GoodsField
                       - MultipleBlanksField
                       - WidgetContact
                       - WidgetVideo
@@ -14948,6 +15015,7 @@ components:
               - name
               - matched
               - serial_numbers
+              - folder_token
               properties:
                 form_token:
                   type: string
@@ -14961,6 +15029,11 @@ components:
                   description: Serial numbers of some matching entries, at most 50
                   items:
                     type: integer
+                folder_token:
+                  type:
+                  - string
+                  - 'null'
+                  description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
             - $ref: '#/components/schemas/EntryFormUnavailable'
       examples:
       - total: 3
@@ -14972,6 +15045,7 @@ components:
           - 12
           - 57
           - 88
+          folder_token: null
     EntryStatsResponse:
       type: object
       required:
@@ -16994,6 +17068,137 @@ components:
         statistics:
           $ref: '#/components/schemas/BillingAccountPaymentStatistics'
           description: Present only when this response returns records
+    BillingAccountFeatureAction:
+      type:
+      - object
+      - 'null'
+      description: What to do so the feature can be used; null when available or when no plan gives more
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - upgrade_plan
+          - buy_package
+          - apply_merchant
+          - bind_payment_account
+        plan_code:
+          type:
+          - string
+          - 'null'
+          description: "`upgrade_plan` only: the code of the plan to upgrade to"
+        plan_name:
+          type:
+          - string
+          - 'null'
+          description: "`upgrade_plan` only: that plan's name"
+    BillingAccountFeatureQuota:
+      type: object
+      required:
+      - unit
+      - consumed_quota
+      properties:
+        unit:
+          type: string
+          enum:
+          - item
+          - mb
+          - second
+          - cent
+          description: "`item` for entries / messages / emails / points, `mb` for attachment storage, `second` for audio duration, `cent` for payment amounts"
+        unlimited:
+          type: boolean
+          description: Present and true only when the quota is unlimited
+        total_quota:
+          type: number
+          description: The plan's free quota this month plus bought packages; absent when unlimited
+        consumed_quota:
+          type: number
+          description: Used this month
+        balance:
+          type: number
+          description: What is left this month; absent when unlimited
+    BillingAccountFeature:
+      type: object
+      required:
+      - key
+      - available
+      - reason
+      - action
+      properties:
+        key:
+          type: string
+          enum:
+          - entry_quota
+          - storage_quota
+          - sms
+          - active_mail
+          - notification_email
+          - custom_smtp
+          - weixin_onetime_subscription_message
+          - notification_wxwork
+          - notification_dingtalk
+          - webhook
+          - advanced_notification_for_entry_update
+          - audio_quota
+          - merchant_entry_transaction_quota
+          - entry_transaction_quota
+          - opensearch
+          - ai_points
+        available:
+          type: boolean
+        reason:
+          type:
+          - string
+          - 'null'
+          enum:
+          - plan_not_supported
+          - quota_insufficient
+          - not_enabled
+          - null
+        action:
+          $ref: '#/components/schemas/BillingAccountFeatureAction'
+        quota:
+          oneOf:
+          - $ref: '#/components/schemas/BillingAccountFeatureQuota'
+          - type: 'null'
+          description: "Every feature that uses a quota (not `notification_email`, `custom_smtp`, `weixin_onetime_subscription_message`, `notification_wxwork`, `notification_dingtalk`, `webhook`, `advanced_notification_for_entry_update` or `opensearch`); payment quotas are in cents. Null for `entry_transaction_quota` when its payments are not limited"
+        limit_per_transaction_in_cent:
+          type:
+          - integer
+          - 'null'
+          description: "`entry_transaction_quota` only: largest amount a single payment may be, in cents; null means no limit"
+        alipay:
+          type: boolean
+          description: "`entry_transaction_quota` only: whether a payment form may take payments through an Alipay account"
+        entries_limit:
+          type:
+          - integer
+          - 'null'
+          description: "`opensearch` only: a form with more entries than this cannot be searched publicly; null means no limit"
+        scoped_data:
+          type: boolean
+          description: "`opensearch` only: whether a search can be limited to a scope of the data"
+      examples:
+      - key: opensearch
+        available: false
+        reason: plan_not_supported
+        action:
+          type: upgrade_plan
+          plan_code: pro2
+          plan_name: 专业版
+        entries_limit: 0
+        scoped_data: false
+    BillingAccountFeaturesResponse:
+      type: object
+      required:
+      - features
+      properties:
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingAccountFeature'
     RelationFieldInput:
       type: object
       title: RelationFieldInput
