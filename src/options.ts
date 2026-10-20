@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import { UsageError } from './errors.js';
+import { choices } from './spec.js';
 
 /**
  * The shared option grammar, written once here because every resource uses it:
@@ -112,14 +113,21 @@ export const CONTAINER_LIST_OPTIONS: readonly OptionSpec[] = [
   }
 ];
 
+/**
+ * The operators a condition takes, off the spec's own ScopeCondition. The
+ * list this replaced was written here, and had drifted: it offered `match`,
+ * which the spec does not list.
+ */
+const FILTER_OPERATORS = choices('listEntries', 'filters[].operator');
+
 export const FILTER_OPTION: OptionSpec = {
   name: '--filter',
   type: 'string',
   repeatable: true,
   placeholder: "'<field> <op> [value]'",
   description:
-    'Filter condition, repeatable, AND-combined. Operators: eq ne gte gt lte lt like not_like ' +
-    'any_in none_in between not_between null not_null match within_last. ' +
+    'Filter condition, repeatable, AND-combined. ' +
+    (FILTER_OPERATORS ? `Operators: ${FILTER_OPERATORS.join(' ')}. ` : '') +
     "e.g. 'field_3 gte 80', 'created_at within_last 30d', 'field_4 between 1,10'"
 };
 

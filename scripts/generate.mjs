@@ -21,6 +21,7 @@ const spec = parse(readFileSync(new URL('spec/openapi.yaml', root), 'utf8'));
 
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 const SCHEMA_REF = '#/components/schemas/';
+const JSON_TEXT = 'application/json';
 
 /**
  * The schema keywords the tests know how to check (src/testing/conformance.ts),
@@ -109,13 +110,32 @@ function constraints(schema, where) {
   return out;
 }
 
+/**
+ * A parameter says what its value is with `schema`, or, when the value is a
+ * document carried as text in one query value — `filters=[{"field":…}]` —
+ * with `content` keyed by the document's media type. The output has the
+ * schema either way, and names the media type for the second kind, so `call`
+ * sends the text as one value and the tests read the document.
+ */
 function parameter(raw, where) {
   const param = raw.$ref ? lookup(raw.$ref) : raw;
-  if (!param.schema) fail(`${where}: parameter ${param.name} has no schema`);
   const out = { name: param.name, in: param.in };
   if (param.required) out.required = true;
   if (param.style !== undefined) out.style = param.style;
   if (param.explode !== undefined) out.explode = param.explode;
+  if (param.content !== undefined) {
+    if (param.schema !== undefined) fail(`${where}: parameter ${param.name} has both schema and content`);
+    const types = Object.keys(param.content);
+    if (types.length !== 1 || types[0] !== JSON_TEXT) {
+      fail(
+        `${where}: parameter ${param.name} carries ${types.join(', ') || 'nothing'}; only ${JSON_TEXT} is supported`
+      );
+    }
+    out.content = JSON_TEXT;
+    out.schema = constraints(param.content[JSON_TEXT].schema ?? {}, `${where}/${param.name}`);
+    return out;
+  }
+  if (!param.schema) fail(`${where}: parameter ${param.name} has neither schema nor content`);
   out.schema = constraints(param.schema, `${where}/${param.name}`);
   return out;
 }

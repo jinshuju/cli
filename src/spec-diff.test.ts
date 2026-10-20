@@ -22,12 +22,20 @@ const original = readFileSync(current, 'utf8');
 const dir = mkdtempSync(join(tmpdir(), 'jsj-spec-diff-'));
 let written = 0;
 
-function titleAfter(change: (spec: Node) => void): string {
+function specAfter(change: (spec: Node) => void): string {
   const spec = parse(original) as Node;
   change(spec);
   const file = join(dir, `${(written += 1)}.yaml`);
   writeFileSync(file, stringify(spec));
-  return execFileSync('node', [script, '--title', current, file], { encoding: 'utf8' }).trim();
+  return file;
+}
+
+function titleAfter(change: (spec: Node) => void): string {
+  return execFileSync('node', [script, '--title', current, specAfter(change)], { encoding: 'utf8' }).trim();
+}
+
+function bodyAfter(change: (spec: Node) => void): string {
+  return execFileSync('node', [script, current, specAfter(change)], { encoding: 'utf8' }).trim();
 }
 
 function parameter(spec: Node, path: string, method: string, name: string): Node {
@@ -76,6 +84,12 @@ test('a list of values a flag offers changing is a feat, named by what reads it'
     }),
     'feat: follow openapi.yaml changes to createForm scene'
   );
+});
+
+test('a document a parameter carries changing is a feat, and a list a flag reads out of it is named', () => {
+  const widened = (spec: Node) => spec.components.schemas.ScopeCondition.properties.operator.enum.push('match');
+  assert.match(titleAfter(widened), /^feat: follow openapi\.yaml changes to /);
+  assert.match(bodyAfter(widened), /`listEntries filters\[\]\.operator` \(\+match\)/);
 });
 
 test('the parameters of an operation the CLI calls changing is a feat, and so is its removal', () => {

@@ -5,7 +5,7 @@ import { UsageError } from './errors.js';
 import { withQuery } from './http.js';
 import { FORM_IMAGE_TYPES } from './commands/upload.js';
 import { BASE_PATH, bodyChoices, call, choices, operation, unansweredLookups, type Schema } from './spec.js';
-import { operationOf, validate } from './testing/conformance.js';
+import { nonconformities, operationOf, validate } from './testing/conformance.js';
 
 test('a request is the operation openapi.yaml names, under the base path, its path parameters encoded', () => {
   const request = call('getEntry', {
@@ -64,6 +64,31 @@ test('a list goes on the wire as its parameter says: comma-joined when it does n
   );
 });
 
+test('a document a parameter carries goes as its JSON text in one value, as given', () => {
+  const at = (filters: unknown) =>
+    call('listEntries', { path: { form_token: 'Kp7mQ2' }, query: { filters: filters as string } });
+  const text = '[{"field":"field_3","operator":"gte","value":"80"}]';
+  const request = at(text);
+  assert.equal(
+    withQuery(request.path, request.query),
+    `/api/v1/forms/Kp7mQ2/entries?${new URLSearchParams({ filters: text })}`
+  );
+  // The document is an array, and still one value: never `filters[]=`, which is how a list goes.
+  assert.throws(() => at([text]), /filters is application\/json text/);
+
+  // What is in it is the API's to judge, as a body is; the tests hold the CLI's own to the schema.
+  assert.ok(at('[{"field":"field_3","operator":"soon"}]'));
+  const issues = nonconformities(at('[{"operator":"soon"}]'));
+  assert.equal(issues[0], 'listEntries filters/0/field is required, got undefined');
+  assert.match(
+    issues[1] ?? '',
+    /^listEntries filters\/0\/operator must be one of eq, ne, .*within_last.*, got "soon"$/
+  );
+  assert.equal(issues.length, 2);
+  assert.deepEqual(nonconformities(at('not json')), ['listEntries filters is not application/json, got "not json"']);
+  assert.deepEqual(nonconformities(call('listEntries', { path: { form_token: 'Kp7mQ2' } })), []);
+});
+
 test('a body goes as given, for the API to judge against the spec it runs', () => {
   // A key this copy of the spec has never heard of may be one the API has
   // learned since this CLI was installed; the request still leaves.
@@ -82,6 +107,10 @@ test('flags read their values off the spec rather than a copy of it', () => {
   assert.ok(bodyChoices('createForm', 'scene')?.includes('quickpay'));
   assert.ok(bodyChoices('createTable', 'fields[].type')?.includes('TextArea'));
   assert.deepEqual(bodyChoices('createFolder', 'kind'), ['form', 'table']);
+  // A document a parameter carries is walked the way a body is.
+  assert.ok(choices('listEntries', 'filters[].operator')?.includes('within_last'));
+  assert.ok(choices('aggregateEntries', 'metrics[].func')?.includes('median'));
+  assert.deepEqual(choices('aggregateEntries', 'dimensions[].bucket'), ['day', 'week', 'month']);
   // A list the spec does not give leaves the flag open, and is noted for the test that loads the commands.
   assert.equal(choices('listFolders', 'limit'), undefined);
   assert.equal(bodyChoices('createFolder', 'colour'), undefined);
