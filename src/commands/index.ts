@@ -17,6 +17,7 @@ import { FILL } from './fill.js';
 import { FOLDER } from './folder.js';
 import { FORM } from './form.js';
 import { LOCAL } from './local.js';
+import { NOTIFICATION } from './notification.js';
 import { OPENSEARCH } from './opensearch.js';
 import { SMS } from './sms.js';
 import { TABLE } from './table.js';
@@ -50,6 +51,14 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'entry', summary: 'Manage entries' },
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
+  {
+    name: 'notification',
+    summary: 'Notification rules: SMS, email and WeChat to submitters, bots and webhooks to your team',
+    note:
+      'An SMS rule needs an approved template of your own, shared in the account or from the system (`sms status`). ' +
+      'A rule under review is saved but does not send; `notification get` says why a rule cannot send. ' +
+      'Only a manager of the form can create, edit or delete its rules. `notification edit --disable` turns a rule off for now.'
+  },
   {
     name: 'checkin',
     summary: 'Check-in campaigns: registrants of a form check in on site',
@@ -91,6 +100,7 @@ export const COMMANDS: readonly Command[] = [
   ...ENTRY,
   ...COMMENT,
   ...OPENSEARCH,
+  ...NOTIFICATION,
   ...CHECKIN,
   ...FILL,
   ...TRADE,

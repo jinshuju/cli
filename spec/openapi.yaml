@@ -1425,6 +1425,209 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/notification_rules":
+    get:
+      tags:
+      - Form Settings
+      summary: List notification rules
+      description: |
+        Lists the form's notification rules (SMS, EMAIL, WEIXIN_ONETIME, WXWORK, DING_TALK, WEBHOOK), newest first, the same rules the form's notification settings page shows. Each rule says whether it can send right now (`sendable`) and, if not, why (`blocked_reasons`).
+        OAuth scope: form_setting
+      operationId: listNotificationRules
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      responses:
+        '200':
+          description: Notification rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationRule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - Form Settings
+      summary: Create a notification rule
+      description: |
+        Creates a notification rule, sent to the submitter (SMS, EMAIL, WEIXIN_ONETIME) or to your team (WXWORK, DING_TALK, WEBHOOK). The body is the schema of its `approach`. The rule shows on the form's notification settings page and can be edited there.
+        - The rule is on as soon as it is created unless `enabled: false` is passed, and it sends (and uses SMS / email balance) for the entries that match it from then on.
+        - The plan must include the approach (SMS is limited only by the SMS balance), otherwise returns 402. The content of SMS and WeChat messages is reviewed when they are sent, as on the page.
+        - Only a manager of the form can create a rule; other cooperators get 403.
+        OAuth scope: form_setting
+      operationId: createNotificationRule
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+              - required:
+                - approach
+              - oneOf:
+                - $ref: '#/components/schemas/SMSNotificationRuleInput'
+                - $ref: '#/components/schemas/EmailNotificationRuleInput'
+                - $ref: '#/components/schemas/WeixinOnetimeNotificationRuleInput'
+                - $ref: '#/components/schemas/WxworkNotificationRuleInput'
+                - $ref: '#/components/schemas/DingTalkNotificationRuleInput'
+                - $ref: '#/components/schemas/WebhookNotificationRuleInput'
+                discriminator:
+                  propertyName: approach
+                  mapping:
+                    SMS: "#/components/schemas/SMSNotificationRuleInput"
+                    EMAIL: "#/components/schemas/EmailNotificationRuleInput"
+                    WEIXIN_ONETIME: "#/components/schemas/WeixinOnetimeNotificationRuleInput"
+                    WXWORK: "#/components/schemas/WxworkNotificationRuleInput"
+                    DING_TALK: "#/components/schemas/DingTalkNotificationRuleInput"
+                    WEBHOOK: "#/components/schemas/WebhookNotificationRuleInput"
+      responses:
+        '201':
+          description: The notification rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/notification_rules/{id}":
+    get:
+      tags:
+      - Form Settings
+      summary: Get a notification rule
+      description: |
+        Returns the rule and whether it can send right now (`sendable`); if not, `blocked_reasons` says why.
+        OAuth scope: form_setting
+      operationId: getNotificationRule
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Notification rule id
+      responses:
+        '200':
+          description: Notification rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Form Settings
+      summary: Update a notification rule
+      description: |
+        Updates only the keys present in the body, which takes the keys of the rule's own approach; PUT is accepted too. `approach` cannot be changed, and a key of another approach returns 400. Pass `enabled: false` to turn the rule off and `enabled: true` to turn it back on. Same checks as creating one.
+        Only a manager of the form can create, update or delete its notification rules; other cooperators get 403.
+        OAuth scope: form_setting
+      operationId: updateNotificationRule
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Notification rule id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/SMSNotificationRuleInput'
+              - $ref: '#/components/schemas/EmailNotificationRuleInput'
+              - $ref: '#/components/schemas/WeixinOnetimeNotificationRuleInput'
+              - $ref: '#/components/schemas/WxworkNotificationRuleInput'
+              - $ref: '#/components/schemas/DingTalkNotificationRuleInput'
+              - $ref: '#/components/schemas/WebhookNotificationRuleInput'
+      responses:
+        '200':
+          description: The notification rule as saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+      - Form Settings
+      summary: Delete a notification rule
+      description: |
+        Deletes the rule; notifications it has scheduled but not sent yet are cancelled. To stop it for now, PATCH `enabled: false` instead.
+        Only a manager of the form can delete it, as with creating and updating.
+        OAuth scope: form_setting
+      operationId: deleteNotificationRule
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Notification rule id
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - id
+                properties:
+                  id:
+                    type: string
+                    description: Id of the deleted rule
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   "/forms/{form_token}/theme":
     patch:
       tags:
@@ -8215,6 +8418,364 @@ components:
           type: boolean
           default: true
       additionalProperties: false
+    NotificationRuleScopeCondition:
+      type: object
+      description: |
+        One condition an entry must match; conditions with the same `group_index` are combined with and, different groups with or. A condition on `trade_status` (for example `{"trigger": "trade_status", "operator": "any_in", "value": ["paid"]}` with `trigger_scope` matched_update) sends when the payment status changes.
+      required:
+      - trigger
+      - operator
+      properties:
+        trigger:
+          type: string
+          description: api_code of the field
+        operator:
+          type: string
+          description: Operator, e.g. eq, ne, any_in, none_in, gt, gte, lt, lte, between, like, null, not_null
+        value:
+          description: Value to compare with; choice fields take choice api_codes
+        group_index:
+          type: integer
+      additionalProperties: false
+    NotificationRuleScheduleTimeRule:
+      type: object
+      description: When a `schedule_time` rule sends, relative to a date field of each entry. `date_offset_action` is before / that_day / after the date, by `date_offset_number` `date_offset_unit`; `hour` and `minute` set the time of day (leave them out with minute / hour units)
+      required:
+      - date_key
+      properties:
+        date_key:
+          type: string
+          description: api_code of a date field, a reservation field, or created_at / updated_at
+        reservation_item_key:
+          type: string
+          description: The reservation item, when `date_key` is a reservation field
+        date_offset_action:
+          type: string
+          enum:
+          - before
+          - that_day
+          - after
+        date_offset_number:
+          type: integer
+          minimum: 0
+        date_offset_unit:
+          type: string
+          enum:
+          - minute
+          - hour
+          - day
+          - week
+          - month
+        hour:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 23
+        minute:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 59
+      additionalProperties: false
+    NotificationRuleTriggerScope:
+      type: string
+      enum:
+      - all_new
+      - all_update
+      - matched_new
+      - matched_update
+      - schedule_time
+      description: 'When it sends: every new entry (default), every changed entry, a new / changed entry matching `scope_conditions`, or at a time relative to a date field (`schedule_time_rule`)'
+    SMSNotificationRuleInput:
+      type: object
+      description: An SMS notification rule, sent to the submitter. The text and signature come from the SMS template.
+      properties:
+        approach:
+          type: string
+          enum:
+          - SMS
+        enabled:
+          type: boolean
+          description: Whether the rule sends; true by default on create
+        trigger_scope:
+          $ref: '#/components/schemas/NotificationRuleTriggerScope'
+        scope_conditions:
+          type: array
+          description: Required with matched_new / matched_update
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+        recipients:
+          type: array
+          description: Mobile numbers, or api_codes of the mobile fields holding them
+          items:
+            type: string
+        sms_template_id:
+          type: string
+          description: A template of the caller's own or shared in the account. One without a signature or that failed review returns 400; one under review is saved but does not send until it is approved
+        placeholder_keys:
+          type: array
+          description: The field api_code filling each `$(...)` placeholder of the template, in order; one for every placeholder
+          items:
+            type: string
+      additionalProperties: false
+    EmailNotificationRuleInput:
+      type: object
+      description: An email notification rule, sent to the submitter or to fixed addresses.
+      properties:
+        approach:
+          type: string
+          enum:
+          - EMAIL
+        enabled:
+          type: boolean
+          description: Whether the rule sends; true by default on create
+        trigger_scope:
+          $ref: '#/components/schemas/NotificationRuleTriggerScope'
+        scope_conditions:
+          type: array
+          description: Required with matched_new / matched_update
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+        recipients:
+          type: array
+          description: Email addresses, or api_codes of the email fields holding them
+          items:
+            type: string
+        subject:
+          type: string
+          description: '`$(api_code)` inserts a field value'
+        content:
+          type: string
+          description: The message; `$(api_code)` inserts a field value
+        smtp_account_id:
+          type:
+          - string
+          - 'null'
+          description: A custom SMTP account of the account; without it the email goes out through the system mailbox
+      additionalProperties: false
+    WeixinOnetimeNotificationRuleInput:
+      type: object
+      description: A WeChat one-time subscription message, sent to submitters who subscribed when they submitted. A form has at most one such rule.
+      properties:
+        approach:
+          type: string
+          enum:
+          - WEIXIN_ONETIME
+        enabled:
+          type: boolean
+          description: Whether the rule sends; true by default on create
+        trigger_scope:
+          $ref: '#/components/schemas/NotificationRuleTriggerScope'
+        scope_conditions:
+          type: array
+          description: Required with matched_new / matched_update
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+        subject:
+          type: string
+          maxLength: 15
+        content:
+          type: string
+          maxLength: 200
+          description: The message; `$(api_code)` inserts a field value
+        weixin_onetime_url:
+          type: string
+          description: Link opened when the message is tapped
+      additionalProperties: false
+    WxworkNotificationRuleInput:
+      type: object
+      description: A WeCom group bot notification, sent to your team.
+      properties:
+        approach:
+          type: string
+          enum:
+          - WXWORK
+        enabled:
+          type: boolean
+          description: Whether the rule sends; true by default on create
+        trigger_scope:
+          $ref: '#/components/schemas/NotificationRuleTriggerScope'
+        scope_conditions:
+          type: array
+          description: Required with matched_new / matched_update
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+        url:
+          type: string
+          format: uri
+          description: Bot webhook URL
+        content:
+          type: string
+          description: The message; `$(api_code)` inserts a field value
+        mentioned_mobile_list:
+          type: array
+          description: Mobiles to @ in the group, `@all` for everyone
+          items:
+            type: string
+      additionalProperties: false
+    DingTalkNotificationRuleInput:
+      type: object
+      description: A DingTalk group bot notification, sent to your team.
+      properties:
+        approach:
+          type: string
+          enum:
+          - DING_TALK
+        enabled:
+          type: boolean
+          description: Whether the rule sends; true by default on create
+        trigger_scope:
+          $ref: '#/components/schemas/NotificationRuleTriggerScope'
+        scope_conditions:
+          type: array
+          description: Required with matched_new / matched_update
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+        url:
+          type: string
+          format: uri
+          description: Bot webhook URL
+        content:
+          type: string
+          description: The message; `$(api_code)` inserts a field value
+        mentioned_mobile_list:
+          type: array
+          description: Mobiles to @ in the group, `@all` for everyone
+          items:
+            type: string
+      additionalProperties: false
+    WebhookNotificationRuleInput:
+      type: object
+      description: A webhook that receives the entry as JSON.
+      properties:
+        approach:
+          type: string
+          enum:
+          - WEBHOOK
+        enabled:
+          type: boolean
+          description: Whether the rule sends; true by default on create
+        trigger_scope:
+          $ref: '#/components/schemas/NotificationRuleTriggerScope'
+        scope_conditions:
+          type: array
+          description: Required with matched_new / matched_update
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+        url:
+          type: string
+          format: uri
+          description: Webhook URL
+      additionalProperties: false
+    NotificationRule:
+      type: object
+      description: A notification rule. Keys of other approaches are left out
+      properties:
+        id:
+          type: string
+        approach:
+          type: string
+        enabled:
+          type: boolean
+        trigger_scope:
+          type: string
+        scope_conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationRuleScopeCondition'
+        schedule_time_rule:
+          description: Only on schedule_time rules; null otherwise
+          oneOf:
+          - $ref: '#/components/schemas/NotificationRuleScheduleTimeRule'
+          - type: 'null'
+        recipients:
+          type: array
+          items:
+            type: string
+        sms_template_id:
+          type: string
+        placeholder_keys:
+          type: array
+          items:
+            type: string
+        signature:
+          type: string
+          description: SMS signature of the template
+        subject:
+          type: string
+        content:
+          type: string
+          description: The message; for SMS, the template content
+        smtp_account_id:
+          type:
+          - string
+          - 'null'
+        weixin_onetime_url:
+          type: string
+        url:
+          type: string
+        mentioned_mobile_list:
+          type: array
+          items:
+            type: string
+        notifications_count:
+          type: integer
+          description: How many have been sent
+        sendable:
+          type: boolean
+          description: Whether the rule can send right now
+        blocked_reasons:
+          type: array
+          description: |
+            Why it cannot send, empty when `sendable`:
+            - `disabled`: turned off by hand; `custom_smtp_deleted` / `custom_smtp_authentication_error` / `share_link_disabled` / `webhook_connection_error`: turned off by the system for that reason
+            - `recipient_fields_deleted`: every field the rule sends to was deleted
+            - `condition_field_deleted` / `condition_choice_deleted`: a field in `scope_conditions` was deleted, or every choice a condition picks was
+            - `schedule_field_deleted`: the date field in `schedule_time_rule` was deleted
+            - `sms_template_auditing` / `sms_template_rejected` / `sms_signature_auditing` / `sms_signature_rejected`: the SMS template or signature is under review or failed it
+            - `sms_disabled`: SMS sending is turned off for the form creator
+            - `plan_not_supported`: the current plan does not include this approach
+            - `sms_balance_insufficient` / `email_balance_insufficient`: not enough SMS / email balance
+          items:
+            type: string
+            enum:
+            - disabled
+            - custom_smtp_deleted
+            - custom_smtp_authentication_error
+            - share_link_disabled
+            - webhook_connection_error
+            - recipient_fields_deleted
+            - condition_field_deleted
+            - condition_choice_deleted
+            - schedule_field_deleted
+            - sms_template_auditing
+            - sms_template_rejected
+            - sms_signature_auditing
+            - sms_signature_rejected
+            - sms_disabled
+            - plan_not_supported
+            - sms_balance_insufficient
+            - email_balance_insufficient
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     FormUpdateInput:
       type: object
       description: Contains at least one of `name` / `description` / `fields` / `setting` / `field_rules`
