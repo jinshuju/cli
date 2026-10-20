@@ -266,7 +266,12 @@ async function pollDeviceToken(
   remainingMs: number
 ): Promise<{ token: TokenResponse } | { error: string; description?: string } | { outOfTime: true }> {
   if (remainingMs <= 0) return { outOfTime: true };
+  // fetch settles on the headers; the body can still be on its way when time
+  // runs out, and an abort there surfaces as a different error. Both halves are
+  // under the one signal, and whether it fired is what decides.
+  const signal = AbortSignal.timeout(Math.min(timeoutMs, remainingMs));
   let response: Response;
+  let text: string;
   try {
     response = await fetch(new URL('/oauth/token', pending.auth_host), {
       method: 'POST',
@@ -276,13 +281,14 @@ async function pollDeviceToken(
         client_id: pending.client_id,
         device_code: pending.device_code
       }),
-      signal: AbortSignal.timeout(Math.min(timeoutMs, remainingMs))
+      signal
     });
+    text = await response.text();
   } catch (error) {
-    if ((error as Error).name === 'TimeoutError' && remainingMs <= timeoutMs) return { outOfTime: true };
+    if (signal.aborted && remainingMs <= timeoutMs) return { outOfTime: true };
     throw error;
   }
-  const body = parseTokenBody(await response.text(), response);
+  const body = parseTokenBody(text, response);
   if (response.ok && body?.access_token) return { token: body as TokenResponse };
   return {
     error: body?.error ?? `${response.status} ${response.statusText}`.trim(),

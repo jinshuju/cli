@@ -206,7 +206,7 @@ test('a request for any other path on the callback server is a 404 and the login
  * An authorization server that hands out one device code and answers each
  * poll with the next of `answers` — an OAuth error name, or 'token'.
  */
-async function deviceServer(answers: string[], delayMs = 0) {
+async function deviceServer(answers: string[], delayMs = 0, headersFirst = false) {
   const polls: URLSearchParams[] = [];
   const server = await listenOnce((req, res) => {
     let body = '';
@@ -230,12 +230,17 @@ async function deviceServer(answers: string[], delayMs = 0) {
       }
       polls.push(new URLSearchParams(body));
       const answer = answers.shift() ?? 'authorization_pending';
+      if (headersFirst) {
+        res.writeHead(answer === 'token' ? 200 : 400);
+        res.flushHeaders();
+      }
       setTimeout(() => {
         if (res.destroyed) return;
         if (answer === 'token') {
           res.end(JSON.stringify({ access_token: 'device-access', refresh_token: 'device-refresh', expires_in: 7200 }));
         } else {
-          res.writeHead(400).end(JSON.stringify({ error: answer }));
+          if (!headersFirst) res.writeHead(400);
+          res.end(JSON.stringify({ error: answer }));
         }
       }, delayMs);
     });
@@ -347,6 +352,24 @@ test('resume stops at its timeout even while a poll is still waiting for an answ
 
   assert.ok(error instanceof PendingError);
   assert.ok(took < 1_000, `took ${took}ms`);
+});
+
+test('auth login --resume exits 9 at its timeout when the answer has sent its headers but not its body', async () => {
+  const auth = await deviceServer(['authorization_pending'], 2_500, true);
+  const env = { JINSHUJU_AUTH_HOST: auth.url, JINSHUJU_OAUTH_CLIENT_ID: 'cli' };
+  await runCli(['auth', 'login', '--no-wait', '--config', auth.configPath], { env });
+
+  const started = Date.now();
+  const resumed = await runCli(
+    ['auth', 'login', '--resume', '--timeout', '1', '--output', 'json', '--config', auth.configPath],
+    { env }
+  );
+  const took = Date.now() - started;
+  auth.cleanup();
+
+  assert.equal(resumed.exitCode, 9);
+  assert.equal(JSON.parse(resumed.stderr).error.kind, 'pending');
+  assert.ok(took < 2_000, `took ${took}ms`);
 });
 
 test('resume with no device login waiting says how to start one', async () => {
