@@ -34,6 +34,8 @@ export type OperationId =
   | 'createFormWebhook'
   | 'createOpensearchQuery'
   | 'createPredefinedChoicesSet'
+  | 'createSmsSignature'
+  | 'createSmsTemplate'
   | 'createTable'
   | 'createTableEntry'
   | 'createTableEntryComment'
@@ -47,6 +49,8 @@ export type OperationId =
   | 'deleteFormView'
   | 'deleteFormWebhook'
   | 'deletePredefinedChoicesSet'
+  | 'deleteSmsSignature'
+  | 'deleteSmsTemplate'
   | 'deleteTable'
   | 'deleteTableEntry'
   | 'deleteTableEntryComment'
@@ -93,6 +97,8 @@ export type OperationId =
   | 'listOpensearchQuerySuggestions'
   | 'listPredefinedChoicesSets'
   | 'listSmsAuditStatuses'
+  | 'listSmsSignatures'
+  | 'listSmsTemplates'
   | 'listTableEntries'
   | 'listTableEntryComments'
   | 'listTableViewEntries'
@@ -128,6 +134,8 @@ export type OperationId =
   | 'updateManuallyCloseRule'
   | 'updateOpensearchQuery'
   | 'updatePredefinedChoicesSet'
+  | 'updateSmsSignature'
+  | 'updateSmsTemplate'
   | 'updateTable'
   | 'updateTableEntry'
   | 'updateTableEntryComment'
@@ -136,6 +144,7 @@ export type OperationId =
   | 'uploadEntryAttachment'
   | 'uploadFormImage'
   | 'uploadImportFile'
+  | 'uploadUserLicenseAttachment'
   | 'verifyRedirectParams';
 
 export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
@@ -503,6 +512,18 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       }
     }
   },
+  createSmsSignature: {
+    method: 'POST',
+    path: '/sms/signatures',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'SMSSignatureCreateInput' } } }
+  },
+  createSmsTemplate: {
+    method: 'POST',
+    path: '/sms/templates',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'SMSTemplateCreateInput' } } }
+  },
   createTable: {
     method: 'POST',
     path: '/tables',
@@ -593,6 +614,16 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   deletePredefinedChoicesSet: {
     method: 'DELETE',
     path: '/predefined_choices_sets/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  deleteSmsSignature: {
+    method: 'DELETE',
+    path: '/sms/signatures/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  deleteSmsTemplate: {
+    method: 'DELETE',
+    path: '/sms/templates/{id}',
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   deleteTable: {
@@ -919,6 +950,29 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   },
   listPredefinedChoicesSets: { method: 'GET', path: '/predefined_choices_sets', parameters: [] },
   listSmsAuditStatuses: { method: 'GET', path: '/sms/audit_statuses', parameters: [] },
+  listSmsSignatures: {
+    method: 'GET',
+    path: '/sms/signatures',
+    parameters: [
+      { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
+  listSmsTemplates: {
+    method: 'GET',
+    path: '/sms/templates',
+    parameters: [
+      { name: 'q', in: 'query', schema: { type: 'string' } },
+      { name: 'scope', in: 'query', schema: { type: 'string', enum: ['owned', 'shared'] } },
+      { name: 'signature_id', in: 'query', schema: { type: 'string' } },
+      { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
   listTableEntries: {
     method: 'GET',
     path: '/tables/{table_token}/entries',
@@ -1328,6 +1382,18 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       }
     }
   },
+  updateSmsSignature: {
+    method: 'PATCH',
+    path: '/sms/signatures/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'SMSSignatureUpdateInput' } } }
+  },
+  updateSmsTemplate: {
+    method: 'PATCH',
+    path: '/sms/templates/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'SMSTemplateUpdateInput' } } }
+  },
   updateTable: {
     method: 'PATCH',
     path: '/tables/{table_token}',
@@ -1442,6 +1508,22 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
           type: 'object',
           required: ['file'],
           properties: { import_file_token: { type: 'string' }, file: { type: 'string' } },
+          additionalProperties: false
+        }
+      }
+    }
+  },
+  uploadUserLicenseAttachment: {
+    method: 'POST',
+    path: '/user/license_attachments',
+    parameters: [],
+    body: {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          type: 'object',
+          required: ['file'],
+          properties: { file: { type: 'string' } },
           additionalProperties: false
         }
       }
@@ -3895,6 +3977,67 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         oneOf: [{ $ref: 'ReservationByDayQuotaInput' }, { $ref: 'ReservationByTimeRangeQuotaInput' }]
       }
     }
+  },
+  SMSSignatureCreateInput: {
+    type: 'object',
+    required: [
+      'signature',
+      'license_attachment_ids',
+      'company_name',
+      'company_id',
+      'id_card_front_attachment_id',
+      'id_card_back_attachment_id',
+      'id_card_name',
+      'id_card_number',
+      'identity_mobile'
+    ],
+    properties: {
+      signature: { type: 'string', minLength: 2, maxLength: 20 },
+      type: { type: 'string', enum: ['notification', 'verification'] },
+      company_name: { type: 'string', minLength: 1 },
+      company_id: { type: 'string', minLength: 1 },
+      license_attachment_ids: { type: 'array', minItems: 1, items: { type: 'string' } },
+      id_card_front_attachment_id: { type: 'string' },
+      id_card_back_attachment_id: { type: 'string' },
+      id_card_name: { type: 'string' },
+      id_card_number: { type: 'string' },
+      identity_mobile: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  SMSSignatureUpdateInput: {
+    type: 'object',
+    properties: {
+      signature: { type: 'string', minLength: 2, maxLength: 20 },
+      company_name: { type: 'string', minLength: 1 },
+      company_id: { type: 'string', minLength: 1 },
+      license_attachment_ids: { type: 'array', minItems: 1, items: { type: 'string' } },
+      id_card_front_attachment_id: { type: 'string' },
+      id_card_back_attachment_id: { type: 'string' },
+      id_card_name: { type: 'string' },
+      id_card_number: { type: 'string' },
+      identity_mobile: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  SMSTemplateCreateInput: {
+    type: 'object',
+    required: ['signature', 'content'],
+    properties: {
+      signature: { type: 'string' },
+      content: { type: 'string' },
+      apply_description: { type: 'string', maxLength: 200 }
+    },
+    additionalProperties: false
+  },
+  SMSTemplateUpdateInput: {
+    type: 'object',
+    properties: {
+      signature: { type: 'string' },
+      content: { type: 'string' },
+      apply_description: { type: 'string', maxLength: 200 }
+    },
+    additionalProperties: false
   },
   ScopeCondition: {
     type: 'object',

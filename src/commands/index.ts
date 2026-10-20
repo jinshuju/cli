@@ -76,7 +76,7 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'transaction', summary: 'Payment orders placed on payment forms' },
   { name: 'refund', summary: 'Refunds of payment orders' },
   { name: 'payout', summary: 'Payouts to the settlement account' },
-  { name: 'sms', summary: 'SMS signature and template review' },
+  { name: 'sms', summary: 'Manage SMS signatures and templates' },
   { name: 'config', summary: 'Manage CLI configuration' }
 ];
 
