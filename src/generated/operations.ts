@@ -2254,16 +2254,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
               items: {
                 properties: {
                   type: {
-                    not: {
-                      enum: [
-                        'PageBreak',
-                        'GoodsField',
-                        'MultipleBlanksField',
-                        'WidgetContact',
-                        'WidgetVideo',
-                        'WidgetButton'
-                      ]
-                    }
+                    not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo', 'WidgetButton'] }
                   }
                 }
               }
@@ -2463,10 +2454,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       success_message: { type: 'string' },
       success_message_rich_text: { type: 'string' },
       success_message_style: { type: 'string', enum: ['text', 'rich_text'] },
-      entry_submit_mode: { type: 'string' },
+      entry_submit_mode: { type: 'string', enum: ['show_message', 'redirect', 'reports', 'exam_score'] },
       success_redirect_url: { type: 'string' },
       success_redirect_fields: { type: 'array', items: { type: 'string' } },
-      open_entry_action: { type: 'string' },
+      open_entry_action: { type: 'string', enum: ['hide', 'view', 'edit'] },
       open_entry_message: { type: 'string' },
       open_entry_cancel_reservation: { type: 'boolean' },
       show_serial_number_on_success: { type: 'boolean' },
@@ -2507,7 +2498,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_field_number: { type: 'boolean' },
       password_required: { type: 'boolean' },
       access_password: { type: 'string' },
-      allowed_audience: { type: 'string' },
+      allowed_audience: {
+        type: 'string',
+        enum: [
+          'public',
+          'internal',
+          'private',
+          'weixin_qiye_followers_only',
+          'weixin_followers_only',
+          'submitter_only',
+          'gd_user_only'
+        ]
+      },
       weixin_limited: { type: 'boolean' },
       submission_region_limited: { type: 'boolean' },
       submission_regions: { type: 'array', items: { type: 'string' } },
