@@ -22,6 +22,14 @@ info:
         (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `read_contacts` / `users` / `public`).
     - An invalid or revoked token returns `401`; a plan without API v1 returns `402`.
 
+    ## Cooperator permissions
+    With a personal access token or an OAuth token, what an endpoint does on a form shared with the caller follows the caller's role on it; an account access token is not narrowed by any role.
+    - Reading entries (entry lists, single entries, view entries, counts, aggregates, summaries, and the cross-form count and search) needs the read entries permission, and so does reading or changing views. Only entries within the role's data scope are returned or counted, and fields the role cannot read are left out.
+    - Creating entries (including batch create, imports and import file uploads) needs the create entries permission, updating needs the edit entries permission, and deleting needs the delete entries permission; uploading an entry attachment needs create or edit permission on its field. An entry outside the role's data scope returns `404`.
+    - Writing a field the role cannot fill in (create) or change (update) returns `403` naming the field; a `PUT` leaves such fields as they were.
+    - A missing permission returns `403` saying which one is missing.
+    - Changing a form or table itself (its fields, settings, access policy, webhook, theme, close rules, exam or evaluation settings, deleting a form or table, and the field data checks and type change previews made before editing fields) needs the admin role on it.
+
     ## Rate limiting
     Requests are counted per account per hour: every token of the account (its members' personal access tokens, account access tokens and OAuth tokens) draws on one shared quota.
     The hourly quota comes from the account's plan, unless the account has a quota set individually:
@@ -282,6 +290,41 @@ paths:
           $ref: '#/components/responses/PaymentRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+      - Forms
+      summary: Delete a form
+      operationId: deleteForm
+      description: |
+        Moves the form and its entries to the trash, from which the product can restore it; on success, returns the form token.
+
+        OAuth scope: forms
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - token
+                properties:
+                  token:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          description: 'Forbidden: the OAuth token lacks the required scope, a personal token''s user is not a manager of the form, or the form cannot be deleted (it holds an unrefunded red-envelope balance, or a customer group was generated from it)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
         '429':
@@ -1682,13 +1725,6 @@ paths:
         - Returns 403 when the source form is frozen or its creator's account is disabled, with body `{ "errors": ..., "status_code": "form_forbidden" }` (not the common error shape).
         - `folder_token` takes a folder token or id; returns 404 when the folder does not exist or the caller lacks manage permission on it.
         - Returns 400 when copying fails (model validation does not pass).
-        - Notification rules are not copied by default; with `with_notification_rules: true` they are copied only when the caller is in the same account as the source form's creator, otherwise none are copied.
-        - Returns 403 when `with_notification_rules` is true and the caller cannot manage the source form.
-        - Copied SMS rules keep using the approved SMS template, so no new template review is needed.
-        - When a copied rule uses the entry share link or WeChat one-time subscription messages, the single entry sharing setting or the authorized official account is copied too.
-        - Copied rules sent at a specified time keep that time, and a time already past is not sent, so update it on the new form.
-        - A quickpay form's order notification is the new form's own default one; changes made to it on the source form are not copied.
-        - A rule that cannot be saved on the new form is skipped, e.g. a rule with the entry share link while the source form has single entry sharing turned off.
       operationId: copyForm
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -3447,7 +3483,7 @@ paths:
       summary: Create a check-in campaign
       description: |
         Turns check-in on for a form. The caller must be able to reach the form.
-        - Same limits as picking a form in the web app: returns 400 when the form has WeChat red envelope, lucky wheel, certificate or confirmation code on, is bound to a plugin that takes over the after-submit redirect (a check-in campaign with a check-in code included), or its after-submit action is not the default message. Turn that off first.
+        - Same limits as picking a form in the web app: returns 400 when the form has WeChat red envelope, lucky wheel, certificate or confirmation code on, already has a check-in campaign with a check-in code in effect, is bound to another plugin that takes over the after-submit redirect, or its after-submit action is not the default message. Turn that off first.
         - Only one check-in campaign is in effect on a form at a time; creating one turns off the one that was in effect.
         - Without `checkin_field_api_code`, the form's first mobile field is used, then its first name field; with neither, returns 400. The check-in field cannot be changed afterwards.
         - The campaign belongs to the caller, or to the account owner with an account-level credential. The caller is also added as a verifier.
@@ -3565,8 +3601,18 @@ paths:
           type: integer
         description: Check-in campaign id
       responses:
-        '204':
-          description: Deleted; empty body
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - id
+                properties:
+                  id:
+                    type: integer
+                    description: Id of the deleted campaign
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4241,7 +4287,8 @@ paths:
       description: |
         Returns the account the current credential belongs to: plan, this month's usage and quota, feature trial status, and the bound payment merchant / WeChat Pay / Alipay accounts.
         OAuth scope: users
-        `usage` is null when the account has no usage record for this month yet; for an add-on service with unlimited quota, only `unit`, `unlimited: true` and `consumed_quota` are returned.
+        `usage` is null when the account has no usage record for this month yet; for an add-on service with unlimited quota, only `unit`, `unlimited: true`, `consumed_quota` and `available` are returned.
+        Each `usage` entry says whether the service can be used now (`available`). Which paid features the plan includes is in `GET /billing_account/paid_features`.
       responses:
         '200':
           description: Account details
@@ -4399,6 +4446,32 @@ paths:
                 $ref: '#/components/schemas/BillingAccountPaymentHistoriesResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/billing_account/paid_features":
+    get:
+      tags:
+      - Account
+      summary: List which paid features the account's plan includes
+      operationId: listBillingAccountPaidFeatures
+      description: |
+        Lists every paid feature, its Chinese name as the product shows it, and whether the current account's plan includes it now (feature trials and features granted on their own count). Check it before planning work that needs a plan feature, so the plan does not stop half way.
+        Find a feature by its `name`; new paid features appear here as the product adds them, so there is no list to keep on the caller's side.
+        It only says whether the plan includes a feature; using it may still be refused for other reasons (quota, a bound account, the form's setup). For add-on service quotas and whether each can still be used, use `usage` of `GET /billing_account`; bound payment accounts are in its `merchant_accounts` / `wxpay_accounts` / `alipay_accounts`. Whether something can be done may take several of these together, e.g. taking direct payments needs `goods_field_payment_setting` here, a bound account (Alipay also needs `show_alipay` here) and `usage.entry_transaction_quota.available` of `GET /billing_account`.
+        OAuth scope: users
+      responses:
+        '200':
+          description: Paid features of the current account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingAccountPaidFeaturesResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -7564,6 +7637,9 @@ components:
           - object
           - 'null'
           properties:
+            enabled:
+              type: boolean
+              description: Pass false to delete the rule
             start_time:
               type: string
               format: date-time
@@ -7576,6 +7652,9 @@ components:
           - object
           - 'null'
           properties:
+            enabled:
+              type: boolean
+              description: Pass false to delete the rule
             limit:
               type: integer
           additionalProperties: false
@@ -9149,7 +9228,7 @@ components:
           description: The form to turn check-in on for
         checkin_field_api_code:
           type: string
-          description: Check-in field; defaults to the first mobile field, then the first name field. Cannot be changed afterwards
+          description: Check-in field, a mobile, name, email, ID card or single-line text field; defaults to the first mobile field, then the first name field. Cannot be changed afterwards
         name:
           type: string
           minLength: 1
@@ -9158,7 +9237,7 @@ components:
           type:
           - string
           - 'null'
-          description: Field shown when verifying, not the check-in field; null clears it
+          description: Field shown when verifying, not the check-in field; a mobile, name, email, ID card or single-line text field. null clears it
         enable_checkin_code:
           type: boolean
           description: After submitting, go on to the check-in code page; registrants show the code on site
@@ -9192,7 +9271,7 @@ components:
           type:
           - string
           - 'null'
-          description: Field shown when verifying, not the check-in field; null clears it
+          description: Field shown when verifying, not the check-in field; a mobile, name, email, ID card or single-line text field. null clears it
         enable_checkin_code:
           type: boolean
           description: After submitting, go on to the check-in code page; registrants show the code on site
@@ -9798,7 +9877,7 @@ components:
         with_notification_rules:
           type: boolean
           default: false
-          description: When true, the notification rules (SMS, email, WeChat, WeCom, DingTalk, webhook, mini program subscription messages) are copied too; see the endpoint description for the rules
+          description: Copy the notification rules too; takes manage permission on the source form, and copies none when the caller is outside the source form creator's account
       additionalProperties: false
     UploadedFormImage:
       type: object
@@ -10324,11 +10403,15 @@ components:
                 -
     BillingAccountUsageItem:
       type: object
-      description: Quota and usage of one add-on service; when the quota is unlimited, only unit, unlimited and consumed_quota are present
+      description: Quota and usage of one add-on service; when the quota is unlimited, only unit, unlimited, consumed_quota and available are present
       required:
       - unit
       - consumed_quota
+      - available
       properties:
+        available:
+          type: boolean
+          description: Whether the service can be used now, by the same check its use runs. A paid account may keep using SMS, email, entries and attachment storage past total_balance while its account balance lasts, so available can be true with total_balance 0. For entry_transaction_quota it says nothing about whether a payment account is bound or the plan allows direct payments; see `GET /billing_account/paid_features`.
         unit:
           type: string
           enum:
@@ -15295,7 +15378,7 @@ components:
           - 12
           - 57
           - 88
-          folder_token: null
+          folder_token:
     EntryStatsResponse:
       type: object
       required:
@@ -17318,6 +17401,35 @@ components:
         statistics:
           $ref: '#/components/schemas/BillingAccountPaymentStatistics'
           description: Present only when this response returns records
+    BillingAccountPaidFeature:
+      type: object
+      required:
+      - key
+      - name
+      - available
+      properties:
+        key:
+          type: string
+          description: Paid feature key
+        name:
+          type: string
+          description: The feature's Chinese name as the product shows it
+        available:
+          type: boolean
+          description: Whether the account's plan includes the feature now
+      examples:
+      - key: opensearch
+        name: 对外查询
+        available: false
+    BillingAccountPaidFeaturesResponse:
+      type: object
+      required:
+      - paid_features
+      properties:
+        paid_features:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingAccountPaidFeature'
     RelationFieldInput:
       type: object
       title: RelationFieldInput

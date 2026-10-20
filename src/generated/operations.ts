@@ -43,6 +43,7 @@ export type OperationId =
   | 'deleteCheckinCampaign'
   | 'deleteEntry'
   | 'deleteEntryComment'
+  | 'deleteForm'
   | 'deleteFormView'
   | 'deleteFormWebhook'
   | 'deletePredefinedChoicesSet'
@@ -71,6 +72,7 @@ export type OperationId =
   | 'getTableView'
   | 'getTradeMerchant'
   | 'listBillingAccountInvoices'
+  | 'listBillingAccountPaidFeatures'
   | 'listBillingAccountPaymentHistories'
   | 'listBillingAccountUsers'
   | 'listCheckinCampaigns'
@@ -570,6 +572,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'comment_id', in: 'path', required: true, schema: { type: 'string' } }
     ]
   },
+  deleteForm: {
+    method: 'DELETE',
+    path: '/forms/{form_token}',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   deleteFormView: {
     method: 'DELETE',
     path: '/forms/{form_token}/views/{view_token}',
@@ -745,6 +752,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   },
   getTradeMerchant: { method: 'GET', path: '/trade/merchant', parameters: [] },
   listBillingAccountInvoices: { method: 'GET', path: '/billing_account/invoices', parameters: [] },
+  listBillingAccountPaidFeatures: { method: 'GET', path: '/billing_account/paid_features', parameters: [] },
   listBillingAccountPaymentHistories: {
     method: 'GET',
     path: '/billing_account/payment_histories',
@@ -2709,12 +2717,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       by_time_range_close_rule: {
         type: ['object', 'null'],
-        properties: { start_time: { type: 'string' }, end_time: { type: 'string' } },
+        properties: { enabled: { type: 'boolean' }, start_time: { type: 'string' }, end_time: { type: 'string' } },
         additionalProperties: false
       },
       by_entries_close_rule: {
         type: ['object', 'null'],
-        properties: { limit: { type: 'integer' } },
+        properties: { enabled: { type: 'boolean' }, limit: { type: 'integer' } },
         additionalProperties: false
       },
       fill_frequency: {

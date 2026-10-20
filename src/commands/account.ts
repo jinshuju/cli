@@ -21,6 +21,14 @@ export const ACCOUNT: readonly Command[] = [
     request: (input) => call('listBillingAccountUsers', { query: paging(input) })
   },
   {
+    path: ['account', 'paid-feature', 'list'],
+    summary: "List which paid features the account's plan includes",
+    description:
+      'Each paid feature, its name as the product shows it, and whether the plan includes it now. Quotas ' +
+      'left this month, and whether each add-on service can still be used, are in account get.',
+    request: () => call('listBillingAccountPaidFeatures')
+  },
+  {
     path: ['account', 'invoice', 'list'],
     summary: 'List e-invoices, and the amount not invoiced yet',
     description: 'Account admins only, as in the web app; a member is refused with 403.',
