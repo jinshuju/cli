@@ -499,10 +499,11 @@ test('transaction list --all follows the page the API hands back', async () => {
   assert.match(result.stdout, /T1[\s\S]*T2/);
 });
 
-test('account invoice, account payment and sms status read their own endpoints', async () => {
+test('account paid-feature, account invoice, account payment and sms status read their own endpoints', async () => {
   const mock = createMockClient();
   const env = { JINSHUJU_API_KEY: 'key', JINSHUJU_API_SECRET: 'secret' };
 
+  await cli(['account', 'paid-feature', 'list'], { env, client: mock.client });
   await cli(['account', 'invoice', 'list'], { env, client: mock.client });
   await cli(['account', 'payment', 'list', '--verb', 'sms_charge', '--limit', '10', '--with-balance'], {
     env,
@@ -511,6 +512,7 @@ test('account invoice, account payment and sms status read their own endpoints',
   await cli(['sms', 'status'], { env, client: mock.client });
 
   assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/billing_account/paid_features',
     '/api/v1/billing_account/invoices',
     '/api/v1/billing_account/payment_histories?verb=sms_charge&limit=10&include_balance=true',
     '/api/v1/sms/audit_statuses'
