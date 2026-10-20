@@ -2414,8 +2414,13 @@ test('help mentions jsj, the exit codes, and what a resource does not have', asy
   const auth = await cli(['auth', '--help'], { env: {} });
   assert.match(auth.stdout, /auth login --access-token/);
 
+  // The operators are the spec's ScopeCondition list, not the copy that offered `match`.
   const filter = await cli(['entry', 'list', '--help'], { env: {} });
-  assert.match(filter.stdout, /Operators: eq ne gte gt lte lt like not_like/);
+  assert.match(
+    filter.stdout,
+    /Operators: eq ne any_in none_in between not_between null not_null gte gt lte lt like not_like within_last/
+  );
+  assert.doesNotMatch(filter.stdout, /Operators:[^.]*\bmatch\b/);
 });
 
 test('fill get reads the page a fill link points at, from the link as shared or its path', async () => {

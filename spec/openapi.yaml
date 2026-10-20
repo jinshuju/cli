@@ -11,6 +11,7 @@ info:
     - Request headers: `Content-Type: application/json`, `Accept: application/json`, `Authorization` (see below).
     - Update endpoints use `PATCH` (only the keys present change); `PUT` on the same path is a compatibility alias, handled and validated as `PATCH`. For the entries resource, `PUT` (full replace) and `PATCH` (partial update) mean different things and are listed separately.
     - Responses are always JSON and carry `Access-Control-Allow-Origin: *`.
+    - Query parameters declared with `content: application/json` (`filters`, `sort`, `metrics`, `dimensions`, `checks`) carry the JSON text of an array as one string: `JSON.stringify` the array and pass the result, not the array itself.
     - The schemas for field definitions (`FieldInput` and each `<Type>Input`, `FieldUpdateInput`, `FormCreateInput`, `TableCreateInput`, etc.) branch on the field `type` and carry conditional constraints.
 
     ## Authentication
@@ -189,7 +190,8 @@ paths:
       summary: Show a form's structure
       operationId: getForm
       description: |
-        Returns the form's name, public fill URL (`url`), description, field definitions and settings. Each element of `fields` is a single-key object `{ "<api_code>": {...} }`, in field order.
+        Returns the form's name, `kind`, `scene`, public URL (`url`), description, field definitions and settings. Each element of `fields` is a single-key object `{ "<api_code>": {...} }`, in field order.
+        Also answers for a table or a quick payment form token; `kind` says which it is.
         The following are included when the matching parameter is `true`:
         - `include_analytics`: each analysable field's definition carries `analytics`;
         - `include_theme`: carries `theme` (the form theme);
@@ -4816,12 +4818,19 @@ paths:
       - name: filters
         in: query
         required: false
-        description: 'Filters, a JSON array written like `filters` of `GET /forms/{form_token}/entries`, but `field` can only be `created_at` / `updated_at` / `creator_id`. Applied to each form separately.
-
-          '
-        schema:
-          type: string
-        example: '[{"field":"created_at","operator":"within_last","value":{"unit":"day","n":7}}]'
+        description: Filters, a JSON string holding an array of ScopeCondition objects (`JSON.stringify` the array; do not pass the array itself), written like `filters` of `GET /forms/{form_token}/entries`, but `field` can only be `created_at` / `updated_at` / `creator_id`. Applied to each form separately.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScopeCondition'
+            example:
+            - field: created_at
+              operator: within_last
+              value:
+                unit: day
+                "n": 7
       responses:
         '200':
           description: Entry counts per form, with the total
@@ -4872,11 +4881,20 @@ paths:
         in: query
         required: false
         description: |
-          Filters on form attributes that narrow the search scope, a JSON array with the same syntax and fields as `filters` of `GET /forms` (`form_name` / `created_at` / `last_entry_created_at` / `entries_count`); conditions are combined with AND.
+          Filters on form attributes that narrow the search scope, a JSON string holding an array of ScopeCondition objects (`JSON.stringify` the array; do not pass the array itself), with the same fields as `filters` of `GET /forms` (`form_name` / `created_at` / `last_entry_created_at` / `entries_count`); conditions are combined with AND.
           Without an `entries_count` condition, `entries_count > 0` is appended automatically.
-        schema:
-          type: string
-        example: '[{"field":"last_entry_created_at","operator":"within_last","value":{"unit":"day","n":30}}]'
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScopeCondition'
+            example:
+            - field: last_entry_created_at
+              operator: within_last
+              value:
+                unit: day
+                "n": 30
       responses:
         '200':
           description: Matches per form
@@ -5416,7 +5434,7 @@ components:
       in: query
       required: false
       description: |
-        Filters, a JSON array; conditions are combined with AND. Filterable fields and operators:
+        Filters, a JSON string holding an array of ScopeCondition objects (`JSON.stringify` the array; do not pass the array itself); conditions are combined with AND. Filterable fields and operators:
         | field | type | operators |
         |---|---|---|
         | `form_name` | text | `eq` `ne` `any_in` `none_in` `like` `not_like` |
@@ -5426,9 +5444,16 @@ components:
 
         The value of `within_last` looks like `{"unit":"day","n":30}` (unit can be minute / day / week / month), meaning the window going back from now.
         Example: `[{"field":"last_entry_created_at","operator":"within_last","value":{"unit":"day","n":7}}]`
-      schema:
-        type: string
-      example: '[{"field":"entries_count","operator":"gte","value":1}]'
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ScopeCondition'
+          example:
+          - field: entries_count
+            operator: gte
+            value: 1
     FormsNext:
       name: next
       in: query
@@ -5458,9 +5483,8 @@ components:
       in: query
       required: false
       description: |
-        Filters, a JSON array of `{"field": "<api_code>", "operator": "<op>", "value": ...}` items (`field` can also be written as `api_code` / `trigger`); conditions are combined with AND.
-        - All operators: `eq` `ne` `any_in` `none_in` `between` `not_between` `null` `not_null` `gte` `gt` `lte` `lt` `like` `not_like` `within_last`,
-          aliases `equal` / `not_equal` / `start` (=gte) / `end` (=lte). Each field type accepts only some of them; an unsupported one returns 400 listing the available operators.
+        Filters, a JSON string holding an array of ScopeCondition objects (`JSON.stringify` the array; do not pass the array itself); conditions are combined with AND.
+        - Each field type accepts only some of the operators; an unsupported one returns 400 listing the available operators.
         - For choice fields (single choice / multiple choice / drop-down / cascading drop-down), `value` can be a choice api_code or a choice label; a cascading drop-down also accepts a `level1-level2` path.
         - For `between` / `not_between`, `value` is a two-element array `[min, max]`; matrix / table fields need `{"<column api_code>": [min, max]}`.
         - `within_last` works only on date fields; `value` looks like `{"unit":"day","n":30}` (unit can be minute / day / week / month).
@@ -5468,9 +5492,18 @@ components:
         - `serial_number` is a special field that filters by serial number with `eq` / `any_in`; several conditions are intersected.
         - For a relation field (RelationField), the `value` of `any_in` / `none_in` is serial numbers of entries in the related table; returns 400 when a serial number does not exist.
         - With a `created_at` condition, results are sorted by creation time instead.
-      schema:
-        type: string
-      example: '[{"field":"field_3","operator":"any_in","value":["选项 A","选项 B"]}]'
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ScopeCondition'
+          example:
+          - field: field_3
+            operator: any_in
+            value:
+            - 选项 A
+            - 选项 B
     EntriesKeyword:
       name: keyword
       in: query
@@ -5484,11 +5517,17 @@ components:
       in: query
       required: false
       description: |
-        Sort rules, a JSON array of `{"api_code": "<api_code>", "order": "asc"|"desc"}` items, applied in order, with ascending serial number appended automatically at the end.
+        Sort rules, a JSON string holding an array of SortRule objects (`JSON.stringify` the array; do not pass the array itself), applied in order, with ascending serial number appended automatically at the end.
         Only sortable fields are allowed; otherwise returns 400 listing the sortable fields. With `sort`, `next` becomes a row offset.
-      schema:
-        type: string
-      example: '[{"api_code":"created_at","order":"desc"}]'
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/SortRule'
+          example:
+          - api_code: created_at
+            order: desc
     EntriesCreatedAt:
       name: created_at
       in: query
@@ -5518,33 +5557,31 @@ components:
       name: checks
       in: query
       required: true
-      description: |
-        Targets to check, a JSON array (1 to 100 items), each item one field or one choice:
-        | Key | Type | Description |
-        |---|---|---|
-        | `field_api_code` | string | Required. api_code of the field to check; to check one column of a table field / matrix field, pass that column's api_code and also pass `parent_field` |
-        | `choice_value` | string | Optional. To check only one choice, pass that choice's api_code; omitted, checks whether the whole field has any data |
-        | `choice_type` | string | Optional, used with `choice_value`: `choice` (default), `statement` / `dimension` for matrix fields, `level_1` to `level_4` for cascading drop-downs |
-        | `parent_field` | string | Optional. When checking one column of a matrix / table field, the api_code of the parent field |
-        | `check_extended_text` | boolean | Optional. When `true`, checks whether the choice's "Other" extra text has any data |
-        | `goods_item_dimension_options` | object | Optional. When checking one spec of a goods field, the mapping of spec dimensions to options |
-      schema:
-        type: string
-      example: '[{"field_api_code":"field_1"},{"field_api_code":"field_3","choice_value":"Yb2d"}]'
+      description: Targets to check, a JSON string holding an array of 1 to 100 FieldDataCheck objects (`JSON.stringify` the array; do not pass the array itself), each naming one field or one choice.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/FieldDataCheck'
+          example:
+          - field_api_code: field_1
+          - field_api_code: field_3
+            choice_value: Yb2d
     FieldTypeChangeChecks:
       name: checks
       in: query
       required: true
-      description: |
-        Type conversions to preview, a JSON array (1 to 20 items), one field per item:
-        | Key | Type | Description |
-        |---|---|---|
-        | `field_api_code` | string | Required. api_code of the field to convert |
-        | `target_type` | string | Required. Target field type; see `GET /field_types` for values (`GET /field_types?kind=table` for tables) |
-        | `target_precision` | string | Optional. When the target is `DateTimeField`, the date precision the edit will use (`month` / `day` / `minute` / `second`), so the preview matches the actual conversion; ignored otherwise |
-      schema:
-        type: string
-      example: '[{"field_api_code":"field_1","target_type":"RadioButton"}]'
+      description: Type conversions to preview, a JSON string holding an array of 1 to 20 FieldTypeChangeCheck objects (`JSON.stringify` the array; do not pass the array itself), one field per item.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/FieldTypeChangeCheck'
+          example:
+          - field_api_code: field_1
+            target_type: RadioButton
     FieldTypeKind:
       name: kind
       in: query
@@ -5558,7 +5595,7 @@ components:
       in: query
       required: false
       description: |
-        Required. Metrics to compute, a JSON array of 1 to 20 items, each `{"func": "<function>", "field": "<api_code>"}`; returns 400 when missing or empty.
+        Required. Metrics to compute, a JSON string holding an array of 1 to 20 AggregateMetric objects (`JSON.stringify` the array; do not pass the array itself); returns 400 when missing or empty.
         The available functions depend on the field (the field's `analytics.agg_funcs` is authoritative):
         | Field | Functions |
         |---|---|
@@ -5566,19 +5603,34 @@ components:
         | Text | adds `count_unique` |
         | Number | adds `count_unique` `sum` `avg` `min` `max` `stddev` `median` `p25` `p75` `p90` |
         | Date | adds `count_unique` `min` `max` |
-      schema:
-        type: string
-      example: '[{"func":"sum","field":"field_5"},{"func":"count","field":"field_1"}]'
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/AggregateMetric'
+          example:
+          - func: sum
+            field: field_5
+          - func: count
+            field: field_1
     AggregateDimensions:
       name: dimensions
       in: query
       required: false
       description: |
-        Fields to group by, a JSON array of at most 2 items, each `{"field": "<api_code>", "bucket": "<granularity>"}`.
+        Fields to group by, a JSON string holding an array of at most 2 AggregateDimension objects (`JSON.stringify` the array; do not pass the array itself).
         Only fields whose `analytics.groupable` is true can be grouped by; a date field must have a `bucket` (`day` / `week` / `month`, in Beijing time, UTC+8), and a non-date field must not have a `bucket`.
-      schema:
-        type: string
-      example: '[{"field":"field_3"},{"field":"created_at","bucket":"month"}]'
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/AggregateDimension'
+          example:
+          - field: field_3
+          - field: created_at
+            bucket: month
     AggregateLimit:
       name: limit
       in: query
@@ -5634,12 +5686,18 @@ components:
       in: query
       required: false
       description: |
-        Sort rules, a JSON array, each item `{"field": "<field>", "order": "asc"|"desc"}` (order defaults to asc), applied in order.
+        Sort rules, a JSON string holding an array of FormSortRule objects (`JSON.stringify` the array; do not pass the array itself), applied in order.
         Sortable fields: `created_at`, `last_entry_created_at`, `entries_count`; any other field, an invalid order or unparseable JSON returns 400.
         With `sort`, `next` becomes a cursor of the form `row:<offset>`, usable only in requests with the same `sort`; rows with equal values may change order between pages.
-      schema:
-        type: string
-      example: '[{"field":"last_entry_created_at","order":"desc"}]'
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/FormSortRule'
+          example:
+          - field: last_entry_created_at
+            order: desc
     IncludeTransactions:
       name: include_transactions
       in: query
@@ -5817,6 +5875,167 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+    ScopeCondition:
+      type: object
+      description: One filter condition. A `filters` parameter is the JSON text of an array of these, combined with AND; each endpoint says which fields and operators it takes.
+      required:
+      - field
+      - operator
+      properties:
+        field:
+          type: string
+          description: What to filter on; a field api_code for entries, or a form attribute such as `created_at` for form lists
+        operator:
+          type: string
+          enum:
+          - eq
+          - ne
+          - any_in
+          - none_in
+          - between
+          - not_between
+          - 'null'
+          - not_null
+          - gte
+          - gt
+          - lte
+          - lt
+          - like
+          - not_like
+          - within_last
+          - equal
+          - not_equal
+          - start
+          - end
+          description: Comparison; `equal` / `not_equal` / `start` / `end` are aliases of `eq` / `ne` / `gte` / `lte`. Each field type accepts only some operators, and an unsupported one returns 400 listing the available ones.
+        value:
+          description: 'Condition value; its type depends on the field and the operator: a two-element array `[min, max]` for `between` / `not_between`, `{"unit": "day", "n": 30}` for `within_last`, and no value for `null` / `not_null`.'
+    SortRule:
+      type: object
+      required:
+      - api_code
+      properties:
+        api_code:
+          type: string
+          description: api_code of the field to sort by; only sortable fields are allowed
+        order:
+          type: string
+          enum:
+          - asc
+          - desc
+          default: asc
+          description: Sort direction
+    FormSortRule:
+      type: object
+      required:
+      - field
+      properties:
+        field:
+          type: string
+          enum:
+          - created_at
+          - last_entry_created_at
+          - entries_count
+          description: Form attribute to sort by
+        order:
+          type: string
+          enum:
+          - asc
+          - desc
+          default: asc
+          description: Sort direction
+    AggregateMetric:
+      type: object
+      required:
+      - func
+      - field
+      properties:
+        func:
+          type: string
+          enum:
+          - count
+          - count_non_empty
+          - count_empty
+          - count_unique
+          - sum
+          - avg
+          - min
+          - max
+          - stddev
+          - median
+          - p25
+          - p75
+          - p90
+          description: Aggregate function; the field's `analytics.agg_funcs` says which ones it supports
+        field:
+          type: string
+          description: api_code of the field to aggregate
+    AggregateDimension:
+      type: object
+      required:
+      - field
+      properties:
+        field:
+          type: string
+          description: api_code of the field to group by; only fields whose `analytics.groupable` is true
+        bucket:
+          type: string
+          enum:
+          - day
+          - week
+          - month
+          description: Time granularity, required for a date field and not allowed on any other
+    FieldDataCheck:
+      type: object
+      required:
+      - field_api_code
+      properties:
+        field_api_code:
+          type: string
+          description: api_code of the field to check; to check one column of a table / matrix field, that column's api_code, with `parent_field` set
+        choice_value:
+          type: string
+          description: api_code of one choice to check; omitted, checks whether the whole field has any data
+        choice_type:
+          type: string
+          enum:
+          - choice
+          - statement
+          - dimension
+          - level_1
+          - level_2
+          - level_3
+          - level_4
+          description: What `choice_value` names, `choice` by default; `statement` / `dimension` for matrix fields, `level_1` to `level_4` for cascading drop-downs
+        parent_field:
+          type: string
+          description: api_code of the parent field when checking one column of a matrix / table field
+        check_extended_text:
+          type: boolean
+          description: When true, checks whether the choice's "Other" extra text has any data
+        goods_item_dimension_options:
+          type: object
+          description: When checking one spec of a goods field, the mapping of spec dimensions to options
+    FieldTypeChangeCheck:
+      type: object
+      required:
+      - field_api_code
+      - target_type
+      properties:
+        field_api_code:
+          type: string
+          description: api_code of the field to convert
+        target_type:
+          type: string
+          description: Target field type; see `GET /field_types` for the values (`GET /field_types?kind=table` for tables)
+        target_precision:
+          type: string
+          enum:
+          - month
+          - day
+          - minute
+          - second
+          description: When the target is `DateTimeField`, the date precision the edit will use, so the preview matches the actual conversion; ignored otherwise
     Error:
       type: object
       required:
@@ -5863,17 +6082,23 @@ components:
       required:
       - name
       - token
+      - kind
       - tags
       - created_at
       - entries_count
       - last_entry_created_at
       - creator
+      - folder_token
       properties:
         name:
           type: string
           description: Form name (the public name)
         token:
           type: string
+        kind:
+          type: string
+          enum:
+          - form
         tags:
           type: array
           items:
@@ -5893,6 +6118,11 @@ components:
           description: When the latest entry was received (UTC); null when the form has never received an entry
         creator:
           $ref: '#/components/schemas/Creator'
+        folder_token:
+          type:
+          - string
+          - 'null'
+          description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
         transactions:
           $ref: '#/components/schemas/FormTransactions'
     FormListResponse:
@@ -5923,6 +6153,8 @@ components:
       required:
       - name
       - token
+      - kind
+      - scene
       - url
       - description
       - fields
@@ -5932,10 +6164,31 @@ components:
           type: string
         token:
           type: string
+        kind:
+          type: string
+          enum:
+          - form
+          - table
+          - quickpay
+          description: What the token is. A table's views are read with `GET /tables/{table_token}`
+        scene:
+          type: string
+          enum:
+          - form
+          - survey
+          - registry
+          - vote
+          - exam
+          - reservation
+          - customer_acquisition
+          - evaluation
+          - online_payment
+          - quickpay
+          description: Form scene, as set by `scene` on create
         url:
           type: string
           format: uri
-          description: Public fill URL of the form (built from the account's custom domain / subdomain; cannot be derived from the token)
+          description: Public URL of the form (built from the account's custom domain / subdomain; cannot be derived from the token). A quick payment form's is its payment page; a table, which has no public page, gives its URL in the product, the same as `GET /tables/{table_token}`
         description:
           type:
           - string
@@ -7223,6 +7476,11 @@ components:
           - rich_text
         entry_submit_mode:
           type: string
+          enum:
+          - show_message
+          - redirect
+          - reports
+          - exam_score
         success_redirect_url:
           type: string
         success_redirect_fields:
@@ -7231,6 +7489,10 @@ components:
             type: string
         open_entry_action:
           type: string
+          enum:
+          - hide
+          - view
+          - edit
         open_entry_message:
           type: string
         open_entry_cancel_reservation:
@@ -7320,6 +7582,14 @@ components:
           type: string
         allowed_audience:
           type: string
+          enum:
+          - public
+          - internal
+          - private
+          - weixin_qiye_followers_only
+          - weixin_followers_only
+          - submitter_only
+          - gd_user_only
         weixin_limited:
           type: boolean
         submission_region_limited:
@@ -9774,12 +10044,12 @@ components:
           type:
           - string
           - 'null'
-          description: Email
+          description: Email; null when the user has not bound one (a placeholder address made at signup counts as not bound)
         mobile:
           type:
           - string
           - 'null'
-          description: Mobile number
+          description: Mobile number; null when the user has not bound one
         role:
           type: string
           enum:
@@ -14295,7 +14565,6 @@ components:
                     not:
                       enum:
                       - PageBreak
-                      - GoodsField
                       - MultipleBlanksField
                       - WidgetContact
                       - WidgetVideo
@@ -14948,6 +15217,7 @@ components:
               - name
               - matched
               - serial_numbers
+              - folder_token
               properties:
                 form_token:
                   type: string
@@ -14961,6 +15231,11 @@ components:
                   description: Serial numbers of some matching entries, at most 50
                   items:
                     type: integer
+                folder_token:
+                  type:
+                  - string
+                  - 'null'
+                  description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
             - $ref: '#/components/schemas/EntryFormUnavailable'
       examples:
       - total: 3
@@ -14972,6 +15247,7 @@ components:
           - 12
           - 57
           - 88
+          folder_token: null
     EntryStatsResponse:
       type: object
       required:

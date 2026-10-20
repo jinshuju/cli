@@ -165,6 +165,17 @@ function valuesOf(spec, { kind, id, path }) {
     return undefined;
   };
 
+  const walk = (start, steps) => {
+    let schema = start;
+    for (const step of steps) {
+      const many = step.endsWith('[]');
+      const next = property(schema, many ? step.slice(0, -2) : step);
+      schema = many ? items(next) : next;
+      if (!schema) break;
+    }
+    return schema;
+  };
+
   let found;
   for (const [route, item] of Object.entries(spec.paths ?? {})) {
     for (const method of METHODS) if (item[method]?.operationId === id) found = { route, item, op: item[method] };
@@ -172,16 +183,15 @@ function valuesOf(spec, { kind, id, path }) {
   if (!found) return undefined;
   let schema;
   if (kind === 'choices') {
+    // The parameter's name first, then on into a document it carries, which
+    // the spec declares with `content` in place of `schema`.
+    const [first, ...rest] = path.split('.');
+    const name = first.endsWith('[]') ? first.slice(0, -2) : first;
     const parameters = [...(found.item.parameters ?? []), ...(found.op.parameters ?? [])].map(resolved);
-    schema = items(parameters.find((parameter) => parameter?.name === path)?.schema);
+    const parameter = parameters.find((candidate) => candidate?.name === name);
+    schema = walk(items(parameter?.schema ?? parameter?.content?.['application/json']?.schema), rest);
   } else {
-    schema = resolved(found.op.requestBody)?.content?.['application/json']?.schema;
-    for (const step of path.split('.')) {
-      const many = step.endsWith('[]');
-      const next = property(schema, many ? step.slice(0, -2) : step);
-      schema = many ? items(next) : next;
-      if (!schema) break;
-    }
+    schema = walk(resolved(found.op.requestBody)?.content?.['application/json']?.schema, path.split('.'));
   }
   const values = (resolved(schema)?.enum ?? []).filter((value) => typeof value === 'string');
   return values.length > 0 ? values : undefined;

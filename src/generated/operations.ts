@@ -142,10 +142,25 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/entries/aggregate',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'metrics', in: 'query', schema: { type: 'string' } },
-      { name: 'dimensions', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'metrics',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateMetric' } }
+      },
+      {
+        name: 'dimensions',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateDimension' } }
+      },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -155,10 +170,25 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'metrics', in: 'query', schema: { type: 'string' } },
-      { name: 'dimensions', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'metrics',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateMetric' } }
+      },
+      {
+        name: 'dimensions',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateDimension' } }
+      },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -167,10 +197,25 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables/{table_token}/entries/aggregate',
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'metrics', in: 'query', schema: { type: 'string' } },
-      { name: 'dimensions', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'metrics',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateMetric' } }
+      },
+      {
+        name: 'dimensions',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateDimension' } }
+      },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -180,10 +225,25 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'metrics', in: 'query', schema: { type: 'string' } },
-      { name: 'dimensions', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'metrics',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateMetric' } }
+      },
+      {
+        name: 'dimensions',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'AggregateDimension' } }
+      },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -212,7 +272,13 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/fields/check',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'checks', in: 'query', required: true, schema: { type: 'string' } }
+      {
+        name: 'checks',
+        in: 'query',
+        required: true,
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'FieldDataCheck' } }
+      }
     ]
   },
   checkTableFieldData: {
@@ -220,7 +286,13 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables/{table_token}/fields/check',
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'checks', in: 'query', required: true, schema: { type: 'string' } }
+      {
+        name: 'checks',
+        in: 'query',
+        required: true,
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'FieldDataCheck' } }
+      }
     ]
   },
   copyForm: {
@@ -234,7 +306,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/entries/count',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -243,7 +320,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/entries/count',
     parameters: [
       { name: 'form_tokens', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } }
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      }
     ]
   },
   countFormViewEntries: {
@@ -252,7 +334,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -261,7 +348,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables/{table_token}/entries/count',
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -271,7 +363,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -683,9 +780,19 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
-      { name: 'sort', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'sort',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'SortRule' } }
+      },
       { name: 'created_at', in: 'query', schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: ['integer', 'string'] } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
@@ -746,8 +853,18 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms',
     parameters: [
       { name: 'q', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
-      { name: 'sort', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
+      {
+        name: 'sort',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'FormSortRule' } }
+      },
       { name: 'next', in: 'query', schema: { type: 'string' } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
@@ -769,7 +886,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
@@ -795,9 +917,19 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
-      { name: 'sort', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'sort',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'SortRule' } }
+      },
       { name: 'created_at', in: 'query', schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: ['integer', 'string'] } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
@@ -833,8 +965,18 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables',
     parameters: [
       { name: 'q', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
-      { name: 'sort', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
+      {
+        name: 'sort',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'FormSortRule' } }
+      },
       { name: 'next', in: 'query', schema: { type: 'string' } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
@@ -932,7 +1074,13 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/fields/preview_convert',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'checks', in: 'query', required: true, schema: { type: 'string' } }
+      {
+        name: 'checks',
+        in: 'query',
+        required: true,
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'FieldTypeChangeCheck' } }
+      }
     ]
   },
   previewTableFieldTypeChange: {
@@ -940,7 +1088,13 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables/{table_token}/fields/preview_convert',
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'checks', in: 'query', required: true, schema: { type: 'string' } }
+      {
+        name: 'checks',
+        in: 'query',
+        required: true,
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'FieldTypeChangeCheck' } }
+      }
     ]
   },
   replaceEntry: {
@@ -967,7 +1121,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'keyword', in: 'query', required: true, schema: { type: 'string', maxLength: 200 } },
       { name: 'form_tokens', in: 'query', schema: { type: 'string' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } }
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      }
     ]
   },
   searchMySubmittedEntries: {
@@ -985,7 +1144,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -997,7 +1161,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -1008,7 +1177,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -1020,7 +1194,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'fields', in: 'query', schema: { type: 'string' } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
-      { name: 'filters', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } }
     ]
   },
@@ -1292,6 +1471,36 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       predefined_value: { type: 'object' },
       changeable: { type: 'object', additionalProperties: { type: 'boolean' } },
       enable_auto_position: { type: 'boolean' }
+    }
+  },
+  AggregateDimension: {
+    type: 'object',
+    required: ['field'],
+    properties: { field: { type: 'string' }, bucket: { type: 'string', enum: ['day', 'week', 'month'] } }
+  },
+  AggregateMetric: {
+    type: 'object',
+    required: ['func', 'field'],
+    properties: {
+      func: {
+        type: 'string',
+        enum: [
+          'count',
+          'count_non_empty',
+          'count_empty',
+          'count_unique',
+          'sum',
+          'avg',
+          'min',
+          'max',
+          'stddev',
+          'median',
+          'p25',
+          'p75',
+          'p90'
+        ]
+      },
+      field: { type: 'string' }
     }
   },
   AnswerInput: {
@@ -1810,6 +2019,21 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  FieldDataCheck: {
+    type: 'object',
+    required: ['field_api_code'],
+    properties: {
+      field_api_code: { type: 'string' },
+      choice_value: { type: 'string' },
+      choice_type: {
+        type: 'string',
+        enum: ['choice', 'statement', 'dimension', 'level_1', 'level_2', 'level_3', 'level_4']
+      },
+      parent_field: { type: 'string' },
+      check_extended_text: { type: 'boolean' },
+      goods_item_dimension_options: { type: 'object' }
+    }
+  },
   FieldInput: {
     type: 'object',
     required: ['type', 'label'],
@@ -1955,6 +2179,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     },
     additionalProperties: false
+  },
+  FieldTypeChangeCheck: {
+    type: 'object',
+    required: ['field_api_code', 'target_type'],
+    properties: {
+      field_api_code: { type: 'string' },
+      target_type: { type: 'string' },
+      target_precision: { type: 'string', enum: ['month', 'day', 'minute', 'second'] }
+    }
   },
   FieldUpdateInput: {
     type: 'object',
@@ -2254,16 +2487,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
               items: {
                 properties: {
                   type: {
-                    not: {
-                      enum: [
-                        'PageBreak',
-                        'GoodsField',
-                        'MultipleBlanksField',
-                        'WidgetContact',
-                        'WidgetVideo',
-                        'WidgetButton'
-                      ]
-                    }
+                    not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo', 'WidgetButton'] }
                   }
                 }
               }
@@ -2463,10 +2687,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       success_message: { type: 'string' },
       success_message_rich_text: { type: 'string' },
       success_message_style: { type: 'string', enum: ['text', 'rich_text'] },
-      entry_submit_mode: { type: 'string' },
+      entry_submit_mode: { type: 'string', enum: ['show_message', 'redirect', 'reports', 'exam_score'] },
       success_redirect_url: { type: 'string' },
       success_redirect_fields: { type: 'array', items: { type: 'string' } },
-      open_entry_action: { type: 'string' },
+      open_entry_action: { type: 'string', enum: ['hide', 'view', 'edit'] },
       open_entry_message: { type: 'string' },
       open_entry_cancel_reservation: { type: 'boolean' },
       show_serial_number_on_success: { type: 'boolean' },
@@ -2507,7 +2731,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_field_number: { type: 'boolean' },
       password_required: { type: 'boolean' },
       access_password: { type: 'string' },
-      allowed_audience: { type: 'string' },
+      allowed_audience: {
+        type: 'string',
+        enum: [
+          'public',
+          'internal',
+          'private',
+          'weixin_qiye_followers_only',
+          'weixin_followers_only',
+          'submitter_only',
+          'gd_user_only'
+        ]
+      },
       weixin_limited: { type: 'boolean' },
       submission_region_limited: { type: 'boolean' },
       submission_regions: { type: 'array', items: { type: 'string' } },
@@ -2518,6 +2753,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       daily_repeat_close_rule: { $ref: 'DailyRepeatCloseRuleInput' }
     },
     additionalProperties: false
+  },
+  FormSortRule: {
+    type: 'object',
+    required: ['field'],
+    properties: {
+      field: { type: 'string', enum: ['created_at', 'last_entry_created_at', 'entries_count'] },
+      order: { type: 'string', enum: ['asc', 'desc'] }
+    }
   },
   FormUpdateInput: {
     type: 'object',
@@ -3641,6 +3884,38 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     }
   },
+  ScopeCondition: {
+    type: 'object',
+    required: ['field', 'operator'],
+    properties: {
+      field: { type: 'string' },
+      operator: {
+        type: 'string',
+        enum: [
+          'eq',
+          'ne',
+          'any_in',
+          'none_in',
+          'between',
+          'not_between',
+          'null',
+          'not_null',
+          'gte',
+          'gt',
+          'lte',
+          'lt',
+          'like',
+          'not_like',
+          'within_last',
+          'equal',
+          'not_equal',
+          'start',
+          'end'
+        ]
+      },
+      value: {}
+    }
+  },
   SectionBreakInput: {
     type: 'object',
     additionalProperties: false,
@@ -3740,6 +4015,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       random_choices: { type: 'boolean' }
     }
+  },
+  SortRule: {
+    type: 'object',
+    required: ['api_code'],
+    properties: { api_code: { type: 'string' }, order: { type: 'string', enum: ['asc', 'desc'] } }
   },
   StatementInput: {
     type: 'object',

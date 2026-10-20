@@ -151,6 +151,16 @@ that offer a fixed set of values take them from the spec too, through
 `choices` and `bodyChoices`, so a value the API learns reaches the CLI with the
 next sync instead of being refused by a copy.
 
+A query parameter can carry a document rather than a value: `filters`, `sort`,
+`metrics`, `dimensions` and `checks` are the JSON text of an array, in one
+query value. The spec declares those with `content: application/json` and the
+array's schema in place of `schema`; the generator keeps the schema and names
+the media type; and `call` sends the text as one value — never repeated as
+`filters[]=`, which is how a list goes — and as given, the way a body goes, for
+the same reason. The lists inside such a document are the spec's too:
+`choices('listEntries', 'filters[].operator')` walks into it the way
+`bodyChoices` walks a body, and is what the `--filter` help lists.
+
 A body goes as given. API v1 validates every request against the openapi.yaml
 it runs — the only copy never out of date — and its 400 already says, by
 pointer, what is wrong. A check here would save that round trip, but an
@@ -162,8 +172,8 @@ release anyway, and they are held only to their type, never to a range or a
 list that may grow.
 
 The tests hold every request the command tests send, and every example in the
-help, to the spec, the body included, with `src/testing/conformance.ts`, which
-ships with nothing. That is where a body the CLI puts together itself is
+help, to the spec — the body and the documents the query carries included —
+with `src/testing/conformance.ts`, which ships with nothing. That is where a body the CLI puts together itself is
 checked, and how a `form edit` example sending an `exam_setting` key the API
 has no use for was found.
 

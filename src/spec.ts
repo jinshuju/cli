@@ -51,6 +51,12 @@ export interface Parameter {
   readonly required?: boolean;
   readonly style?: string;
   readonly explode?: boolean;
+  /**
+   * The media type of a document the value carries as text in one query
+   * value — `filters=[{"field":…}]` — when it does: `application/json`.
+   * `schema` is then the document's.
+   */
+  readonly content?: string;
   readonly schema: Schema;
 }
 
@@ -140,6 +146,15 @@ function queryOf(id: OperationId, op: Operation, values: Readonly<Record<string,
     const param = op.parameters.find((candidate) => candidate.in === 'query' && candidate.name === name);
     if (!param) {
       throw new UsageError(`${op.method} ${BASE_PATH}${op.path} takes no ${name} parameter (${id} in openapi.yaml)`);
+    }
+    if (param.content !== undefined) {
+      // A document goes as its text in one value, never repeated the way a
+      // list is, and as given: it is the caller's payload as often as not,
+      // and the API judges it as it does a body. The tests hold the CLI's own
+      // to the document's schema.
+      if (typeof value !== 'string') throw new Error(`${id} ${name} is ${param.content} text, spelled by the command`);
+      query[name] = value;
+      continue;
     }
     const texts = typeof value === 'object' ? [...value] : [String(value)];
     check(param, texts);
@@ -234,14 +249,20 @@ export function unansweredLookups(): readonly string[] {
 }
 
 /**
- * The values a query parameter takes, for the flag that feeds it. A flag
- * listing them itself is a second copy, and the second copy was already behind
- * once: a view type and two scenes the API had learned were refused by the CLI
- * before they reached it.
+ * The values a query parameter takes, for the flag that feeds it. `path` is
+ * the parameter's name, and walks on into a document the parameter carries
+ * the way `bodyChoices` walks a body: `filters[].operator`. A flag listing
+ * the values itself is a second copy, and the second copy was already behind
+ * once: a view type and two scenes the API had learned were refused by the
+ * CLI before they reached it.
  */
-export function choices(id: OperationId, name: string): readonly string[] | undefined {
+export function choices(id: OperationId, path: string): readonly string[] | undefined {
+  const [first, ...rest] = path.split('.') as [string, ...string[]];
+  const name = first.endsWith('[]') ? first.slice(0, -2) : first;
   const param = OPERATIONS[id].parameters.find((candidate) => candidate.name === name);
-  return enumOf(param && (isArray(param.schema) ? itemsOf(param.schema) : param.schema), `${id} ${name}`);
+  // A parameter that is a list offers its items' values.
+  const start = param && (isArray(param.schema) ? itemsOf(param.schema) : param.schema);
+  return enumOf(walk(start, rest), `${id} ${path}`);
 }
 
 /**
@@ -249,14 +270,19 @@ export function choices(id: OperationId, name: string): readonly string[] | unde
  * dots and steps into a list's items with `[]`: `fields[].type`.
  */
 export function bodyChoices(id: OperationId, path: string): readonly string[] | undefined {
-  let schema = OPERATIONS[id].body?.content['application/json'];
-  for (const step of path.split('.')) {
+  return enumOf(walk(OPERATIONS[id].body?.content['application/json'], path.split('.')), `${id} ${path}`);
+}
+
+/** The schema the steps lead to: each names a property, and `[]` steps into a list's items. */
+function walk(from: Schema | undefined, steps: readonly string[]): Schema | undefined {
+  let schema = from;
+  for (const step of steps) {
     if (!schema) break;
     const many = step.endsWith('[]');
     const property = propertyOf(schema, many ? step.slice(0, -2) : step);
     schema = property && (many ? itemsOf(property) : property);
   }
-  return enumOf(schema, `${id} ${path}`);
+  return schema;
 }
 
 /** A property as an object schema or any of its allOf parts declares it. */
