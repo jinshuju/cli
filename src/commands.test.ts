@@ -519,6 +519,181 @@ test('account paid-feature, account invoice, account payment and sms status read
   ]);
 });
 
+function licenseUploadingClient() {
+  let uploads = 0;
+  const requests: HttpRequest[] = [];
+  return {
+    requests,
+    client: {
+      async request<T>(request: HttpRequest): Promise<T> {
+        requests.push(request);
+        conform(request);
+        return (request.form ? { attachment_id: `ul_${++uploads}` } : { status: 'CHECKING' }) as T;
+      }
+    }
+  };
+}
+
+test('sms signature create uploads each license image, then applies with their ids', async () => {
+  const mock = licenseUploadingClient();
+
+  const result = await cli(
+    [
+      'sms',
+      'signature',
+      'create',
+      '小金培训',
+      '--license',
+      'package.json',
+      '--company-name',
+      '小金培训有限公司',
+      '--company-id',
+      '91110000MA00000000',
+      '--id-card-front',
+      'package.json',
+      '--id-card-back',
+      'package.json',
+      '--id-card-name',
+      '张三',
+      '--id-card-number',
+      '110101199001011234',
+      '--mobile',
+      '13800000000'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    mock.requests.map((request) => request.path),
+    [
+      '/api/v1/user/license_attachments',
+      '/api/v1/user/license_attachments',
+      '/api/v1/user/license_attachments',
+      '/api/v1/sms/signatures'
+    ]
+  );
+  assert.deepEqual(mock.requests[3].body, {
+    signature: '小金培训',
+    company_name: '小金培训有限公司',
+    company_id: '91110000MA00000000',
+    id_card_name: '张三',
+    id_card_number: '110101199001011234',
+    identity_mobile: '13800000000',
+    license_attachment_ids: ['ul_1'],
+    id_card_front_attachment_id: 'ul_2',
+    id_card_back_attachment_id: 'ul_3'
+  });
+});
+
+test('sms signature create uploads nothing until every required flag is there', async () => {
+  const mock = createMockClient();
+
+  const result = await cli(['sms', 'signature', 'create', '小金培训', '--license', 'package.json'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /--company-name <name> is required/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('sms signature create sends the type it is given', async () => {
+  const mock = licenseUploadingClient();
+
+  await cli(
+    [
+      'sms',
+      'signature',
+      'create',
+      '小金验证',
+      '--type',
+      'verification',
+      '--license',
+      'package.json',
+      '--company-name',
+      '小金培训有限公司',
+      '--company-id',
+      '91110000MA00000000',
+      '--id-card-front',
+      'package.json',
+      '--id-card-back',
+      'package.json',
+      '--id-card-name',
+      '张三',
+      '--id-card-number',
+      '110101199001011234',
+      '--mobile',
+      '13800000000'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal((mock.requests[3].body as Record<string, unknown>).type, 'verification');
+});
+
+test('sms signature update sends only what its flags give, uploading the files among them', async () => {
+  const mock = licenseUploadingClient();
+
+  const result = await cli(
+    ['sms', 'signature', 'update', '6512a1c2d3e4f5a6b7c8d9d3', '--signature', '小金课堂', '--license', 'package.json'],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(mock.requests[1].method, 'PATCH');
+  assert.equal(mock.requests[1].path, '/api/v1/sms/signatures/6512a1c2d3e4f5a6b7c8d9d3');
+  assert.deepEqual(mock.requests[1].body, { license_attachment_ids: ['ul_1'], signature: '小金课堂' });
+});
+
+test('sms signature delete and sms template delete want --yes before they send anything', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['sms', ...args], { env: WRITE_ENV, client: mock.client });
+
+  const unconfirmed = await run(['signature', 'delete', '6512a1c2d3e4f5a6b7c8d9d3']);
+  assert.notEqual(unconfirmed.exitCode, 0);
+  assert.match(unconfirmed.stderr, /pass --yes/);
+  assert.equal(mock.requests.length, 0);
+
+  await run(['signature', 'delete', '6512a1c2d3e4f5a6b7c8d9d3', '--yes']);
+  await run(['template', 'delete', '6512a1c2d3e4f5a6b7c8d9e0', '--yes']);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['DELETE /api/v1/sms/signatures/6512a1c2d3e4f5a6b7c8d9d3', 'DELETE /api/v1/sms/templates/6512a1c2d3e4f5a6b7c8d9e0']
+  );
+});
+
+test('sms signature list and sms template list send their filters and page with next', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['sms', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['signature', 'list', '--status', 'FAIL', '--limit', '10']);
+  await run(['template', 'list', '--keyword', '开课', '--scope', 'shared', '--signature-id', 'sig_1', '--next', '50']);
+
+  assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/sms/signatures?status=FAIL&limit=10',
+    `/api/v1/sms/templates?q=${encodeURIComponent('开课')}&scope=shared&signature_id=sig_1&next=50`
+  ]);
+});
+
+test('sms template create and update send what their flags say', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['sms', 'template', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['create', '--signature', '小金培训', '--content', '明天开课', '--description', '课程提醒']);
+  await run(['update', '6512a1c2d3e4f5a6b7c8d9e0', '--content', '后天开课']);
+
+  assert.deepEqual(mock.requests[0].body, {
+    signature: '小金培训',
+    content: '明天开课',
+    apply_description: '课程提醒'
+  });
+  assert.equal(mock.requests[1].path, '/api/v1/sms/templates/6512a1c2d3e4f5a6b7c8d9e0');
+  assert.deepEqual(mock.requests[1].body, { content: '后天开课' });
+});
+
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_ACCESS_TOKEN: 'tok' },

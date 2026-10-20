@@ -310,7 +310,7 @@ needs the `submit_entries` scope for these.
 
 ## Working with files
 
-Five commands take a file. The CLI uploads with its own credential; there is no
+Seven commands take a file. The CLI uploads with its own credential; there is no
 ticket to fetch first.
 
 ```bash
@@ -321,6 +321,9 @@ jinshuju entry create --form Kp7mQ2 --json '{"field_1":"Alice"}' --attach field_
 jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
 jinshuju opensearch edit Qy7nR3 --header ./banner.png
 jinshuju form image upload ./venue-map.png      # answers with a url for an <img> in a form or field description
+jinshuju sms signature create 小金培训 --license ./license.jpg --company-name 小金培训有限公司 --company-id 91110000MA00000000 \
+  --id-card-front ./front.jpg --id-card-back ./back.jpg --id-card-name 张三 --id-card-number 110101199001011234 --mobile 13800000000
+jinshuju sms signature update 6512a1c2d3e4f5a6b7c8d9d3 --license ./license-clear.jpg
 ```
 
 ```bash
@@ -413,6 +416,32 @@ jinshuju field preview-convert --form Kp7mQ2 field_1 --to RadioButton
 `field check` answers whether a field or a choice has data under it — removing
 it takes that data along, so it is worth asking first. `preview-convert` reports
 how much a type conversion would keep and how much it would clear.
+
+## SMS signatures and templates
+
+An SMS notification needs a signature and a template, and both wait on a
+review, so submit them as early as you can. A template can go in while its
+signature is still under review; `sms status` follows both, with the reason
+when one is rejected.
+
+`sms signature list` shows every signature of the account and `sms template list`
+your templates with the ones the account shares; both carry the ids the updates
+and deletes take. A rejected signature, and a template of yours that is not under
+review, can be changed and sent back to review; only the flags given change. The
+same ones can be deleted with `--yes`; deleting a signature takes its templates
+with it.
+
+```bash
+jinshuju sms signature create 小金培训 --license ./license.jpg --company-name 小金培训有限公司 --company-id 91110000MA00000000 \
+  --id-card-front ./front.jpg --id-card-back ./back.jpg --id-card-name 张三 --id-card-number 110101199001011234 --mobile 13800000000
+jinshuju sms template create --signature 小金培训 --content "你报名的课程明天上午 9 点开课，请准时参加。"
+jinshuju sms status
+jinshuju sms signature list --status FAIL
+jinshuju sms template list --keyword 开课 --scope owned
+jinshuju sms signature update 6512a1c2d3e4f5a6b7c8d9d3 --license ./license-clear.jpg
+jinshuju sms template update 6512a1c2d3e4f5a6b7c8d9e0 --content "你报名的课程后天上午 9 点开课。"
+jinshuju sms template delete 6512a1c2d3e4f5a6b7c8d9e0 --yes
+```
 
 ## Odds and ends
 
