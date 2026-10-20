@@ -56,7 +56,7 @@ src/
     operations.ts   every operation and the request-side schemas, generated; never edited by hand
   payload.ts        the shape check on a form or table payload
   http.ts           JinshujuHttpClient: auth header, deadline, retry, query serialization
-  auth.ts           OAuth with PKCE on a loopback port; refresh; revoke
+  auth.ts           OAuth with PKCE on a loopback port, or a device code; refresh; revoke
   config.ts         ~/.jinshuju/config.json and the env, with precedence and provenance
   errors.ts         the error classes and classify(): kind and exit code
   result.ts         CliResult, CliRuntime, and how a failure is written out
@@ -186,7 +186,7 @@ longer passes, and says so: that is the case that needs a person.
 
 ## Errors and exit codes
 
-Every failure is one of seven kinds, and the exit code is the kind:
+Every failure is one of eight kinds, and the exit code is the kind:
 
 | code | kind         | raised as                                                                              |
 | ---- | ------------ | -------------------------------------------------------------------------------------- |
@@ -198,6 +198,7 @@ Every failure is one of seven kinds, and the exit code is the kind:
 | 6    | server       | `HttpError` 5xx, or a 2xx whose body could not be read                                 |
 | 7    | transport    | `TransportError`: no connection, or the deadline passed                                |
 | 8    | rate_limited | `HttpError` 429, after the client's own retries; `retry_after` is lifted from the body |
+| 9    | pending      | `PendingError`: a device login `--resume` waited on is still not approved              |
 
 An error that wraps another (`{ cause }`) is sorted by what it wraps and keeps
 its own words, so "the form was created but its settings were refused" exits 5
@@ -216,6 +217,14 @@ with no signal.
 OAuth is authorization code with PKCE. The CLI listens on a loopback port,
 checks the returned `state` with a constant-time compare, exchanges the code,
 and stores the session in the config file, mode 600, written atomically.
+
+Where nothing can reach a loopback port from a browser — over SSH, in a
+sandbox — it is the device authorization grant (RFC 8628) instead: the CLI
+asks for a code, a person approves it on another device, and the CLI polls
+the token endpoint at the interval the server gave, slower on `slow_down`.
+`--no-wait` stores the pending device code in the config file as
+`pending_device`, and `--resume` polls with it; any login that completes
+clears it.
 
 ## Output
 

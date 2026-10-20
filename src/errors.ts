@@ -41,6 +41,14 @@ export class RefusedError extends Error {
 }
 
 /**
+ * Nothing went wrong yet, but the thing waited for has not happened: a device
+ * login nobody has approved. Running the same command again is the remedy.
+ */
+export class PendingError extends Error {
+  override name = 'PendingError';
+}
+
+/**
  * What kind of failure it was, which is what a script branches on. The exit
  * code says it without parsing anything; `--output json` also says it in
  * words, alongside the status and body the server answered with.
@@ -53,7 +61,8 @@ export type ErrorKind =
   | 'refused'
   | 'server'
   | 'transport'
-  | 'rate_limited';
+  | 'rate_limited'
+  | 'pending';
 
 export const EXIT_CODES: Readonly<Record<ErrorKind, number>> = {
   unexpected: 1,
@@ -64,7 +73,9 @@ export const EXIT_CODES: Readonly<Record<ErrorKind, number>> = {
   server: 6,
   transport: 7,
   // Neither the caller's fault nor permanent: it wants waiting, not a corrected request.
-  rate_limited: 8
+  rate_limited: 8,
+  // Not a failure of anything: a device login still waits for someone to approve it.
+  pending: 9
 };
 
 export type ClassifiedError = {
@@ -104,6 +115,7 @@ export function classify(error: unknown): ClassifiedError {
   if (error instanceof AuthError) return { kind: 'auth', exitCode: EXIT_CODES.auth, message };
   if (error instanceof RefusedError) return { kind: 'refused', exitCode: EXIT_CODES.refused, message };
   if (error instanceof TransportError) return { kind: 'transport', exitCode: EXIT_CODES.transport, message };
+  if (error instanceof PendingError) return { kind: 'pending', exitCode: EXIT_CODES.pending, message };
   if (error instanceof HttpError) {
     const kind = kindOfStatus(error.status);
     const retry_after = retryAfterIn(error.body);

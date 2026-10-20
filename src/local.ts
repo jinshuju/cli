@@ -1,4 +1,11 @@
-import { loginWithOAuth, logout, refreshOAuthToken } from './auth.js';
+import {
+  loginWithDevice,
+  loginWithOAuth,
+  logout,
+  refreshOAuthToken,
+  resumeDeviceLogin,
+  startDeviceLogin
+} from './auth.js';
 import { bindOptions } from './args.js';
 import {
   assertConfigKey,
@@ -9,7 +16,9 @@ import {
   saveAccessToken,
   setConfigValue,
   unsetConfigValue,
-  type ConfigKey
+  type ConfigKey,
+  type OAuthConfig,
+  type PendingDeviceLogin
 } from './config.js';
 import { AuthError } from './errors.js';
 import { JinshujuHttpClient, type HttpClient } from './http.js';
@@ -34,6 +43,10 @@ type LocalOptions = {
   clientId?: string;
   scopes?: string;
   noOpen: boolean;
+  device: boolean;
+  noWait: boolean;
+  resume: boolean;
+  timeout?: string;
   verify: boolean;
 };
 
@@ -48,6 +61,10 @@ export function localOptions(flags: Record<string, unknown>, stdin: () => string
     clientId: bound.client_id as string | undefined,
     scopes: bound.scopes as string | undefined,
     noOpen: Boolean(bound.no_open),
+    device: Boolean(bound.device),
+    noWait: Boolean(bound.no_wait),
+    resume: Boolean(bound.resume),
+    timeout: bound.timeout as string | undefined,
     verify: Boolean(bound.verify)
   };
 }
@@ -94,27 +111,81 @@ function createClient(options: LocalOptions, runtime: CliRuntime, accessToken?: 
 
 async function authLogin(options: LocalOptions, runtime: CliRuntime): Promise<CliResult> {
   if (options.accessToken !== undefined) return await tokenLogin(options.accessToken, options, runtime);
-  const result = await loginWithOAuth(
-    {
-      configPath: options.configPath,
-      env: runtime.env,
-      host: options.host,
-      authHost: options.authHost,
-      clientId: options.clientId,
-      scopes: options.scopes
-    },
-    options.noOpen ? printLoginUrl : undefined
-  );
+  if (options.noWait && options.resume)
+    throw new UsageError('--no-wait starts a device login and --resume finishes it; pick one');
+  const target = {
+    configPath: options.configPath,
+    env: runtime.env,
+    host: options.host,
+    authHost: options.authHost,
+    clientId: options.clientId,
+    scopes: options.scopes
+  };
+  if (options.noWait) return pendingLogin(await startDeviceLogin(target), options);
+  if (options.resume) return loggedIn(await resumeDeviceLogin({ ...target, waitMs: waitMs(options.timeout) }), options);
+  if (options.device || (!options.noOpen && headless(runtime.env ?? process.env)))
+    return loggedIn(await loginWithDevice(target, printDeviceCode), options);
+  const result = await loginWithOAuth(target, options.noOpen ? printLoginUrl : undefined);
+  return loggedIn(result.token, options);
+}
+
+function waitMs(seconds: string | undefined): number | undefined {
+  if (seconds === undefined) return undefined;
+  if (!/^\d+$/.test(seconds))
+    throw new UsageError(`--timeout takes a whole number of seconds, got ${JSON.stringify(seconds)}`);
+  return Number.parseInt(seconds, 10) * 1000;
+}
+
+/**
+ * No browser could open here, or none that the person at the keyboard would
+ * see: a session over SSH, or a Linux box without a display. The loopback
+ * login would wait for a redirect that cannot arrive, so a device login is
+ * the one that can work. --no-open still asks for the loopback login by name.
+ */
+function headless(env: NodeJS.ProcessEnv | Record<string, string | undefined>): boolean {
+  if (env.SSH_CONNECTION || env.SSH_TTY) return true;
+  return process.platform === 'linux' && !env.DISPLAY && !env.WAYLAND_DISPLAY;
+}
+
+function loggedIn(token: OAuthConfig, options: LocalOptions): CliResult {
   const payload = {
     authenticated: true,
     mode: 'oauth',
-    auth_host: result.token.auth_host,
-    client_id: result.token.client_id,
-    scope: result.token.scope,
-    expires_at: result.token.expires_at
+    auth_host: token.auth_host,
+    client_id: token.client_id,
+    scope: token.scope,
+    expires_at: token.expires_at
   };
   if (options.output !== 'text') return ok(format(payload, options.output, 0));
   return ok(`Authenticated with OAuth.\nConfig: ${options.configPath}`);
+}
+
+/** The link and code go on stdout here: they are the result, and whoever ran this has to pass them on. */
+function pendingLogin(pending: PendingDeviceLogin, options: LocalOptions): CliResult {
+  const link = pending.verification_uri_complete ?? pending.verification_uri;
+  const payload = {
+    authenticated: false,
+    pending: true,
+    user_code: pending.user_code,
+    verification_uri: pending.verification_uri,
+    verification_uri_complete: pending.verification_uri_complete,
+    expires_at: pending.expires_at,
+    resume: 'jinshuju auth login --resume'
+  };
+  if (options.output !== 'text') return ok(format(payload, options.output, 0));
+  return ok(
+    `To log in, open ${link}\nand check it shows the code ${pending.user_code}, then approve it.\n` +
+      `Then run \`jinshuju auth login --resume\` to finish. The code expires at ${pending.expires_at}.`
+  );
+}
+
+/** While the login waits, so stdout still carries only the result. */
+function printDeviceCode(pending: PendingDeviceLogin): void {
+  const link = pending.verification_uri_complete ?? pending.verification_uri;
+  process.stderr.write(
+    `To log in, open this link on any device:\n${link}\n` +
+      `and check it shows the code ${pending.user_code}, then approve it. Waiting…\n`
+  );
 }
 
 /**

@@ -34,7 +34,23 @@ and an access token (personal or account). Both go in through `auth login`:
 
 ```bash
 jinshuju auth login                          # browser login
+jinshuju auth login --device                 # approve a short code on any other device
 jinshuju auth login --access-token xxx       # access token, checked before it is stored
+```
+
+On a machine without a browser — a server over SSH, a container, an agent's
+sandbox — `--device` prints a link and a short code. Open the link on any
+device, a phone will do, check the code matches and approve; the CLI is
+polling and finishes on its own. Nothing has to reach back into the machine.
+Over SSH, or on Linux without a display, `auth login` does this by itself.
+Someone without an account can sign up on that page and come back to approve.
+
+An agent whose commands are cut off after a minute or two can split it in
+two:
+
+```bash
+jinshuju auth login --no-wait --output json  # prints verification_uri_complete and user_code, then exits
+jinshuju auth login --resume --timeout 60    # waits up to 60s; exit code 9 means still pending
 ```
 
 Either one is written to the config file (`~/.jinshuju/config.json`, mode 600)
