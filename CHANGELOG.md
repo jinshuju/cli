@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/jinshuju/cli/compare/v0.12.0...v0.13.0) (2026-10-20)
+
+
+### Features
+
+* log in from a machine without a browser, by a code approved on another device ([4533c85](https://github.com/jinshuju/cli/commit/4533c8556672f20c6fce9029e9bc098d26c6a6a2))
+
 ## [0.12.0](https://github.com/jinshuju/cli/compare/v0.11.0...v0.12.0) (2026-10-16)
 
 
