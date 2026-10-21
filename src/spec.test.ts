@@ -78,15 +78,21 @@ test('a document a parameter carries goes as its JSON text in one value, as give
 
   // What is in it is the API's to judge, as a body is; the tests hold the CLI's own to the schema.
   assert.ok(at('[{"field":"field_3","operator":"soon"}]'));
-  const issues = nonconformities(at('[{"operator":"soon"}]'));
-  assert.equal(issues[0], 'listEntries filters/0/field is required, got undefined');
+  const issues = nonconformities(at('[{"field":"field_3","operator":"soon"}]'));
+  assert.equal(issues.length, 1);
   assert.match(
-    issues[1] ?? '',
+    issues[0] ?? '',
     /^listEntries filters\/0\/operator must be one of eq, ne, .*within_last.*, got "soon"$/
   );
-  assert.equal(issues.length, 2);
   assert.deepEqual(nonconformities(at('not json')), ['listEntries filters is not application/json, got "not json"']);
   assert.deepEqual(nonconformities(call('listEntries', { path: { form_token: 'Kp7mQ2' } })), []);
+  const preview = call('previewFormFieldTypeChange', {
+    path: { form_token: 'Kp7mQ2' },
+    query: { checks: '[{"field_api_code":"field_1"}]' }
+  });
+  assert.deepEqual(nonconformities(preview), [
+    'previewFormFieldTypeChange checks/0/target_type is required, got undefined'
+  ]);
 });
 
 test('a body goes as given, for the API to judge against the spec it runs', () => {

@@ -39,9 +39,10 @@ import { isRecord } from '../values.js';
 import { basename } from 'node:path';
 import { upload } from './upload.js';
 
-function list(value: unknown): string | undefined {
+/** The api_codes a --fields named, for `call` to spell as the parameter says: comma-joined, as the spec has it. */
+function list(value: unknown): readonly string[] | undefined {
   const values = value as string[] | undefined;
-  return values && values.length > 0 ? values.join(',') : undefined;
+  return values && values.length > 0 ? values : undefined;
 }
 
 function labels(input: CommandInput): boolean | undefined {
@@ -487,7 +488,7 @@ export const ENTRY: readonly Command[] = [
           '--keyword searches the fields of one form or table, so it counts one container, not several'
         );
       }
-      return call('countEntriesAcrossForms', { query: { filters: filters(input), form_tokens: tokens.join(',') } });
+      return call('countEntriesAcrossForms', { query: { filters: filters(input), form_tokens: tokens } });
     },
     examples: [
       "jinshuju entry count --form Kp7mQ2 --filter 'field_3 gte 80'",
@@ -526,7 +527,7 @@ export const ENTRY: readonly Command[] = [
         return call('searchMySubmittedEntries', {
           query: {
             keyword: input.args.keyword,
-            form_tokens: tokens.length > 0 ? tokens.join(',') : undefined
+            form_tokens: tokens.length > 0 ? tokens : undefined
           }
         });
       }
@@ -534,7 +535,7 @@ export const ENTRY: readonly Command[] = [
       return call('searchEntriesAcrossForms', {
         query: {
           keyword: input.args.keyword,
-          form_tokens: tokens.length > 0 ? tokens.join(',') : undefined,
+          form_tokens: tokens.length > 0 ? tokens : undefined,
           filters: scope.length > 0 ? JSON.stringify(scope.map(parseFilter)) : undefined
         }
       });
