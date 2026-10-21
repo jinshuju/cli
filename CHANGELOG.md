@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/jinshuju/cli/compare/v0.13.0...v0.14.0) (2026-10-21)
+
+
+### Features
+
+* follow openapi.yaml typing filters, sort, metrics, dimensions, checks ([f4c536c](https://github.com/jinshuju/cli/commit/f4c536cbf95ef910b1c9a2475515de50fa56861f))
+* take the published openapi.yaml, which lists fields and form_tokens ([c3051ad](https://github.com/jinshuju/cli/commit/c3051ad385cc87a2daf1f2ef39681b783b58b981))
+
+
+### Fixes
+
+* give checkin delete a receipt instead of failing on its empty answer ([c4c8d2e](https://github.com/jinshuju/cli/commit/c4c8d2e8e2f30cb0f9fcc1915d73d1b3304474ba))
+
 ## [0.13.0](https://github.com/jinshuju/cli/compare/v0.12.0...v0.13.0) (2026-10-20)
 
 
