@@ -319,7 +319,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/entries/count',
     parameters: [
-      { name: 'form_tokens', in: 'query', schema: { type: 'string' } },
+      { name: 'form_tokens', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       {
         name: 'filters',
         in: 'query',
@@ -631,7 +631,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'serial_number', in: 'path', required: true, schema: { type: 'integer' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -731,7 +731,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'serial_number', in: 'path', required: true, schema: { type: 'integer' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -779,7 +779,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/entries',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       {
         name: 'filters',
         in: 'query',
@@ -885,7 +885,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/my/forms/{form_token}/entries',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       {
         name: 'filters',
         in: 'query',
@@ -916,7 +916,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables/{table_token}/entries',
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       {
         name: 'filters',
         in: 'query',
@@ -1120,7 +1120,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/entries/search',
     parameters: [
       { name: 'keyword', in: 'query', required: true, schema: { type: 'string', maxLength: 200 } },
-      { name: 'form_tokens', in: 'query', schema: { type: 'string' } },
+      { name: 'form_tokens', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       {
         name: 'filters',
         in: 'query',
@@ -1134,7 +1134,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/my/search',
     parameters: [
       { name: 'keyword', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
-      { name: 'form_tokens', in: 'query', schema: { type: 'string' } }
+      { name: 'form_tokens', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } }
     ]
   },
   summarizeEntries: {
@@ -1142,7 +1142,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/entries/summary',
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
       {
         name: 'filters',
@@ -1159,7 +1159,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
       {
         name: 'filters',
@@ -1175,7 +1175,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/tables/{table_token}/entries/summary',
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
       {
         name: 'filters',
@@ -1192,7 +1192,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'fields', in: 'query', schema: { type: 'string' } },
+      { name: 'fields', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } },
       { name: 'include_overview', in: 'query', schema: { type: 'boolean' } },
       {
         name: 'filters',
@@ -1736,7 +1736,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   },
   CopyFormInput: {
     type: 'object',
-    properties: { name: { type: 'string' }, folder_token: { type: 'string' } },
+    properties: {
+      name: { type: 'string' },
+      folder_token: { type: 'string' },
+      with_notification_rules: { type: 'boolean' }
+    },
     additionalProperties: false
   },
   DailyRepeatCloseRuleInput: {
@@ -3886,9 +3890,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   },
   ScopeCondition: {
     type: 'object',
-    required: ['field', 'operator'],
+    required: ['operator'],
     properties: {
       field: { type: 'string' },
+      api_code: { type: 'string' },
+      trigger: { type: 'string' },
       operator: {
         type: 'string',
         enum: [
