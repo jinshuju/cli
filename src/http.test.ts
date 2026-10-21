@@ -93,6 +93,39 @@ test('a per-row rejection names the rows, rather than collapsing to the HTTP sta
   assert.equal(error.status, 422);
 });
 
+test('a refusal stating only the first of its reasons is reported with every one of them', async () => {
+  const server = await serve({
+    '/api/v1/routines': {
+      status: 422,
+      body: JSON.stringify({
+        error_description: '启用中的自动任务最多 20 条，请先暂停或删除一些',
+        errors: [
+          { code: 'active_limit', message: '启用中的自动任务最多 20 条，请先暂停或删除一些' },
+          { code: 'object_unavailable', message: '找不到表单 Kp7mQ2，或者你没有权限' }
+        ]
+      })
+    },
+    '/api/v1/forms': {
+      status: 400,
+      body: JSON.stringify({
+        error_description: 'Request body invalid: name is required. fields must be an array',
+        errors: [
+          { pointer: '/name', message: 'name is required', code: 'required' },
+          { pointer: '/fields', message: 'fields must be an array', code: 'type' }
+        ]
+      })
+    }
+  });
+  const refused = await failure(server.url, '/api/v1/routines');
+  const invalid = await failure(server.url, '/api/v1/forms');
+  await server.close();
+
+  assert.equal(refused.message, '启用中的自动任务最多 20 条，请先暂停或删除一些; 找不到表单 Kp7mQ2，或者你没有权限');
+  assert.equal(refused.status, 422);
+  // A description that says something of its own is said as it is.
+  assert.equal(invalid.message, 'Request body invalid: name is required. fields must be an array');
+});
+
 test('an HTML error page is reported as the status it is, not as broken JSON', async () => {
   const server = await serve({
     '/api/v1/forms/Kp7mQ2/field_rules': { status: 500, body: HTML_500, type: 'text/html' }

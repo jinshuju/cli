@@ -34,6 +34,7 @@ export type OperationId =
   | 'createFormWebhook'
   | 'createOpensearchQuery'
   | 'createPredefinedChoicesSet'
+  | 'createRoutine'
   | 'createSmsSignature'
   | 'createSmsTemplate'
   | 'createTable'
@@ -49,6 +50,7 @@ export type OperationId =
   | 'deleteFormView'
   | 'deleteFormWebhook'
   | 'deletePredefinedChoicesSet'
+  | 'deleteRoutine'
   | 'deleteSmsSignature'
   | 'deleteSmsTemplate'
   | 'deleteTable'
@@ -72,6 +74,7 @@ export type OperationId =
   | 'getFormView'
   | 'getManuallyCloseRule'
   | 'getOpensearchQuery'
+  | 'getRoutine'
   | 'getTable'
   | 'getTableEntry'
   | 'getTableView'
@@ -97,6 +100,8 @@ export type OperationId =
   | 'listOpensearchQueries'
   | 'listOpensearchQuerySuggestions'
   | 'listPredefinedChoicesSets'
+  | 'listRoutineRuns'
+  | 'listRoutines'
   | 'listSmsAuditStatuses'
   | 'listSmsSignatures'
   | 'listSmsTemplates'
@@ -111,10 +116,13 @@ export type OperationId =
   | 'moveFormToFolder'
   | 'moveTableToFolder'
   | 'patchEntriesBatch'
+  | 'pauseRoutine'
   | 'previewFormFieldTypeChange'
   | 'previewTableFieldTypeChange'
   | 'replaceEntry'
   | 'replaceTableEntry'
+  | 'resumeRoutine'
+  | 'runRoutine'
   | 'searchEntriesAcrossForms'
   | 'searchMySubmittedEntries'
   | 'summarizeEntries'
@@ -135,6 +143,7 @@ export type OperationId =
   | 'updateManuallyCloseRule'
   | 'updateOpensearchQuery'
   | 'updatePredefinedChoicesSet'
+  | 'updateRoutine'
   | 'updateSmsSignature'
   | 'updateSmsTemplate'
   | 'updateTable'
@@ -513,6 +522,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       }
     }
   },
+  createRoutine: {
+    method: 'POST',
+    path: '/routines',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'RoutineInput' } } }
+  },
   createSmsSignature: {
     method: 'POST',
     path: '/sms/signatures',
@@ -615,6 +630,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   deletePredefinedChoicesSet: {
     method: 'DELETE',
     path: '/predefined_choices_sets/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  deleteRoutine: {
+    method: 'DELETE',
+    path: '/routines/{id}',
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   deleteSmsSignature: {
@@ -760,6 +780,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/opensearch/queries/{query_token}',
     parameters: [{ name: 'query_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getRoutine: {
+    method: 'GET',
+    path: '/routines/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getTable: {
     method: 'GET',
@@ -955,6 +980,26 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'query', required: true, schema: { type: 'string' } }]
   },
   listPredefinedChoicesSets: { method: 'GET', path: '/predefined_choices_sets', parameters: [] },
+  listRoutineRuns: {
+    method: 'GET',
+    path: '/routines/{routine_id}/runs',
+    parameters: [
+      { name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
+  listRoutines: {
+    method: 'GET',
+    path: '/routines',
+    parameters: [
+      { name: 'state', in: 'query', schema: { type: 'string', enum: ['active', 'paused'] } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
   listSmsAuditStatuses: { method: 'GET', path: '/sms/audit_statuses', parameters: [] },
   listSmsSignatures: {
     method: 'GET',
@@ -1137,6 +1182,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       }
     }
   },
+  pauseRoutine: {
+    method: 'POST',
+    path: '/routines/{routine_id}/pause',
+    parameters: [{ name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   previewFormFieldTypeChange: {
     method: 'GET',
     path: '/forms/{form_token}/fields/preview_convert',
@@ -1182,6 +1232,16 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'serial_number', in: 'path', required: true, schema: { type: 'integer' } }
     ],
     body: { required: true, content: { 'application/json': { $ref: 'EntryInput' } } }
+  },
+  resumeRoutine: {
+    method: 'POST',
+    path: '/routines/{routine_id}/resume',
+    parameters: [{ name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  runRoutine: {
+    method: 'POST',
+    path: '/routines/{routine_id}/run',
+    parameters: [{ name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   searchEntriesAcrossForms: {
     method: 'GET',
@@ -1387,6 +1447,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         }
       }
     }
+  },
+  updateRoutine: {
+    method: 'PATCH',
+    path: '/routines/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'RoutineInput' } } }
   },
   updateSmsSignature: {
     method: 'PATCH',
@@ -3982,6 +4048,55 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         properties: { type: { type: 'string', enum: ['by_day_repeat_weekly', 'by_time_range_repeat_daily'] } },
         oneOf: [{ $ref: 'ReservationByDayQuotaInput' }, { $ref: 'ReservationByTimeRangeQuotaInput' }]
       }
+    }
+  },
+  RoutineEventInput: {
+    type: 'object',
+    properties: {
+      source_kind: { type: 'string' },
+      source_token: { type: 'string' },
+      on: { type: 'string' },
+      field_codes: { type: 'array', items: { type: 'string' } },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            trigger: { type: 'string' },
+            operator: { type: 'string' },
+            value: {},
+            group_index: { type: 'integer' },
+            scope_attr: { type: 'string' }
+          }
+        }
+      },
+      include_bulk: { type: 'boolean' }
+    }
+  },
+  RoutineInput: {
+    type: 'object',
+    properties: {
+      name: { type: ['string', 'null'] },
+      instruction: { type: ['string', 'null'] },
+      objects: {
+        type: ['array', 'null'],
+        items: { type: 'object', properties: { kind: { type: 'string' }, token: { type: 'string' } } }
+      },
+      trigger_kind: { type: ['string', 'null'] },
+      schedule: { oneOf: [{ $ref: 'RoutineScheduleInput' }, { type: 'null' }] },
+      event: { oneOf: [{ $ref: 'RoutineEventInput' }, { type: 'null' }] },
+      delete_authorized: {}
+    }
+  },
+  RoutineScheduleInput: {
+    type: 'object',
+    properties: {
+      freq: { type: 'string' },
+      at: { type: 'string' },
+      minute: { type: 'integer' },
+      time: { type: 'string' },
+      weekdays: { type: 'array', items: { type: 'integer' } },
+      month_days: { type: 'array', items: { type: 'integer' } }
     }
   },
   SMSSignatureCreateInput: {
