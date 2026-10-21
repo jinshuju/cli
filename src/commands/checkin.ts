@@ -28,7 +28,7 @@ export const CHECKIN: readonly Command[] = [
     summary: 'List your check-in campaigns',
     options: [
       { name: '--form', type: 'string', placeholder: '<token>', description: 'Only the campaigns of this form' },
-      LIMIT_OPTION
+      { ...LIMIT_OPTION, description: 'Campaigns to return (default 50, up to 100)' }
     ],
     request: (input) =>
       call('listCheckinCampaigns', {
@@ -124,6 +124,7 @@ export const CHECKIN: readonly Command[] = [
     request: (input) => {
       confirmed(input, `Deleting check-in campaign ${input.args.campaign}`);
       return call('deleteCheckinCampaign', { path: { id: input.args.campaign } });
-    }
+    },
+    select: (body, input) => body ?? { id: Number(input.args.campaign) }
   }
 ];

@@ -48,7 +48,7 @@ export function terminalWidth(stream: NodeJS.WriteStream = process.stdout): numb
 }
 
 export function json(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return JSON.stringify(value ?? null, null, 2);
 }
 
 /**
@@ -58,7 +58,7 @@ export function json(value: unknown): string {
  */
 export function jsonl(value: unknown, listKey?: string): string {
   const rows = listOf(value, listKey);
-  return (rows ?? [value]).map((row) => JSON.stringify(row)).join('\n');
+  return (rows ?? [value]).map((row) => JSON.stringify(row ?? null)).join('\n');
 }
 
 /** The rows a payload carries, when it is a listing. */
