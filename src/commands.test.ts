@@ -1092,6 +1092,36 @@ test('checkin list, get, edit and delete address the campaign', async () => {
   assert.equal(both.exitCode, 2);
 });
 
+test('checkin delete answers with the campaign id in every format, though the API answered an empty body', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return undefined as T;
+    }
+  };
+
+  for (const [output, stdout] of [
+    ['text', 'id: 42\n'],
+    ['json', '{\n  "id": 42\n}\n'],
+    ['jsonl', '{"id":42}\n']
+  ]) {
+    const result = await cli(['checkin', 'delete', '42', '--yes', '--output', output], { env: WRITE_ENV, client });
+    assert.deepEqual(result, { exitCode: 0, stdout, stderr: '' });
+  }
+});
+
+test('an empty body prints null as JSON instead of failing a request that went through', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return undefined as T;
+    }
+  };
+
+  for (const output of ['json', 'jsonl']) {
+    const result = await cli(['form', 'get', 'Kp7mQ2', '--output', output], { env: WRITE_ENV, client });
+    assert.deepEqual(result, { exitCode: 0, stdout: 'null\n', stderr: '' });
+  }
+});
+
 test('several --name keywords stay separate, so the API matches any of them', async () => {
   const forms = createMockClient();
   const tables = createMockClient();
