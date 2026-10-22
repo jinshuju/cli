@@ -899,22 +899,28 @@ test('artifact share get refuses an address that names no artifact version, befo
   assert.equal(mock.requests.length, 0);
 });
 
-test('artifact share set puts the audience, and shares the very version <artifact> names', async () => {
+test('artifact share set shares the version <artifact> names, except private, which keeps the one the link shows', async () => {
   const mock = createMockClient();
   const run = (args: string[]) => cli(['artifact', 'share', 'set', ...args], { env: WRITE_ENV, client: mock.client });
 
   await run(['https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W', '--audience', 'public']);
   await run(['Pq4nR8sT2vWx', '--audience', 'internal']);
+  await run(['Xy7Qm2PaLk9W', '--audience', 'private']);
 
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${request.path}`),
-    ['PUT /api/v1/artifacts/Xy7Qm2PaLk9W/publication', 'PUT /api/v1/artifacts/Pq4nR8sT2vWx/publication']
+    [
+      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/publication',
+      'PUT /api/v1/artifacts/Pq4nR8sT2vWx/publication',
+      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/publication'
+    ]
   );
   assert.deepEqual(
     mock.requests.map((request) => request.body),
     [
       { allowedAudience: 'public', versionId: 'Xy7Qm2PaLk9W' },
-      { allowedAudience: 'internal', versionId: 'Pq4nR8sT2vWx' }
+      { allowedAudience: 'internal', versionId: 'Pq4nR8sT2vWx' },
+      { allowedAudience: 'private' }
     ]
   );
 });

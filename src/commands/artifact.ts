@@ -1,6 +1,6 @@
 import { UsageError } from '../options.js';
 import { bodyChoices, call } from '../spec.js';
-import { requiredOption } from './shared.js';
+import { given, requiredOption } from './shared.js';
 import type { ArgSpec, Command } from './types.js';
 
 const ARTIFACT_ARG: ArgSpec = {
@@ -56,7 +56,7 @@ export const ARTIFACT: readonly Command[] = [
     summary: 'Change who can open an artifact’s share link, and which version it shows',
     description:
       'The link shows the version <artifact> names; to share another version of the same artifact, ' +
-      'name that one. A change takes effect at once. Only an HTML version whose file is still there can ' +
+      'name that one. private keeps the version the link shows. A change takes effect at once. Only an HTML version whose file is still there can ' +
       'be shared, and not one the content check judged high risk; those are refused with 422. private: ' +
       'only you; internal: members of your account, on a plan that includes it; public: anyone with the link.',
     args: [ARTIFACT_ARG],
@@ -71,9 +71,12 @@ export const ARTIFACT: readonly Command[] = [
     ],
     request: (input) => {
       const version = artifactVersion(input.args.artifact as string);
+      const audience = requiredOption(input, 'audience');
+      // Without versionId the API keeps the version the link shows, so taking a share back to
+      // private from an older version's receipt does not change what a later public share shows.
       return call('updateArtifactPublication', {
         path: { id: version },
-        body: { allowedAudience: requiredOption(input, 'audience'), versionId: version }
+        body: given({ allowedAudience: audience, versionId: audience === 'private' ? undefined : version })
       });
     },
     examples: [
