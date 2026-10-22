@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.15.0](https://github.com/jinshuju/cli/compare/v0.14.0...v0.15.0) (2026-10-22)
+
+
+### Features
+
+* **account:** list which paid features the account's plan includes ([0175dad](https://github.com/jinshuju/cli/commit/0175dadb2109e2cd5f0b279507e4ac9b89ccdb97))
+* list, apply for, change and delete SMS signatures and templates ([242a67b](https://github.com/jinshuju/cli/commit/242a67b8fd72806fd05ee23b4f26d2d137cd420b))
+* say which folder a folder_token names with folder get ([19a29fe](https://github.com/jinshuju/cli/commit/19a29fe1eab1b7fb4ced611297d2a4e02494d756))
+
+
+### Fixes
+
+* say how each close rule is removed, now that the API takes it ([aaa715a](https://github.com/jinshuju/cli/commit/aaa715a93e7d23eb659a67ca7df1e76e229619e0))
+
 ## [0.14.0](https://github.com/jinshuju/cli/compare/v0.13.0...v0.14.0) (2026-10-21)
 
 
