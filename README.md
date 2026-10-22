@@ -111,7 +111,10 @@ leaves every other change unsent.
 `setting` travels as is, on create and on edit. Its close rules decide when the
 form is open; they coexist, and `form get` reads them back in the shape they
 were written. On edit a rule replaces what was there (`time_periods` is the
-whole list) and `{"enabled": false}` removes it.
+whole list). A time-range, daily or entries rule is removed by
+`{"enabled": false}` or by `null`. `manually_close_rule` is a switch rather
+than a rule: `{"closed": false}` reopens the form, and changing `closed` either
+way deletes the other three rules.
 
 ```bash
 # between two instants; either end may be left out
@@ -122,7 +125,9 @@ jinshuju form edit Kp7mQ2 --json '{"setting":{"daily_repeat_close_rule":{"time_p
   {"start_time":{"hour":17,"minute":0},"end_time":{"hour":18,"minute":30}}]}}}'
 jinshuju form edit Kp7mQ2 --json '{"setting":{"daily_repeat_close_rule":{"enabled":false}}}'
 jinshuju form edit Kp7mQ2 --json '{"setting":{"by_entries_close_rule":{"limit":100}}}'   # closes after 100 entries
+jinshuju form edit Kp7mQ2 --json '{"setting":{"by_entries_close_rule":null}}'            # takes the limit off
 jinshuju form edit Kp7mQ2 --json '{"setting":{"manually_close_rule":{"closed":true}}}'   # stops it now
+jinshuju form edit Kp7mQ2 --json '{"setting":{"manually_close_rule":{"closed":false}}}'  # reopens it
 ```
 
 `show_form_before_open` and `show_close_count_down` only hold with a time-range
