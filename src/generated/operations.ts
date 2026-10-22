@@ -66,6 +66,7 @@ export type OperationId =
   | 'getFieldType'
   | 'getFillFormPage'
   | 'getFillViewPage'
+  | 'getFolder'
   | 'getForm'
   | 'getFormSetting'
   | 'getFormView'
@@ -719,6 +720,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/fill/v/{view_token}',
     parameters: [{ name: 'view_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getFolder: {
+    method: 'GET',
+    path: '/folders/{folder_token}',
+    parameters: [{ name: 'folder_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getForm: {
     method: 'GET',
