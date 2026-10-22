@@ -961,6 +961,35 @@ test('entry aggregate turns --metric and --by into the JSON the API reads', asyn
   assert.equal(query.get('limit'), '5');
 });
 
+test('sms status shows each template id with its signature, while --output json keeps the API shape', async () => {
+  const body = {
+    signatures: [
+      {
+        id: 'sig1',
+        signature: '小金金',
+        status: 'SUCCESS',
+        reason: null,
+        templates: [{ id: '6650a1', content: '报名成功', status: 'SUCCESS', reason: null }]
+      },
+      { id: 'sig2', signature: '新签名', status: 'CHECKING', reason: null, templates: [] }
+    ]
+  };
+  const client = {
+    async request<T>(): Promise<T> {
+      return body as T;
+    }
+  };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  const asText = await cli(['sms', 'status', '--output', 'text'], { env, client });
+  assert.equal(asText.exitCode, 0);
+  assert.match(asText.stdout, /6650a1/);
+  assert.match(asText.stdout, /新签名/);
+
+  const asJson = await cli(['sms', 'status', '--output', 'json'], { env, client });
+  assert.deepEqual(JSON.parse(asJson.stdout), body);
+});
+
 test('entry aggregate reads as a table, while --output json keeps the shape a script indexes', async () => {
   const body = {
     columns: [

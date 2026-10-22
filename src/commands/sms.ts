@@ -113,12 +113,56 @@ function templateBody(input: CommandInput): Record<string, unknown> {
   return body;
 }
 
+interface SmsTemplate {
+  id: string;
+  content: string;
+  status: string;
+  reason?: string | null;
+}
+
+interface SmsSignature {
+  id: string;
+  signature: string;
+  status: string;
+  reason?: string | null;
+  templates?: SmsTemplate[];
+}
+
+/**
+ * One row per template, carrying its signature, so the template id a
+ * notification rule sends with is on the screen. A signature without
+ * templates still gets a row, for its own review status.
+ */
+function templatesForReading(body: unknown): unknown {
+  const signatures = (body as { signatures?: SmsSignature[] }).signatures ?? [];
+  const data = signatures.flatMap((signature) => {
+    const own = {
+      signature: signature.signature,
+      signature_status: signature.status,
+      signature_reason: signature.reason
+    };
+    const templates = signature.templates ?? [];
+    if (templates.length === 0) return [own];
+    return templates.map((template) => ({
+      template_id: template.id,
+      ...own,
+      template_status: template.status,
+      template_reason: template.reason,
+      content: template.content
+    }));
+  });
+  return { data };
+}
+
 export const SMS: readonly Command[] = [
   {
     path: ['sms', 'status'],
     summary: 'List SMS signatures and templates with their review status and why a review failed',
-    description: 'Your own signatures and templates, not those of the rest of the account.',
-    request: () => call('listSmsAuditStatuses')
+    description:
+      'Your own signatures and templates, not those of the rest of the account. ' +
+      'template_id is what `notification create --sms-template` takes.',
+    request: () => call('listSmsAuditStatuses'),
+    render: templatesForReading
   },
   {
     path: ['sms', 'signature', 'list'],
