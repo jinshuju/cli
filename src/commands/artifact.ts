@@ -56,9 +56,9 @@ export const ARTIFACT: readonly Command[] = [
     summary: 'Change who can open an artifact’s share link, and which version it shows',
     description:
       'The link shows the version <artifact> names; to share another version of the same artifact, ' +
-      'name that one. A change takes effect at once. Only an HTML version that passed the content check ' +
-      'can be shared; any other is refused with 422. private: only you; internal: members of your ' +
-      'account, on a plan that includes it; public: anyone with the link.',
+      'name that one. A change takes effect at once. Only an HTML version whose file is still there can ' +
+      'be shared, and not one the content check judged high risk; those are refused with 422. private: ' +
+      'only you; internal: members of your account, on a plan that includes it; public: anyone with the link.',
     args: [ARTIFACT_ARG],
     options: [
       {
