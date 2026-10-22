@@ -11,6 +11,14 @@ export const FOLDER: readonly Command[] = [
     request: (input) => call('listFolders', { query: paging(input) })
   },
   {
+    path: ['folder', 'get'],
+    summary: 'Show a folder: its name and kind',
+    description: 'Takes the folder_token a form or table answers with, to say which folder that is.',
+    args: [{ name: 'folder', required: true, description: 'Folder token, e.g. Fd2xK8' }],
+    request: (input) => call('getFolder', { path: { folder_token: input.args.folder } }),
+    examples: ['jinshuju folder get Fd2xK8']
+  },
+  {
     path: ['folder', 'create'],
     summary: 'Create a folder',
     description: 'A folder holds one kind. A table refuses a form folder, so say which when it is not forms.',

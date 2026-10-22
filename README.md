@@ -144,6 +144,7 @@ jinshuju entry list --form Kp7mQ2
 jinshuju entry list --table Vn4xR8
 jinshuju entry get 1 --form Kp7mQ2
 jinshuju entry list --form Kp7mQ2 --view aB3dE9
+jinshuju folder get Fd2xK8                       # the folder a form or table's folder_token names
 ```
 
 Filtering, sorting and paging:

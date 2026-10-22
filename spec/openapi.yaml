@@ -3944,6 +3944,44 @@ paths:
           $ref: '#/components/responses/PaymentRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
+  "/folders/{folder_token}":
+    parameters:
+    - name: folder_token
+      in: path
+      required: true
+      description: Folder token (`folder_token` from `GET /forms/{form_token}`, `GET /tables/{table_token}` or their listings)
+      schema:
+        type: string
+    get:
+      tags:
+      - Folders
+      summary: Show a folder
+      operationId: getFolder
+      description: |
+        Returns one folder the current user can manage.
+
+        OAuth scope: forms
+      responses:
+        '200':
+          description: Folder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Folder'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The folder does not exist or cannot be managed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/predefined_choices_sets":
     get:
       tags:
