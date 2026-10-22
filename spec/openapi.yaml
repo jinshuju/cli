@@ -19,7 +19,7 @@ info:
       - Personal access token: acts as that user, on the forms they created or that are shared with them;
       - Account access token (Enterprise plan): acts across the account, on all of its forms. Endpoints then have no "current user", and create operations are recorded under the account owner;
       - OAuth 2.0 token: the endpoints it can call are limited by the token's scope; insufficient scope returns `403`. Each endpoint's description states the scope it needs
-        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `read_contacts` / `users` / `routines` / `public`).
+        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `share_artifacts` / `read_contacts` / `users` / `routines` / `public`).
     - An invalid or revoked token returns `401`; a plan without API v1 returns `402`.
 
     ## Cooperator permissions
@@ -5111,7 +5111,7 @@ paths:
     - name: id
       in: path
       required: true
-      description: Artifact version id or token, or the URL-encoded artifact address (`.../artifacts/{token}`)
+      description: Artifact version id or token, or the URL-encoded artifact address from Jinshuju (`.../artifacts/{token}`)
       schema:
         type: string
     get:
@@ -5121,7 +5121,7 @@ paths:
       operationId: getArtifactPublication
       description: |
         Returns the artifact's share link and who can open it; the first call creates the link, open to its owner only.
-        OAuth scope: form_setting
+        OAuth scope: share_artifacts
       responses:
         '200':
           description: The share
@@ -5129,6 +5129,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ArtifactPublication'
+        '400':
+          description: An account access token has no user to share for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5156,7 +5162,7 @@ paths:
       operationId: updateArtifactPublication
       description: |
         Sets who can open the share link and which version it shows; the change takes effect at once.
-        OAuth scope: form_setting
+        OAuth scope: share_artifacts
       requestBody:
         required: true
         content:
@@ -5171,17 +5177,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/ArtifactPublication'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: The body is invalid, or an account access token has no user to share for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          description: "`internal` needs a plan with account member access"
+          description: The current plan does not include API v1, or `internal` needs a plan with account member access
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Sharing beyond `private` is not open to this account, or the token acts for no user
+          description: Sharing beyond `private` is not open to this user, or the OAuth token lacks its scope
           content:
             application/json:
               schema:
