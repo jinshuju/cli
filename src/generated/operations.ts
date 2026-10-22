@@ -491,7 +491,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       content: {
         'application/json': {
           allOf: [
-            { required: ['approach'] },
+            {
+              required: ['approach'],
+              properties: {
+                approach: { type: 'string', enum: ['SMS', 'EMAIL', 'WEIXIN_ONETIME', 'WXWORK', 'DING_TALK', 'WEBHOOK'] }
+              }
+            },
             {
               oneOf: [
                 { $ref: 'SMSNotificationRuleInput' },
@@ -3669,7 +3674,26 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['trigger', 'operator'],
     properties: {
       trigger: { type: 'string' },
-      operator: { type: 'string' },
+      operator: {
+        type: 'string',
+        enum: [
+          'eq',
+          'ne',
+          'any_in',
+          'none_in',
+          'between',
+          'not_between',
+          'gte',
+          'gt',
+          'lte',
+          'lt',
+          'null',
+          'not_null',
+          'like',
+          'not_like',
+          'match'
+        ]
+      },
       value: {},
       group_index: { type: 'integer' }
     },

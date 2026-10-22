@@ -1480,6 +1480,16 @@ paths:
               allOf:
               - required:
                 - approach
+                properties:
+                  approach:
+                    type: string
+                    enum:
+                    - SMS
+                    - EMAIL
+                    - WEIXIN_ONETIME
+                    - WXWORK
+                    - DING_TALK
+                    - WEBHOOK
               - oneOf:
                 - $ref: '#/components/schemas/SMSNotificationRuleInput'
                 - $ref: '#/components/schemas/EmailNotificationRuleInput'
@@ -8460,7 +8470,22 @@ components:
           description: Field api_code; `trade_status` matches the payment status, e.g. `paid`
         operator:
           type: string
-          description: Operator, e.g. eq, any_in, gt, like, null
+          enum:
+          - eq
+          - ne
+          - any_in
+          - none_in
+          - between
+          - not_between
+          - gte
+          - gt
+          - lte
+          - lt
+          - 'null'
+          - not_null
+          - like
+          - not_like
+          - match
         value:
           description: Value to compare with; choice fields take choice api_codes
         group_index:
