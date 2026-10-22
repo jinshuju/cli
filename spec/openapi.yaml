@@ -18757,6 +18757,11 @@ components:
           - string
           - 'null'
           description: The name, at most 60 characters
+        description:
+          type:
+          - string
+          - 'null'
+          description: One sentence on what the routine does, for people reading the routines list, at most 100 characters
         instruction:
           type:
           - string
@@ -18865,6 +18870,7 @@ components:
       required:
       - id
       - name
+      - description
       - instruction
       - state
       - paused_reason
@@ -18886,6 +18892,10 @@ components:
           type: string
         name:
           type: string
+        description:
+          type:
+          - string
+          - 'null'
         instruction:
           type: string
         state:

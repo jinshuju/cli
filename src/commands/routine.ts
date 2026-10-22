@@ -19,13 +19,16 @@ import type { Command, CommandInput } from './types.js';
 const ROUTINE_PAYLOAD: readonly string[] = [
   '{',
   '  "name": "每周报名汇总",',
+  '  "description": "每周一汇总上周报名表新增的数据，按渠道统计",',
   '  "instruction": "汇总上周（周一到周日）报名表新增的数据，按渠道统计条数",',
   '  "objects": [{ "kind": "form", "token": "Kp7mQ2" }],',
   '  "trigger_kind": "schedule",',
   '  "schedule": { "freq": "weekly", "weekdays": [1], "time": "09:00" }',
   '}',
   '',
-  'name is up to 60 characters, instruction up to 2000. objects are the forms,',
+  'name is up to 60 characters. description is one sentence on what the routine',
+  'does, up to 100 characters: the routines list shows it to people in place of',
+  'the instruction, which is written for Jiri, up to 2000. objects are the forms,',
   'tables, views and public queries the routine may work on: up to 10 of',
   '{ "kind": form | table | view | opensearch, "token" }. trigger_kind is schedule',
   'or event; create defaults to schedule. On update a key left out, or null,',
@@ -152,6 +155,12 @@ export function parseObject(input: string): { kind: string; token: string } {
 const ROUTINE_OPTIONS: readonly OptionSpec[] = [
   { name: '--name', type: 'string', placeholder: '<name>', description: 'Name, up to 60 characters' },
   {
+    name: '--description',
+    type: 'string',
+    placeholder: '<text>',
+    description: 'One sentence on what it does, for people reading the routines list, up to 100 characters'
+  },
+  {
     name: '--instruction',
     type: 'string',
     placeholder: '<text>',
@@ -200,6 +209,7 @@ function routineBody(input: CommandInput): Record<string, unknown> {
   const schedule = spec === undefined ? undefined : parseSchedule(spec);
   return overriding(raw ?? {}, {
     name: input.options.name,
+    description: input.options.description,
     instruction: input.options.instruction,
     objects,
     trigger_kind: schedule ? 'schedule' : undefined,
@@ -214,14 +224,16 @@ function rowsForReading(body: unknown, row: (item: Record<string, unknown>) => R
 }
 
 /**
- * A row of a listing as a person scans it: which routine, whether it is on and
- * why not, when it runs and when it runs next. The instruction, the objects and
+ * A row of a listing as a person scans it: which routine and what it does,
+ * whether it is on and why not, when it runs and when it runs next. The
+ * instruction, written for Jiri rather than for people, the objects and
  * the raw schedule are `routine get`'s, and `--output json` keeps all of it.
  */
 function routinesForReading(body: unknown): unknown {
   return rowsForReading(body, (row) => ({
     id: row.id,
     name: row.name,
+    description: row.description,
     state: row.state,
     paused_reason: row.paused_reason,
     trigger_text: row.trigger_text,
@@ -266,7 +278,7 @@ export const ROUTINE: readonly Command[] = [
   },
   {
     path: ['routine', 'get'],
-    summary: 'Show a routine: its instruction, trigger, next runs, objects and page link',
+    summary: 'Show a routine: what it does, its instruction, trigger, next runs, objects and page link',
     description:
       "trigger_text says when it runs in the 自动任务 page's words; next_runs holds the next five times of an " +
       'active schedule, and is empty otherwise. A data trigger has its conditions in words under ' +
@@ -287,7 +299,8 @@ export const ROUTINE: readonly Command[] = [
     payload: ROUTINE_PAYLOAD,
     request: (input) => call('createRoutine', { body: routineBody(input) }),
     examples: [
-      "jinshuju routine create --name 每周报名汇总 --instruction '汇总上周（周一到周日）报名表新增的数据，按渠道统计条数' " +
+      'jinshuju routine create --name 每周报名汇总 --description 每周一汇总上周报名表新增的数据，按渠道统计 ' +
+        "--instruction '汇总上周（周一到周日）报名表新增的数据，按渠道统计条数' " +
         "--object form:Kp7mQ2 --schedule 'weekly 1 09:00'",
       "jinshuju routine create --name 活动提醒 --instruction '…' --object table:Vn4xR8 --schedule 'once 2026-10-12 09:00'",
       "jinshuju routine create --name 巡检 --instruction '…' --object form:Kp7mQ2 --schedule 'hourly 30'",
@@ -299,7 +312,7 @@ export const ROUTINE: readonly Command[] = [
   },
   {
     path: ['routine', 'update'],
-    summary: 'Change a routine: name, instruction, objects or trigger',
+    summary: 'Change a routine: name, description, instruction, objects or trigger',
     description:
       'Only what is named changes. --object replaces the whole list. Moving to a schedule is --schedule; ' +
       'moving to an event is --json with "trigger_kind": "event" and the event. The payload is the one ' +

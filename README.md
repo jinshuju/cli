@@ -316,8 +316,8 @@ a form or table changes. One created here is active at once, the same as one
 created on the 自动任务 page, and is held to that page's rules and words.
 
 ```bash
-jinshuju routine create --name 每周报名汇总 --instruction '汇总上周报名表新增的数据' \
-  --object form:Kp7mQ2 --schedule 'weekly 1 09:00'
+jinshuju routine create --name 每周报名汇总 --description 每周一汇总上周报名，按渠道统计 \
+  --instruction '汇总上周报名表新增的数据' --object form:Kp7mQ2 --schedule 'weekly 1 09:00'
 jinshuju routine create --json @routine.json         # an event trigger and its conditions
 jinshuju routine list --state active
 jinshuju routine get 6ac5f0e2b1d4c3a2f1e0d9c8         # trigger_text, next_runs, objects, url
@@ -333,6 +333,8 @@ jinshuju routine delete 6ac5f0e2b1d4c3a2f1e0d9c8 --yes
 09:00`, `hourly 30`, `daily 09:00`, `workdays 09:00`, `weekly 1,5 09:00` (1 is
 Monday) and `monthly 1,-1 09:00` (-1 is the last day). `--object kind:token`
 names a form, table, view or public query, and given, it is the whole list.
+`--description` is the one sentence the routines list shows people, up to 100
+characters; the instruction is written for Jiri.
 Flags lay over `--json`; `routine create --help` shows the full payload, events
 and conditions included. A routine against the page's rules exits 5 with every
 reason the page gives.

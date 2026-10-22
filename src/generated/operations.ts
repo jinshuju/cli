@@ -4077,6 +4077,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     type: 'object',
     properties: {
       name: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
       instruction: { type: ['string', 'null'] },
       objects: {
         type: ['array', 'null'],

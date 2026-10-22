@@ -2897,6 +2897,10 @@ test('routine update sends only what was named', async () => {
     env: WRITE_ENV,
     client: mock.client
   });
+  await cli(['routine', 'update', ROUTINE_ID, '--description', '每周一汇总上周报名'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
 
   assert.deepEqual(mock.requests[0].body, { instruction: '改为按周汇总' });
   assert.deepEqual(mock.requests[1].body, {
@@ -2905,6 +2909,7 @@ test('routine update sends only what was named', async () => {
       { kind: 'view', token: 'aB3dE9' }
     ]
   });
+  assert.deepEqual(mock.requests[2].body, { description: '每周一汇总上周报名' });
 });
 
 test('delete_authorized is never sent: no flag sets it, and --json naming it is refused here', async () => {
@@ -2986,6 +2991,7 @@ test("a routine refused by the server exits as refused, with the page's reasons"
 const ROUTINE = {
   id: ROUTINE_ID,
   name: '每周报名汇总',
+  description: '每周一汇总上周报名，按渠道统计',
   instruction: '汇总上周报名表新增的数据，按渠道统计条数',
   state: 'active',
   paused_reason: null,
@@ -3010,11 +3016,12 @@ const answering = (body: unknown) => ({
   }
 });
 
-test('routine list reads as id, name, state, why paused, trigger and next run, one page or all of them', async () => {
+test('routine list reads as id, name, what it does, state, why paused, trigger and next run, one page or all of them', async () => {
   const paused = {
     ...ROUTINE,
     id: 'f00d',
     name: '月报',
+    description: null,
     state: 'paused',
     paused_reason: 'insufficient_points',
     trigger_text: '每月最后一天 18:00',
@@ -3023,15 +3030,18 @@ test('routine list reads as id, name, state, why paused, trigger and next run, o
   };
   const listing = { total: 2, count: 2, data: [ROUTINE, paused], next: null };
 
-  const page = await cli(['routine', 'list'], { env: WRITE_ENV, client: answering(listing) });
-  const all = await cli(['routine', 'list', '--all'], { env: WRITE_ENV, client: answering(listing) });
+  // Wide enough for every column; a narrower table drops them from the right.
+  const page = await cli(['routine', 'list'], { env: WRITE_ENV, client: answering(listing), width: 200 });
+  const all = await cli(['routine', 'list', '--all'], { env: WRITE_ENV, client: answering(listing), width: 200 });
   const json = await cli(['routine', 'list', '--output', 'json'], { env: WRITE_ENV, client: answering(listing) });
 
   for (const { stdout } of [page, all]) {
-    assert.match(stdout, /id\s+name\s+state\s+paused_reason\s+trigger_text\s+next_run_at/);
+    assert.match(stdout, /id\s+name\s+state\s+description\s+paused_reason\s+trigger_text\s+next_run_at/);
     assert.match(
       stdout,
-      new RegExp(`${ROUTINE_ID}\\s+每周报名汇总\\s+active\\s+每周一 09:00\\s+2026-10-26T09:00:00\\+08:00`)
+      new RegExp(
+        `${ROUTINE_ID}\\s+每周报名汇总\\s+active\\s+每周一汇总上周报名，按渠道统计\\s+每周一 09:00\\s+2026-10-26T09:00:00\\+08:00`
+      )
     );
     assert.match(stdout, /f00d\s+月报\s+paused\s+insufficient_points\s+每月最后一天 18:00/);
     assert.doesNotMatch(stdout, /汇总上周报名表/);
@@ -3071,6 +3081,7 @@ test('routine get shows when it runs, the next runs, its objects and the link to
   const result = await cli(['routine', 'get', ROUTINE_ID], { env: WRITE_ENV, client: answering(ROUTINE) });
 
   assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^description: 每周一汇总上周报名，按渠道统计$/m);
   assert.match(result.stdout, /^trigger_text: 每周一 09:00$/m);
   assert.match(result.stdout, /^next_runs:\n {2}2026-10-26T09:00:00\+08:00\n {2}2026-11-02T09:00:00\+08:00$/m);
   assert.match(result.stdout, /^objects:\n {2}token\s+name\s+kind/m);
@@ -3092,6 +3103,8 @@ test('routine create --help spells out every frequency, event and condition', as
   assert.match(stdout, /on matched/);
   assert.match(stdout, /group_index/);
   assert.match(stdout, /delete_authorized cannot be sent/);
+  assert.match(stdout, /--description <text>/);
+  assert.match(stdout, /"description": "每周一汇总上周报名表新增的数据，按渠道统计"/);
   assert.match(stdout, /--schedule 'weekly 1 09:00'/);
 
   const resource = await cli(['routine', '--help'], { env: {} });
