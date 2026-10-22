@@ -66,6 +66,7 @@ export type OperationId =
   | 'estimateSmsTask'
   | 'estimateSmsTaskChange'
   | 'estimateSmsTaskResend'
+  | 'getArtifactPublication'
   | 'getBillingAccount'
   | 'getCheckinCampaign'
   | 'getCurrentUser'
@@ -152,6 +153,7 @@ export type OperationId =
   | 'summarizeTableEntries'
   | 'summarizeTableViewEntries'
   | 'updateAccessPolicy'
+  | 'updateArtifactPublication'
   | 'updateCheckinCampaign'
   | 'updateEntry'
   | 'updateEntryComment'
@@ -832,6 +834,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
       { name: 'view_token', in: 'query', schema: { type: 'string' } }
     ]
+  },
+  getArtifactPublication: {
+    method: 'GET',
+    path: '/artifacts/{id}/publication',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getBillingAccount: { method: 'GET', path: '/billing_account', parameters: [] },
   getCheckinCampaign: {
@@ -1646,6 +1653,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'AccessPolicyInput' } } }
   },
+  updateArtifactPublication: {
+    method: 'PUT',
+    path: '/artifacts/{id}/publication',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'ArtifactPublicationInput' } } }
+  },
   updateCheckinCampaign: {
     method: 'PATCH',
     path: '/plugins/checkin/campaigns/{id}',
@@ -2011,6 +2024,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     additionalProperties: false,
     required: ['value', 'score'],
     properties: { value: {}, score: { type: 'number' } }
+  },
+  ArtifactPublicationInput: {
+    type: 'object',
+    required: ['allowedAudience'],
+    properties: {
+      allowedAudience: { type: 'string', enum: ['private', 'internal', 'public'] },
+      versionId: { type: 'string' }
+    }
   },
   AttachmentFieldInput: {
     type: 'object',

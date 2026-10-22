@@ -515,6 +515,24 @@ jinshuju email smtp-account list
 jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课提醒 --content '<p>明天上午 9 点开课</p>' --yes
 ```
 
+## Sharing artifacts
+
+An artifact is a file Jiri made in a conversation. An HTML version of one can
+be shared by a link, and `artifact share set` says who can open it: `private`
+(only you, the default), `internal` (members of your account, on a plan that
+includes it) or `public` (anyone with the link). The first `set` creates the
+link; changes take effect at once. `<artifact>` is a version id, a version
+token, or the address of the page that shows the version
+(`https://…/artifacts/<token>`). The link shows that version; to share
+another version of the same artifact, name that one.
+
+```bash
+jinshuju artifact share get https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W
+jinshuju artifact share set Xy7Qm2PaLk9W --audience public
+jinshuju artifact share set Pq4nR8sT2vWx --audience internal   # now the link shows this version
+jinshuju artifact share set Xy7Qm2PaLk9W --audience private
+```
+
 ## Odds and ends
 
 ```bash
