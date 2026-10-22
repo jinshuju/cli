@@ -2027,6 +2027,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   },
   ArtifactPublicationInput: {
     type: 'object',
+    additionalProperties: false,
     required: ['allowedAudience'],
     properties: {
       allowedAudience: { type: 'string', enum: ['private', 'internal', 'public'] },

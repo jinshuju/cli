@@ -93,7 +93,7 @@ tags:
 - name: Folders
   description: Folders.
 - name: Artifacts
-  description: Files Jiri made in a conversation, and sharing them.
+  description: Pages Jiri generated, and who can open them on their share link.
 - name: Predefined Choices Sets
   description: Predefined choice sets.
 - name: Templates
@@ -5111,7 +5111,7 @@ paths:
     - name: id
       in: path
       required: true
-      description: Artifact version id or version token; the token in an artifact address (`/artifacts/{token}`) is a version token
+      description: Artifact version id or token, or the URL-encoded artifact address (`.../artifacts/{token}`)
       schema:
         type: string
     get:
@@ -5120,10 +5120,11 @@ paths:
       summary: Show how an artifact is shared
       operationId: getArtifactPublication
       description: |
-        Returns who can open the artifact's share link, the link itself and which version it shows. Only the creator of the conversation the artifact belongs to can read it.
+        Returns the artifact's share link and who can open it; the first call creates the link, open to its owner only.
+        OAuth scope: form_setting
       responses:
         '200':
-          description: Publication
+          description: The share
           content:
             application/json:
               schema:
@@ -5135,17 +5136,27 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: The artifact does not exist or is not the current user's in the current account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The artifact is not an HTML page, its file is gone, or it failed the content check
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
     put:
       tags:
       - Artifacts
       summary: Change who can open an artifact's share link
       operationId: updateArtifactPublication
       description: |
-        Sets who can open the artifact's share link and, with `versionId`, which version it shows; without `versionId` it shows the version in the path. The first call creates the link. Changes take effect at once.
-        - Only an HTML version can be shared; the version must belong to the same artifact.
-        - `internal` needs a plan that includes it; otherwise 402.
-        - A version judged high risk cannot be shared; returns 400.
+        Sets who can open the share link and which version it shows; the change takes effect at once.
+        OAuth scope: form_setting
       requestBody:
         required: true
         content:
@@ -5154,7 +5165,7 @@ paths:
               $ref: '#/components/schemas/ArtifactPublicationInput'
       responses:
         '200':
-          description: Publication
+          description: The share after the change
           content:
             application/json:
               schema:
@@ -5164,11 +5175,31 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          description: "`internal` needs a plan with account member access"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Sharing beyond `private` is not open to this account, or the token acts for no user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: The artifact or `versionId` does not exist, or is not the current user's in the current account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The version is not an HTML page, its file is gone, or it failed the content check
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/predefined_choices_sets":
     get:
       tags:
@@ -12438,6 +12469,23 @@ components:
           type: string
           description: MIME type, defaults to the one in the data URI prefix, otherwise `application/octet-stream`
       additionalProperties: false
+    ArtifactPublicationInput:
+      title: ArtifactPublicationInput
+      type: object
+      additionalProperties: false
+      required:
+      - allowedAudience
+      properties:
+        allowedAudience:
+          type: string
+          enum:
+          - private
+          - internal
+          - public
+          description: "`private` only the owner, `internal` members of the account, `public` anyone with the link"
+        versionId:
+          type: string
+          description: Id or token of the version visitors see; defaults to the version in the path
     ArtifactPublication:
       type: object
       required:
@@ -12453,17 +12501,12 @@ components:
           - private
           - internal
           - public
-          description: 'Who can open the share link: `private` only its creator, `internal` members of the account, `public` anyone with the link'
         url:
-          type:
-          - string
-          - 'null'
-          description: Share link; null when there is none yet
+          type: string
+          description: The share link
         publishedVersion:
-          type:
-          - object
-          - 'null'
-          description: The version the share link shows; null when there is no share link yet
+          type: object
+          description: The version visitors see
           required:
           - id
           - version
@@ -12471,34 +12514,18 @@ components:
           properties:
             id:
               type: string
-              description: Version id
             version:
-              type: integer
-              description: Version number, from 1
+              type:
+              - integer
+              - 'null'
             title:
               type: string
-              description: Version title, usually its file name
         banned:
           type: boolean
-          description: Whether the share link was blocked for risky content
+          description: The link was stopped for its content and opens to no one
         canUseInternal:
           type: boolean
-          description: Whether the account's plan includes `internal`
-    ArtifactPublicationInput:
-      type: object
-      required:
-      - allowedAudience
-      properties:
-        allowedAudience:
-          type: string
-          enum:
-          - private
-          - internal
-          - public
-          description: Who can open the share link
-        versionId:
-          type: string
-          description: Version id or token to share; defaults to the one in the path, and must be a version of the same artifact
+          description: The account's plan allows `internal`
     Folder:
       type: object
       required:
