@@ -1431,7 +1431,8 @@ paths:
       - Form Settings
       summary: List notification rules
       description: |
-        Lists the form's notification rules (SMS, EMAIL, WEIXIN_ONETIME, WXWORK, DING_TALK, WEBHOOK), newest first, the same rules the form's notification settings page shows. Each rule says whether it can send right now (`sendable`) and, if not, why (`blocked_reasons`).
+        Lists the form's notification rules, newest first, each with whether it can send right now.
+
         OAuth scope: form_setting
       operationId: listNotificationRules
       parameters:
@@ -1458,15 +1459,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
     post:
       tags:
       - Form Settings
       summary: Create a notification rule
       description: |
-        Creates a notification rule, sent to the submitter (SMS, EMAIL, WEIXIN_ONETIME) or to your team (WXWORK, DING_TALK, WEBHOOK). The body is the schema of its `approach`. The rule shows on the form's notification settings page and can be edited there.
-        - The rule is on as soon as it is created unless `enabled: false` is passed, and it sends (and uses SMS / email balance) for the entries that match it from then on.
-        - The plan must include the approach (SMS is limited only by the SMS balance), otherwise returns 402. The content of SMS and WeChat messages is reviewed when they are sent, as on the page.
-        - Only a manager of the form can create a rule; other cooperators get 403.
+        Creates a notification rule; the body follows the schema of its `approach`. The rule sends for matching entries from then on, using the SMS / email balance, and shows on the form's notification settings page. SMS and WeChat messages are reviewed when they are sent.
+
         OAuth scope: form_setting
       operationId: createNotificationRule
       parameters:
@@ -1507,18 +1508,29 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          description: The current plan does not include API v1, or does not include this approach (SMS is limited only by its balance)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: 'Forbidden: the OAuth token lacks the required scope, or the caller is not a manager of the form'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/forms/{form_token}/notification_rules/{id}":
     get:
       tags:
       - Form Settings
       summary: Get a notification rule
       description: |
-        Returns the rule and whether it can send right now (`sendable`); if not, `blocked_reasons` says why.
+        Returns the rule and whether it can send right now.
+
         OAuth scope: form_setting
       operationId: getNotificationRule
       parameters:
@@ -1544,13 +1556,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
     patch:
       tags:
       - Form Settings
       summary: Update a notification rule
       description: |
-        Updates only the keys present in the body, which takes the keys of the rule's own approach; PUT is accepted too. `approach` cannot be changed, and a key of another approach returns 400. Pass `enabled: false` to turn the rule off and `enabled: true` to turn it back on. Same checks as creating one.
-        Only a manager of the form can create, update or delete its notification rules; other cooperators get 403.
+        Changes the rule; the body takes only the keys of the rule's own `approach`, and `approach` itself cannot change.
+
         OAuth scope: form_setting
       operationId: updateNotificationRule
       parameters:
@@ -1585,18 +1599,28 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          description: The current plan does not include API v1, or does not include this approach (SMS is limited only by its balance)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: 'Forbidden: the OAuth token lacks the required scope, or the caller is not a manager of the form'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
     delete:
       tags:
       - Form Settings
       summary: Delete a notification rule
       description: |
-        Deletes the rule; notifications it has scheduled but not sent yet are cancelled. To stop it for now, PATCH `enabled: false` instead.
-        Only a manager of the form can delete it, as with creating and updating.
+        Deletes the rule and cancels what it has scheduled but not yet sent.
+
         OAuth scope: form_setting
       operationId: deleteNotificationRule
       parameters:
@@ -1625,9 +1649,15 @@ paths:
         '402':
           $ref: '#/components/responses/PaymentRequired'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: 'Forbidden: the OAuth token lacks the required scope, or the caller is not a manager of the form'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/forms/{form_token}/theme":
     patch:
       tags:
@@ -8420,18 +8450,17 @@ components:
       additionalProperties: false
     NotificationRuleScopeCondition:
       type: object
-      description: |
-        One condition an entry must match; conditions with the same `group_index` are combined with and, different groups with or. A condition on `trade_status` (for example `{"trigger": "trade_status", "operator": "any_in", "value": ["paid"]}` with `trigger_scope` matched_update) sends when the payment status changes.
+      description: A condition an entry must match; conditions sharing a `group_index` must all hold, different groups are alternatives
       required:
       - trigger
       - operator
       properties:
         trigger:
           type: string
-          description: api_code of the field
+          description: Field api_code; `trade_status` matches the payment status, e.g. `paid`
         operator:
           type: string
-          description: Operator, e.g. eq, ne, any_in, none_in, gt, gte, lt, lte, between, like, null, not_null
+          description: Operator, e.g. eq, any_in, gt, like, null
         value:
           description: Value to compare with; choice fields take choice api_codes
         group_index:
@@ -8439,7 +8468,7 @@ components:
       additionalProperties: false
     NotificationRuleScheduleTimeRule:
       type: object
-      description: When a `schedule_time` rule sends, relative to a date field of each entry. `date_offset_action` is before / that_day / after the date, by `date_offset_number` `date_offset_unit`; `hour` and `minute` set the time of day (leave them out with minute / hour units)
+      description: When a `schedule_time` rule sends, relative to a date field of each entry
       required:
       - date_key
       properties:
@@ -8487,7 +8516,8 @@ components:
       - matched_new
       - matched_update
       - schedule_time
-      description: 'When it sends: every new entry (default), every changed entry, a new / changed entry matching `scope_conditions`, or at a time relative to a date field (`schedule_time_rule`)'
+      default: all_new
+      description: 'When it sends: on new entries, on changed entries, on new / changed entries matching `scope_conditions`, or at a time set by `schedule_time_rule`'
     SMSNotificationRuleInput:
       type: object
       description: An SMS notification rule, sent to the submitter. The text and signature come from the SMS template.
@@ -8498,7 +8528,7 @@ components:
           - SMS
         enabled:
           type: boolean
-          description: Whether the rule sends; true by default on create
+          default: true
         trigger_scope:
           $ref: '#/components/schemas/NotificationRuleTriggerScope'
         scope_conditions:
@@ -8515,10 +8545,10 @@ components:
             type: string
         sms_template_id:
           type: string
-          description: A template of the caller's own or shared in the account. One without a signature or that failed review returns 400; one under review is saved but does not send until it is approved
+          description: A template of the caller's own or shared in the account; one under review sends once approved
         placeholder_keys:
           type: array
-          description: The field api_code filling each `$(...)` placeholder of the template, in order; one for every placeholder
+          description: The field api_code filling each `$(...)` variable of the template, in order
           items:
             type: string
       additionalProperties: false
@@ -8532,7 +8562,7 @@ components:
           - EMAIL
         enabled:
           type: boolean
-          description: Whether the rule sends; true by default on create
+          default: true
         trigger_scope:
           $ref: '#/components/schemas/NotificationRuleTriggerScope'
         scope_conditions:
@@ -8549,7 +8579,7 @@ components:
             type: string
         subject:
           type: string
-          description: '`$(api_code)` inserts a field value'
+          description: "`$(api_code)` inserts a field value"
         content:
           type: string
           description: The message; `$(api_code)` inserts a field value
@@ -8557,7 +8587,7 @@ components:
           type:
           - string
           - 'null'
-          description: A custom SMTP account of the account; without it the email goes out through the system mailbox
+          description: A custom SMTP account of the account; null sends through the system mailbox
       additionalProperties: false
     WeixinOnetimeNotificationRuleInput:
       type: object
@@ -8569,7 +8599,7 @@ components:
           - WEIXIN_ONETIME
         enabled:
           type: boolean
-          description: Whether the rule sends; true by default on create
+          default: true
         trigger_scope:
           $ref: '#/components/schemas/NotificationRuleTriggerScope'
         scope_conditions:
@@ -8600,7 +8630,7 @@ components:
           - WXWORK
         enabled:
           type: boolean
-          description: Whether the rule sends; true by default on create
+          default: true
         trigger_scope:
           $ref: '#/components/schemas/NotificationRuleTriggerScope'
         scope_conditions:
@@ -8633,7 +8663,7 @@ components:
           - DING_TALK
         enabled:
           type: boolean
-          description: Whether the rule sends; true by default on create
+          default: true
         trigger_scope:
           $ref: '#/components/schemas/NotificationRuleTriggerScope'
         scope_conditions:
@@ -8666,7 +8696,7 @@ components:
           - WEBHOOK
         enabled:
           type: boolean
-          description: Whether the rule sends; true by default on create
+          default: true
         trigger_scope:
           $ref: '#/components/schemas/NotificationRuleTriggerScope'
         scope_conditions:
@@ -8740,16 +8770,7 @@ components:
           description: Whether the rule can send right now
         blocked_reasons:
           type: array
-          description: |
-            Why it cannot send, empty when `sendable`:
-            - `disabled`: turned off by hand; `custom_smtp_deleted` / `custom_smtp_authentication_error` / `share_link_disabled` / `webhook_connection_error`: turned off by the system for that reason
-            - `recipient_fields_deleted`: every field the rule sends to was deleted
-            - `condition_field_deleted` / `condition_choice_deleted`: a field in `scope_conditions` was deleted, or every choice a condition picks was
-            - `schedule_field_deleted`: the date field in `schedule_time_rule` was deleted
-            - `sms_template_auditing` / `sms_template_rejected` / `sms_signature_auditing` / `sms_signature_rejected`: the SMS template or signature is under review or failed it
-            - `sms_disabled`: SMS sending is turned off for the form creator
-            - `plan_not_supported`: the current plan does not include this approach
-            - `sms_balance_insufficient` / `email_balance_insufficient`: not enough SMS / email balance
+          description: Why it cannot send right now; empty when `sendable`
           items:
             type: string
             enum:
