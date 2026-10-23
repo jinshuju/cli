@@ -446,6 +446,32 @@ jinshuju sms template update 6512a1c2d3e4f5a6b7c8d9e0 --content "你报名的课
 jinshuju sms template delete 6512a1c2d3e4f5a6b7c8d9e0 --yes
 ```
 
+## Sending SMS and email to entries
+
+`sms send` and `email send` pick the entries of a form the way `entry count`
+narrows them, by `--filter`, `--keyword` or `--view`, or the whole form with
+`--select-all`, and send to the field `--field` names. Sending uses quota and
+cannot be recalled, so each takes `--estimate` or `--yes`: `--estimate` answers
+how many entries and recipients it reaches, how many are missing a number or an
+address, what it bills and whether the quota covers it, and sends nothing;
+`--yes` sends. The entries are picked again when it sends.
+
+An SMS goes out from a template, by the id `sms template list` gives; variables
+are filled from the fields `--placeholder` names, one per variable in order.
+`--send-at` schedules it and `--manual` holds it for `sms task send`. A task whose
+template failed review can be changed with `sms task change`, and a sent one
+sent again with `sms task resend` to the entries that got a result.
+
+```bash
+jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --filter 'field_5 eq 已报名' --estimate
+jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --filter 'field_5 eq 已报名' --yes
+jinshuju sms task list --form Kp7mQ2
+jinshuju sms task activities 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED
+jinshuju sms task resend 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED --yes
+jinshuju email smtp-account list
+jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课提醒 --content '<p>明天上午 9 点开课</p>' --yes
+```
+
 ## Odds and ends
 
 ```bash
