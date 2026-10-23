@@ -519,13 +519,15 @@ jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课�
 
 An artifact is a file Jiri made in a conversation. An HTML version of one can
 be shared by a link, and `artifact share set` says who can open it: `private`
-(only you, the default), `internal` (members of your account, on a plan that
-includes it) or `public` (anyone with the link). The first `get` or `set`
-creates the link; changes take effect at once. `<artifact>` is a version id,
-a version token, or the address of the page that shows the version
-(`https://…/artifacts/<token>`). The link shows that version; to share
-another version of the same artifact, name that one. `--audience private`
-keeps the version the link shows, whichever version `<artifact>` names.
+(only you, the default), `internal` (members of your account) or `public`
+(anyone with the link). Sharing beyond `private` needs a plan with share links,
+and `internal` one with members-only sharing; `artifact share get` says which
+the plan has. The first `get` or `set` creates the link; changes take effect
+at once. `<artifact>` is a version id, a version token, or the address of the
+page that shows the version (`https://…/artifacts/<token>`). The link shows
+that version; to share another version of the same artifact, name that one.
+`--audience private` keeps the version the link shows, whichever version
+`<artifact>` names.
 
 An OAuth session needs the `share_artifacts` scope, which `jinshuju auth login`
 asks for; a session from an older CLI has to log in again. An account access

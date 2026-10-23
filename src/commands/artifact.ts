@@ -41,11 +41,12 @@ export const ARTIFACT: readonly Command[] = [
     path: ['artifact', 'share', 'get'],
     summary: 'Show who can open an artifact’s share link, the link, and which version it shows',
     description:
-      'The first get creates the link, open to you only (private). canUseInternal says whether the plan ' +
-      'includes internal; banned, whether the link was stopped for its content and opens to no one.',
+      'The first get creates the link, open to you only (private). canUseArtifactUrl says whether the ' +
+      'plan includes share links at all, canUseInternal whether it includes internal; accountName is the ' +
+      'account whose members internal lets in; banned, whether the link was stopped for its content and ' +
+      'opens to no one.',
     args: [ARTIFACT_ARG],
-    request: (input) =>
-      call('getArtifactPublication', { path: { id: artifactVersion(input.args.artifact as string) } }),
+    request: (input) => call('getPublishedArtifact', { path: { id: artifactVersion(input.args.artifact as string) } }),
     examples: [
       'jinshuju artifact share get https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W',
       'jinshuju artifact share get Xy7Qm2PaLk9W'
@@ -56,15 +57,17 @@ export const ARTIFACT: readonly Command[] = [
     summary: 'Change who can open an artifact’s share link, and which version it shows',
     description:
       'The link shows the version <artifact> names; to share another version of the same artifact, ' +
-      'name that one. private keeps the version the link shows. A change takes effect at once. Only an HTML version whose file is still there can ' +
-      'be shared, and not one the content check judged high risk; those are refused with 422. private: ' +
-      'only you; internal: members of your account, on a plan that includes it; public: anyone with the link.',
+      'name that one. private keeps the version the link shows. A change takes effect at once. Only an ' +
+      'HTML version whose file is still there can be shared, and not one the content check judged high ' +
+      'risk; those are refused with 422. private: only you; internal: members of your account; public: ' +
+      'anyone with the link. Beyond private needs a plan with share links, and internal one with ' +
+      'members-only sharing; otherwise 402.',
     args: [ARTIFACT_ARG],
     options: [
       {
         name: '--audience',
         type: 'string',
-        choices: bodyChoices('updateArtifactPublication', 'allowedAudience'),
+        choices: bodyChoices('updatePublishedArtifact', 'allowedAudience'),
         placeholder: '<audience>',
         description: 'Who can open the link: private, internal or public'
       }
@@ -74,7 +77,7 @@ export const ARTIFACT: readonly Command[] = [
       const audience = requiredOption(input, 'audience');
       // Without versionId the API keeps the version the link shows, so taking a share back to
       // private from an older version's receipt does not change what a later public share shows.
-      return call('updateArtifactPublication', {
+      return call('updatePublishedArtifact', {
         path: { id: version },
         body: given({ allowedAudience: audience, versionId: audience === 'private' ? undefined : version })
       });

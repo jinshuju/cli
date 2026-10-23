@@ -855,7 +855,7 @@ test('form copy takes the notification rules along only when asked', async () =>
   assert.deepEqual(mock.requests[1].body, { name: '第二期', with_notification_rules: true });
 });
 
-test('artifact share get reads the publication of the version an id, a token or an address names', async () => {
+test('artifact share get reads the published artifact of the version an id, a token or an address names', async () => {
   const mock = createMockClient();
   const run = (artifact: string) =>
     cli(['artifact', 'share', 'get', artifact], { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client });
@@ -869,11 +869,11 @@ test('artifact share get reads the publication of the version an id, a token or 
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${url(request)}`),
     [
-      'GET /api/v1/artifacts/6512a1c2d3e4f5a6b7c8d9d3/publication',
-      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/publication',
-      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/publication',
-      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/publication',
-      'GET /api/v1/artifacts/Xy7Qm2_PaLk9W/publication'
+      'GET /api/v1/artifacts/6512a1c2d3e4f5a6b7c8d9d3/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2_PaLk9W/published_artifact'
     ]
   );
 });
@@ -910,9 +910,9 @@ test('artifact share set shares the version <artifact> names, except private, wh
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${request.path}`),
     [
-      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/publication',
-      'PUT /api/v1/artifacts/Pq4nR8sT2vWx/publication',
-      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/publication'
+      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'PUT /api/v1/artifacts/Pq4nR8sT2vWx/published_artifact',
+      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact'
     ]
   );
   assert.deepEqual(
@@ -951,16 +951,18 @@ test('artifact share set has no --version of its own; the flag still shows the C
 });
 
 test('artifact share answers what the API answered, and a 404 exits 4', async () => {
-  const publication = {
+  const publishedArtifact = {
     allowedAudience: 'public',
     url: 'https://k3x9ab-acme.jinapp.net/Xy7Qm2PaLk9W',
     publishedVersion: { id: '6512a1c2d3e4f5a6b7c8d9d3', version: 2, title: '八月报告.html' },
     banned: false,
-    canUseInternal: true
+    canUseInternal: true,
+    accountName: '小金培训',
+    canUseArtifactUrl: true
   };
   const answering = {
     async request<T>(): Promise<T> {
-      return publication as T;
+      return publishedArtifact as T;
     }
   };
   const shown = await cli(['artifact', 'share', 'get', 'Xy7Qm2PaLk9W', '--output', 'json'], {
@@ -968,7 +970,7 @@ test('artifact share answers what the API answered, and a 404 exits 4', async ()
     client: answering
   });
   assert.equal(shown.exitCode, 0);
-  assert.deepEqual(JSON.parse(shown.stdout), publication);
+  assert.deepEqual(JSON.parse(shown.stdout), publishedArtifact);
 
   const missing = {
     async request<T>(): Promise<T> {

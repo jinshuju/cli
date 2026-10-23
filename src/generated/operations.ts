@@ -66,7 +66,6 @@ export type OperationId =
   | 'estimateSmsTask'
   | 'estimateSmsTaskChange'
   | 'estimateSmsTaskResend'
-  | 'getArtifactPublication'
   | 'getBillingAccount'
   | 'getCheckinCampaign'
   | 'getCurrentUser'
@@ -86,6 +85,7 @@ export type OperationId =
   | 'getManuallyCloseRule'
   | 'getNotificationRule'
   | 'getOpensearchQuery'
+  | 'getPublishedArtifact'
   | 'getRoutine'
   | 'getSmsTask'
   | 'getTable'
@@ -153,7 +153,6 @@ export type OperationId =
   | 'summarizeTableEntries'
   | 'summarizeTableViewEntries'
   | 'updateAccessPolicy'
-  | 'updateArtifactPublication'
   | 'updateCheckinCampaign'
   | 'updateEntry'
   | 'updateEntryComment'
@@ -168,6 +167,7 @@ export type OperationId =
   | 'updateNotificationRule'
   | 'updateOpensearchQuery'
   | 'updatePredefinedChoicesSet'
+  | 'updatePublishedArtifact'
   | 'updateRoutine'
   | 'updateSmsSignature'
   | 'updateSmsTask'
@@ -835,11 +835,6 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'view_token', in: 'query', schema: { type: 'string' } }
     ]
   },
-  getArtifactPublication: {
-    method: 'GET',
-    path: '/artifacts/{id}/publication',
-    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
-  },
   getBillingAccount: { method: 'GET', path: '/billing_account', parameters: [] },
   getCheckinCampaign: {
     method: 'GET',
@@ -959,6 +954,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/opensearch/queries/{query_token}',
     parameters: [{ name: 'query_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getPublishedArtifact: {
+    method: 'GET',
+    path: '/artifacts/{id}/published_artifact',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getRoutine: {
     method: 'GET',
@@ -1653,12 +1653,6 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'AccessPolicyInput' } } }
   },
-  updateArtifactPublication: {
-    method: 'PUT',
-    path: '/artifacts/{id}/publication',
-    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-    body: { required: true, content: { 'application/json': { $ref: 'ArtifactPublicationInput' } } }
-  },
   updateCheckinCampaign: {
     method: 'PATCH',
     path: '/plugins/checkin/campaigns/{id}',
@@ -1792,6 +1786,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         }
       }
     }
+  },
+  updatePublishedArtifact: {
+    method: 'PUT',
+    path: '/artifacts/{id}/published_artifact',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'PublishedArtifactInput' } } }
   },
   updateRoutine: {
     method: 'PATCH',
@@ -2024,15 +2024,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     additionalProperties: false,
     required: ['value', 'score'],
     properties: { value: {}, score: { type: 'number' } }
-  },
-  ArtifactPublicationInput: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['allowedAudience'],
-    properties: {
-      allowedAudience: { type: 'string', enum: ['private', 'internal', 'public'] },
-      versionId: { type: 'string' }
-    }
   },
   AttachmentFieldInput: {
     type: 'object',
@@ -4272,6 +4263,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['label', 'choices'],
     properties: { label: { type: 'string' }, choices: { type: 'array', items: { type: 'string' } } },
     additionalProperties: false
+  },
+  PublishedArtifactInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['allowedAudience'],
+    properties: {
+      allowedAudience: { type: 'string', enum: ['private', 'internal', 'public'] },
+      versionId: { type: 'string' }
+    }
   },
   RadioButtonInput: {
     type: 'object',

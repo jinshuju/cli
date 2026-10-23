@@ -5106,7 +5106,7 @@ paths:
                 $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-  "/artifacts/{id}/publication":
+  "/artifacts/{id}/published_artifact":
     parameters:
     - name: id
       in: path
@@ -5118,7 +5118,7 @@ paths:
       tags:
       - Artifacts
       summary: Show how an artifact is shared
-      operationId: getArtifactPublication
+      operationId: getPublishedArtifact
       description: |
         Returns the artifact's share link and who can open it; the first call creates the link, open to its owner only.
         OAuth scope: share_artifacts
@@ -5128,7 +5128,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArtifactPublication'
+                $ref: '#/components/schemas/PublishedArtifact'
         '400':
           description: An account access token has no user to share for
           content:
@@ -5159,7 +5159,7 @@ paths:
       tags:
       - Artifacts
       summary: Change who can open an artifact's share link
-      operationId: updateArtifactPublication
+      operationId: updatePublishedArtifact
       description: |
         Sets who can open the share link and which version it shows; the change takes effect at once.
         OAuth scope: share_artifacts
@@ -5168,14 +5168,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArtifactPublicationInput'
+              $ref: '#/components/schemas/PublishedArtifactInput'
       responses:
         '200':
           description: The share after the change
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArtifactPublication'
+                $ref: '#/components/schemas/PublishedArtifact'
         '400':
           description: The body is invalid, or an account access token has no user to share for
           content:
@@ -5185,7 +5185,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          description: The current plan does not include API v1, or `internal` needs a plan with account member access
+          description: The current plan does not include API v1, sharing beyond `private` needs a plan with online links (`artifact_url`), or `internal` needs a plan with members-only sharing (`artifact_sub_account_audience_only`)
           content:
             application/json:
               schema:
@@ -12479,8 +12479,8 @@ components:
           type: string
           description: MIME type, defaults to the one in the data URI prefix, otherwise `application/octet-stream`
       additionalProperties: false
-    ArtifactPublicationInput:
-      title: ArtifactPublicationInput
+    PublishedArtifactInput:
+      title: PublishedArtifactInput
       type: object
       additionalProperties: false
       required:
@@ -12495,8 +12495,8 @@ components:
           description: "`private` only the owner, `internal` members of the account, `public` anyone with the link"
         versionId:
           type: string
-          description: Id or token of the version visitors see; defaults to the version in the path
-    ArtifactPublication:
+          description: Id or token of the version visitors see; defaults to the version in the path, except that setting `private` keeps the version already shown
+    PublishedArtifact:
       type: object
       required:
       - allowedAudience
@@ -12535,7 +12535,13 @@ components:
           description: The link was stopped for its content and opens to no one
         canUseInternal:
           type: boolean
-          description: The account's plan allows `internal`
+          description: The account's plan or trial includes members-only sharing (`artifact_sub_account_audience_only`); without it, `internal` cannot be set
+        accountName:
+          type: string
+          description: Name of the account the share belongs to, whose members `internal` lets in
+        canUseArtifactUrl:
+          type: boolean
+          description: The account's plan or trial includes online links (`artifact_url`); without it, only `private` can be set and the link shows as expired
     Folder:
       type: object
       required:
