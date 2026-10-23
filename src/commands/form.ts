@@ -338,12 +338,21 @@ export const FORM: readonly Command[] = [
     args: [{ name: 'form', required: true, description: 'Form token to copy' }],
     options: [
       { name: '--name', type: 'string', placeholder: '<name>', description: 'Name for the copy' },
-      FOLDER_OPTION
+      FOLDER_OPTION,
+      {
+        name: '--with-notification-rules',
+        type: 'boolean',
+        description: 'Also copy the notification rules; needs manage permission on the form'
+      }
     ],
     request: (input) =>
       call('copyForm', {
         path: { form_token: input.args.form },
-        body: given({ name: input.options.name, folder_token: input.options.folder })
+        body: given({
+          name: input.options.name,
+          folder_token: input.options.folder,
+          with_notification_rules: input.options.with_notification_rules ? true : undefined
+        })
       })
   },
   {

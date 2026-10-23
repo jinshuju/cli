@@ -99,7 +99,7 @@ tags:
 - name: Contacts
   description: Contacts.
 - name: Account
-  description: 'Current user and account: members, e-invoices, payment history, SMS signatures and templates.'
+  description: 'Current user and account: members, e-invoices, payment history, SMS signatures and templates, SMTP accounts.'
 - name: Trade
   description: '小金商户: merchant and onboarding progress, payment orders, transaction statistics, refunds and payouts.'
 - name: Uploads
@@ -2542,6 +2542,796 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/estimate":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    get:
+      tags:
+      - Entries
+      summary: Estimate an SMS task
+      operationId: estimateSmsTask
+      description: |
+        Picks the entries an SMS task would send to and counts the messages it would charge, without sending anything.
+        OAuth scope: read_entries
+        - `POST /forms/{form_token}/sms_tasks` with the same parameters picks the entries again when it runs, so its count changes if they changed in between.
+        - A cooperator picks only the entries visible to their role.
+      parameters:
+      - $ref: '#/components/parameters/EntryTaskEntryField'
+      - $ref: '#/components/parameters/EntriesFilters'
+      - $ref: '#/components/parameters/EntriesKeyword'
+      - $ref: '#/components/parameters/EntryTaskViewToken'
+      - $ref: '#/components/parameters/EntryTaskSelectAll'
+      - name: sms_template_id
+        in: query
+        required: true
+        description: SMS template to send with (`id` from `GET /sms/templates`)
+        schema:
+          type: string
+      - name: placeholder_keys
+        in: query
+        required: false
+        description: The same as `placeholder_keys` of `POST /forms/{form_token}/sms_tasks`, one `placeholder_keys[]=` per variable
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: SMS task estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMSTaskEstimate'
+        '400':
+          description: 'Invalid parameters, including: nothing narrows the entries and `select_all` is not true, `filters` has a `creator_id` condition or `serial_number` conditions matching no entry, `entry_field` is not a mobile field the caller can read, or the SMS template or its signature failed review'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, the view or the SMS template does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    get:
+      tags:
+      - Entries
+      summary: List SMS tasks
+      operationId: listSmsTasks
+      description: |
+        Lists the SMS tasks of this form.
+        OAuth scope: read_entries
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: Return only the tasks in this status
+        schema:
+          type: string
+          enum:
+          - template_checking
+          - content_auditing
+          - approved
+          - rejected
+          - waiting_for_send
+          - sending
+          - all_sent
+          - partial_sent
+          - none_sent
+          - template_fail
+          - revoked
+          - template_deleted
+      - $ref: '#/components/parameters/EntryTaskLimit'
+      - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: SMS tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTaskListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+      - Entries
+      summary: Send SMS to entries
+      operationId: createSmsTask
+      description: |
+        Creates an SMS task that sends a template message to each entry picked.
+        OAuth scope: write_entries
+        - Estimate first with `GET /forms/{form_token}/sms_tasks/estimate` and send with the same parameters; the entries are picked again when this runs.
+        - The task may wait in `template_checking` or `content_auditing` while the template or content is under review, and sends once approved.
+        - When the estimate's `can_send` is false the task is still created, and when sending finds the quota and balance short it stops, ending `none_sent` or `partial_sent` with the reason in `failed_reason`.
+        - Sent messages cannot be recalled, and retrying a request that succeeded sends again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SMSTaskCreateInput'
+      responses:
+        '201':
+          description: Created; returns the task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '400':
+          description: Any 400 case of the estimate, `send_at` not a future time, or no entry to send to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, the view or the SMS template does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/{id}":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: Show an SMS task
+      operationId: getSmsTask
+      description: |
+        Returns an SMS task of this form with its status and sending progress.
+        OAuth scope: read_entries
+      responses:
+        '200':
+          description: SMS task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+      - Entries
+      summary: Revoke an SMS task, or change one whose template failed review and send it again
+      operationId: updateSmsTask
+      description: |
+        Revokes an SMS task that has not started sending, or changes a `template_fail` task and sends it again, keeping its `id`.
+        OAuth scope: write_entries
+        - `revoked: true` revokes a `waiting_for_send` or `content_auditing` task so it never sends.
+        - Otherwise the body changes a `template_fail` task, keeping its entries. Estimate first with `GET /forms/{form_token}/sms_tasks/{id}/estimate`.
+        - A changed task goes through review and sending as one created by `POST /forms/{form_token}/sms_tasks`; sent messages cannot be recalled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SMSTaskUpdateInput'
+      responses:
+        '200':
+          description: The task after the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '400':
+          description: The task's status does not allow the change, any 400 case of the change estimate, `send_at` not a future time, or a mobile number filled in its entries is not a valid one
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, the task on this form or the SMS template does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/{id}/activities":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: List an SMS task's sending results
+      operationId: listSmsTaskActivities
+      description: |
+        Lists the sending result of each mobile number an SMS task sent to.
+        OAuth scope: read_entries
+      parameters:
+      - $ref: '#/components/parameters/EntryTaskActivityStatus'
+      - name: mobile
+        in: query
+        required: false
+        description: Return only the records of this mobile number (exact match)
+        schema:
+          type: string
+      - $ref: '#/components/parameters/EntryTaskLimit'
+      - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Sending results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMSTaskActivityListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/{id}/resend/estimate":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: Estimate resending an SMS task
+      operationId: estimateSmsTaskResend
+      description: |
+        Picks the entries that resending an SMS task would send to and counts the messages it would charge, without sending anything.
+        OAuth scope: read_entries
+        - The entries are the task's entries with the `status` result in its sending results, narrowed by `filters` / `keyword` / `view_token`; no other entry is ever picked.
+        - An entry holding several numbers is picked when any of them got that result, and is sent to on all of them.
+        - `POST /forms/{form_token}/sms_tasks/{id}/resend` with the same parameters picks the entries again when it runs, so its count changes if they changed in between.
+        - A cooperator picks only the entries visible to their role.
+      parameters:
+      - $ref: '#/components/parameters/EntryTaskResendStatus'
+      - $ref: '#/components/parameters/EntriesFilters'
+      - $ref: '#/components/parameters/EntriesKeyword'
+      - $ref: '#/components/parameters/EntryTaskViewToken'
+      responses:
+        '200':
+          description: Estimate of resending the SMS task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMSTaskEstimate'
+        '400':
+          description: Invalid filters, no entry of the task got that result, or the filters leave none of them; a `template_fail` task was never sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/{id}/resend":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    post:
+      tags:
+      - Entries
+      summary: Resend an SMS task
+      operationId: resendSmsTask
+      description: |
+        Sends an SMS task again as a new task, to its entries with a given result in its sending results.
+        OAuth scope: write_entries
+        - Estimate first with `GET /forms/{form_token}/sms_tasks/{id}/resend/estimate` and send with the same parameters; the entries are picked again when this runs.
+        - The new task keeps the original's template, `entry_field` and `placeholder_keys` and is sent as by `POST /forms/{form_token}/sms_tasks`; the original task is left unchanged.
+        - Sent messages cannot be recalled, and retrying a request that succeeded sends again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryTaskResendInput'
+      responses:
+        '201':
+          description: Created; returns the new task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '400':
+          description: Any 400 case of the resend estimate, or no entry to send to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/{id}/estimate":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: Estimate changing an SMS task whose template failed review
+      operationId: estimateSmsTaskChange
+      description: |
+        Estimates changing a `template_fail` SMS task and sending it again, without changing or sending anything.
+        OAuth scope: read_entries
+        - Counts the entries the task holds without reading them: content with variables gives a lower bound (`at_least`), and a table column `entry_field` gives null numbers and cost.
+      parameters:
+      - name: entry_field
+        in: query
+        required: false
+        description: The same as `entry_field` of `PATCH /forms/{form_token}/sms_tasks/{id}`; omitted, the task's current `entry_field`
+        schema:
+          type: string
+        example: field_2
+      - name: sms_template_id
+        in: query
+        required: true
+        description: SMS template to send with (`id` from `GET /sms/templates`)
+        schema:
+          type: string
+      - name: placeholder_keys
+        in: query
+        required: false
+        description: The same as `placeholder_keys` of `PATCH /forms/{form_token}/sms_tasks/{id}`, one `placeholder_keys[]=` per variable
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: Estimate of changing the SMS task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMSTaskEstimate'
+        '400':
+          description: The task is not `template_fail`, `entry_field` is not a mobile field the caller can read, or the SMS template or its signature failed review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, the task on this form or the SMS template does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/sms_tasks/{id}/auto_send":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    patch:
+      tags:
+      - Entries
+      summary: Send an SMS task created with auto_send false
+      operationId: sendSmsTask
+      description: |
+        Sends a task created with `auto_send` false once it has passed review, to the entries fixed at creation; a task given `send_at` waits until then.
+        OAuth scope: write_entries
+      responses:
+        '200':
+          description: The task after it starts sending, or after it is scheduled for its `send_at`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '400':
+          description: The task was not created with `auto_send` false, has not passed review, is already sending, or a mobile number filled in its entries is not a valid one
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/email_tasks/estimate":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    get:
+      tags:
+      - Entries
+      summary: Estimate an email task
+      operationId: estimateEmailTask
+      description: |
+        Picks the entries an email task would send to and checks the quota, without sending anything.
+        OAuth scope: read_entries
+        - `POST /forms/{form_token}/email_tasks` with the same parameters picks the entries again when it runs, so its count changes if they changed in between.
+        - A cooperator picks only the entries visible to their role.
+      parameters:
+      - $ref: '#/components/parameters/EntryTaskEntryField'
+      - $ref: '#/components/parameters/EntriesFilters'
+      - $ref: '#/components/parameters/EntriesKeyword'
+      - $ref: '#/components/parameters/EntryTaskViewToken'
+      - $ref: '#/components/parameters/EntryTaskSelectAll'
+      - $ref: '#/components/parameters/SMTPAccountId'
+      responses:
+        '200':
+          description: Email task estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTaskEstimate'
+        '400':
+          description: 'Invalid parameters, including: nothing narrows the entries and `select_all` is not true, `filters` has a `creator_id` condition or `serial_number` conditions matching no entry, or `entry_field` is not an email field the caller can read'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, the view or the SMTP account does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/email_tasks":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    get:
+      tags:
+      - Entries
+      summary: List email tasks
+      operationId: listEmailTasks
+      description: |
+        Lists the email tasks of this form.
+        OAuth scope: read_entries
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: Return only the tasks in this status
+        schema:
+          type: string
+          enum:
+          - waiting_for_send
+          - sending
+          - all_sent
+          - partial_sent
+          - none_sent
+      - $ref: '#/components/parameters/EntryTaskLimit'
+      - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Email tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTaskListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+      - Entries
+      summary: Send email to entries
+      operationId: createEmailTask
+      description: |
+        Creates an email task that sends an email to each entry picked, starting right away.
+        OAuth scope: write_entries
+        - Estimate first with `GET /forms/{form_token}/email_tasks/estimate` and send with the same parameters; the entries are picked again when this runs.
+        - When the estimate's `can_send` is false the task is still created, and when sending finds the quota and balance short it stops, ending `none_sent` or `partial_sent` with the reason in `failed_reason`.
+        - Sent emails cannot be recalled, and retrying a request that succeeded sends again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailTaskCreateInput'
+      responses:
+        '201':
+          description: Created; returns the task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '400':
+          description: Any 400 case of the estimate, `content` referring to a field the form does not have, or no entry to send to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, the view or the SMTP account does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/email_tasks/{id}":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: Show an email task
+      operationId: getEmailTask
+      description: |
+        Returns an email task of this form with its status and sending progress.
+        OAuth scope: read_entries
+      responses:
+        '200':
+          description: Email task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/email_tasks/{id}/activities":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: List an email task's sending results
+      operationId: listEmailTaskActivities
+      description: |
+        Lists the sending result of each entry an email task sent to.
+        OAuth scope: read_entries
+      parameters:
+      - $ref: '#/components/parameters/EntryTaskActivityStatus'
+      - name: email
+        in: query
+        required: false
+        description: Return only the records whose `email` includes this address (exact match)
+        schema:
+          type: string
+      - $ref: '#/components/parameters/EntryTaskLimit'
+      - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Sending results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTaskActivityListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/email_tasks/{id}/resend/estimate":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    get:
+      tags:
+      - Entries
+      summary: Estimate resending an email task
+      operationId: estimateEmailTaskResend
+      description: |
+        Picks the entries that resending an email task would send to and checks the quota, without sending anything.
+        OAuth scope: read_entries
+        - The entries are the task's entries with the `status` result in its sending results, narrowed by `filters` / `keyword` / `view_token`; no other entry is ever picked.
+        - The emails go through the task's custom SMTP account, using no quota, while the account can still use it.
+        - `POST /forms/{form_token}/email_tasks/{id}/resend` with the same parameters picks the entries again when it runs, so its count changes if they changed in between.
+        - A cooperator picks only the entries visible to their role.
+      parameters:
+      - $ref: '#/components/parameters/EntryTaskResendStatus'
+      - $ref: '#/components/parameters/EntriesFilters'
+      - $ref: '#/components/parameters/EntriesKeyword'
+      - $ref: '#/components/parameters/EntryTaskViewToken'
+      responses:
+        '200':
+          description: Estimate of resending the email task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTaskEstimate'
+        '400':
+          description: Invalid filters, no entry of the task got that result, or the filters leave none of them
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/email_tasks/{id}/resend":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/EntryTaskId'
+    post:
+      tags:
+      - Entries
+      summary: Resend an email task
+      operationId: resendEmailTask
+      description: |
+        Sends an email task again as a new task, to its entries with a given result in its sending results.
+        OAuth scope: write_entries
+        - Estimate first with `GET /forms/{form_token}/email_tasks/{id}/resend/estimate` and send with the same parameters; the entries are picked again when this runs.
+        - The new task keeps the original's `entry_field`, subject, body and custom SMTP account and is sent as by `POST /forms/{form_token}/email_tasks`; the original task is left unchanged.
+        - Sent emails cannot be recalled, and retrying a request that succeeded sends again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryTaskResendInput'
+      responses:
+        '201':
+          description: Created; returns the new task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryTask'
+        '400':
+          description: Any 400 case of the resend estimate, or no entry to send to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/EntryTaskForbidden'
+        '404':
+          description: The form, or the task on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
   "/form_image_attachments":
@@ -5429,6 +6219,32 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/smtp_accounts":
+    get:
+      tags:
+      - Account
+      summary: List SMTP accounts
+      operationId: listSmtpAccounts
+      description: |
+        Lists the verified custom SMTP accounts the account can send email through.
+        OAuth scope: users
+        - The list is empty when the plan does not include custom SMTP.
+        - Every member gets the same list; admin is not required.
+      responses:
+        '200':
+          description: SMTP accounts the account can send email through
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMTPAccountListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/jamr_v":
     get:
       tags:
@@ -6470,7 +7286,7 @@ components:
       description: |
         `Authorization: Bearer ACCESS_TOKEN`. Accepts personal access tokens, account access tokens (Enterprise plan) and OAuth 2.0 tokens.
         OAuth tokens can call only the endpoints their scopes allow: `forms` (forms / tables / views / folders / public queries / templates), `form_setting` (form settings, predefined choice sets),
-        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, license image uploads), `routines` (routines and their runs), `public` (everything else).
+        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `public` (everything else).
   parameters:
     FormToken:
       name: form_token
@@ -6572,7 +7388,7 @@ components:
         - For `between` / `not_between`, `value` is a two-element array `[min, max]`; matrix / table fields need `{"<column api_code>": [min, max]}`.
         - `within_last` works only on date fields; `value` looks like `{"unit":"day","n":30}` (unit can be minute / day / week / month).
         - `creator_id` is a special field that filters by submitter with `eq` (the value is a user id), and can appear only once.
-        - `serial_number` is a special field that filters by serial number with `eq` / `any_in`; several conditions are intersected.
+        - `serial_number` is a special field that filters by serial number with `eq` / `any_in` / `none_in` (`none_in` leaves the listed entries out, as unticking rows after selecting all in the web app); several conditions are intersected.
         - For a relation field (RelationField), the `value` of `any_in` / `none_in` is serial numbers of entries in the related table; returns 400 when a serial number does not exist.
         - With a `created_at` condition, results are sorted by creation time instead.
       content:
@@ -6801,6 +7617,79 @@ components:
       description: Import job ID (the `job_id` returned when the import was created)
       schema:
         type: string
+    EntryTaskEntryField:
+      name: entry_field
+      in: query
+      required: true
+      description: api_code of the mobile field (SMS) or email field (email) to send to, or `<table api_code>.<column api_code>` for a column of a table / matrix field
+      schema:
+        type: string
+      example: field_2
+    EntryTaskViewToken:
+      name: view_token
+      in: query
+      required: false
+      description: Pick only from the entries this view selects (`token` from `GET /forms/{form_token}/views`), narrowed further by `filters` / `keyword`
+      schema:
+        type: string
+    EntryTaskSelectAll:
+      name: select_all
+      in: query
+      required: false
+      description: Must be true to pick every entry of the form when no filter, keyword or view with filters narrows the entries; otherwise 400
+      schema:
+        type: boolean
+    EntryTaskId:
+      name: id
+      in: path
+      required: true
+      description: Task id (the `id` returned when the task was created)
+      schema:
+        type: string
+    EntryTaskLimit:
+      name: limit
+      in: query
+      required: false
+      description: Page size, at most 1000 (larger values are treated as 1000)
+      schema:
+        type: integer
+        default: 50
+    EntryTaskNext:
+      name: next
+      in: query
+      required: false
+      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page."
+      schema:
+        type: integer
+        minimum: 0
+    EntryTaskActivityStatus:
+      name: status
+      in: query
+      required: false
+      description: Return only the records with this result; omitted, both
+      schema:
+        type: string
+        enum:
+        - SUCCESS
+        - FAILED
+    EntryTaskResendStatus:
+      name: status
+      in: query
+      required: true
+      description: Send again to the task's entries with this result in its sending results, `ALL` meaning any result
+      schema:
+        type: string
+        enum:
+        - FAILED
+        - SUCCESS
+        - ALL
+    SMTPAccountId:
+      name: smtp_account_id
+      in: query
+      required: false
+      description: Custom SMTP account to send through (`id` from `GET /smtp_accounts`), using no email quota
+      schema:
+        type: string
     TradeStartDate:
       name: start_date
       in: query
@@ -6976,6 +7865,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    EntryTaskForbidden:
+      description: Insufficient OAuth scope, a role without data read rights on the form, or, for sending, an external cooperator without the `send_sms_and_email` ability (error_description shape); or the form or its creator is frozen (errors + status_code shape)
+      content:
+        application/json:
+          schema:
+            oneOf:
+            - $ref: '#/components/schemas/Error'
+            - $ref: '#/components/schemas/FormFrozenError'
     RoutineForbidden:
       description: 'Forbidden: the OAuth token lacks the `routines` scope; the credential has no current user (an account access token and the like, as routines belong to a person); the account cannot use routines yet; or Jiri running a routine tried to create, update, pause, resume, delete or run one (it can only read them).'
       content:
@@ -17429,6 +18326,500 @@ components:
           - 'null'
           format: date-time
           description: When the job finished (UTC)
+    SMSTaskCreateInput:
+      type: object
+      title: SMSTaskCreateInput
+      description: Request body of POST /forms/{form_token}/sms_tasks
+      required:
+      - entry_field
+      - sms_template_id
+      properties:
+        entry_field:
+          type: string
+          description: api_code of the mobile field to send to, or `<table api_code>.<column api_code>` for a column of a table / matrix field
+        filters:
+          description: The same as `filters` of `GET /forms/{form_token}/sms_tasks/estimate`, as JSON text or the array itself
+          oneOf:
+          - type: string
+          - type: array
+            items:
+              type: object
+        keyword:
+          type: string
+          maxLength: 200
+          description: The same as `keyword` of `GET /forms/{form_token}/sms_tasks/estimate`
+        view_token:
+          type: string
+          description: The same as `view_token` of `GET /forms/{form_token}/sms_tasks/estimate`
+        select_all:
+          type: boolean
+          description: Must be true to pick every entry of the form when no filter, keyword or view with filters narrows the entries; otherwise 400
+        sms_template_id:
+          type: string
+          description: SMS template to send with (`id` from `GET /sms/templates`)
+        placeholder_keys:
+          type: array
+          description: Field api_code filling each template variable, in order, with blank items dropped; a variable left without one is filled from the field whose api_code is its name
+          items:
+            type: string
+        send_at:
+          type: string
+          format: date-time
+          description: When to send, a future time in ISO 8601 with a time zone offset like `2026-10-21T09:00:00+08:00`; omitted, right away
+        auto_send:
+          type: boolean
+          default: true
+          description: 'false makes the task wait to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send` once it has passed review, even when the template has already passed review'
+      additionalProperties: false
+      examples:
+      - entry_field: field_2
+        filters: '[{"field":"field_3","operator":"any_in","value":["选项 A"]}]'
+        sms_template_id: 6512a3f0c1d2e3f4a5b6c7d8
+      - entry_field: field_2
+        sms_template_id: 6512a3f0c1d2e3f4a5b6c7d8
+        send_at: '2026-10-21T09:00:00+08:00'
+    EmailTaskCreateInput:
+      type: object
+      title: EmailTaskCreateInput
+      description: Request body of POST /forms/{form_token}/email_tasks
+      required:
+      - entry_field
+      - subject
+      - content
+      properties:
+        entry_field:
+          type: string
+          description: api_code of the email field to send to, or `<table api_code>.<column api_code>` for a column of a table / matrix field
+        filters:
+          description: The same as `filters` of `GET /forms/{form_token}/email_tasks/estimate`, as JSON text or the array itself
+          oneOf:
+          - type: string
+          - type: array
+            items:
+              type: object
+        keyword:
+          type: string
+          maxLength: 200
+          description: The same as `keyword` of `GET /forms/{form_token}/email_tasks/estimate`
+        view_token:
+          type: string
+          description: The same as `view_token` of `GET /forms/{form_token}/email_tasks/estimate`
+        select_all:
+          type: boolean
+          description: Must be true to pick every entry of the form when no filter, keyword or view with filters narrows the entries; otherwise 400
+        smtp_account_id:
+          type: string
+          description: Custom SMTP account to send through (`id` from `GET /smtp_accounts`), using no email quota
+        subject:
+          type: string
+          description: Email subject
+        content:
+          type: string
+          description: Email body in HTML; insert an entry's field value with `$(field_x)`
+      additionalProperties: false
+      examples:
+      - entry_field: field_5
+        view_token: Xk3pQa
+        subject: 活动通知
+        content: "<p>$(field_1) 您好，活动将于明天 9:00 开始。</p>"
+    SMSTaskEstimate:
+      type: object
+      required:
+      - matched_entries
+      - recipient_entries
+      - missing_recipient_entries
+      - recipients_count
+      - billed_sms_count
+      - at_least
+      - can_send
+      - within_quota_count
+      - over_quota_count
+      - over_quota_amount
+      properties:
+        matched_entries:
+          type: integer
+          description: Number of entries the selection matches, counted as by `GET /forms/{form_token}/entries/count`
+        recipient_entries:
+          type: integer
+          description: Matched entries whose `entry_field` holds a valid mobile number, which go into the task. For a table column, entries whose column is empty are included and get no message, as in the web app
+        missing_recipient_entries:
+          type: integer
+          description: Matched entries left out because `entry_field` is empty or not a valid mobile number; for a table column, those holding a value that is not a valid mobile number
+        recipients_count:
+          type:
+          - integer
+          - 'null'
+          description: 'Number of mobile numbers; one entry can hold several when `entry_field` is a table column. null when `entry_field` is a table column and either `recipient_entries` is over 20000 or a change of a task is estimated: the numbers are then read only as the task sends, as in the web app, which stops when the quota and balance run out'
+        billed_sms_count:
+          type:
+          - integer
+          - 'null'
+          description: 'Messages to be charged with each entry''s values filled in, counted as the SMS provider charges: up to 70 characters including `【signature】` is one, longer bodies one per 67; null when `recipients_count` is null'
+        at_least:
+          type:
+          - boolean
+          - 'null'
+          description: 'true when `billed_sms_count` is a lower bound: content with variables picked for over 20000 entries or estimated for a change of a task, or a variable filled from an associated form''s field; null when `recipients_count` is null'
+        can_send:
+          type:
+          - boolean
+          - 'null'
+          description: Whether the quota, and the balance where the plan allows paying for what the quota does not cover, covers `billed_sms_count`; null when `recipients_count` is null
+        within_quota_count:
+          type:
+          - integer
+          - 'null'
+          description: Messages of `billed_sms_count` the remaining quota (plan and purchased packages) covers; null when `recipients_count` is null
+        over_quota_count:
+          type:
+          - integer
+          - 'null'
+          description: Messages of `billed_sms_count` beyond the remaining quota, paid from the account balance where the plan allows it; null when `recipients_count` is null
+        over_quota_amount:
+          type:
+          - number
+          - 'null'
+          description: What `over_quota_count` costs from the account balance, in CNY; the remaining quota and balance are in `GET /billing_account`; null when `recipients_count` is null
+      examples:
+      - matched_entries: 130
+        recipient_entries: 128
+        missing_recipient_entries: 2
+        recipients_count: 128
+        billed_sms_count: 256
+        at_least: false
+        can_send: true
+        within_quota_count: 200
+        over_quota_count: 56
+        over_quota_amount: 3.36
+    EmailTaskEstimate:
+      type: object
+      required:
+      - matched_entries
+      - recipient_entries
+      - missing_recipient_entries
+      - recipients_count
+      - can_send
+      - within_quota_count
+      - over_quota_count
+      - over_quota_amount
+      properties:
+        matched_entries:
+          type: integer
+          description: Number of entries the selection matches, counted as by `GET /forms/{form_token}/entries/count`
+        recipient_entries:
+          type: integer
+          description: Matched entries whose `entry_field` holds a valid email address, which go into the task. For a table column, entries whose column is empty are included and get no email, as in the web app
+        missing_recipient_entries:
+          type: integer
+          description: Matched entries left out because `entry_field` is empty or not a valid email address; for a table column, those holding a value that is not a valid email address
+        recipients_count:
+          type:
+          - integer
+          - 'null'
+          description: 'Number of email addresses, one email each; one entry can hold several when `entry_field` is a table column. null when `entry_field` is a table column and `recipient_entries` is over 20000: the addresses are then read only as the task sends, as in the web app, which stops when the quota and balance run out'
+        within_quota_count:
+          type:
+          - integer
+          - 'null'
+          description: Emails of `recipients_count` the remaining quota (plan and purchased packages) covers; 0 with a custom SMTP account, which uses no quota; null when `recipients_count` is null
+        over_quota_count:
+          type:
+          - integer
+          - 'null'
+          description: Emails of `recipients_count` beyond the remaining quota, paid from the account balance where the plan allows it; 0 with a custom SMTP account; null when `recipients_count` is null
+        over_quota_amount:
+          type:
+          - number
+          - 'null'
+          description: What `over_quota_count` costs from the account balance, in CNY; the remaining quota and balance are in `GET /billing_account`; null when `recipients_count` is null
+        can_send:
+          type:
+          - boolean
+          - 'null'
+          description: Whether the quota, or balance where the plan allows, covers `recipients_count` within the daily limit of 200 (none on organization plans); null when `recipients_count` is null, otherwise always true with custom SMTP
+      examples:
+      - matched_entries: 45
+        recipient_entries: 42
+        missing_recipient_entries: 3
+        recipients_count: 42
+        can_send: true
+        within_quota_count: 42
+        over_quota_count: 0
+        over_quota_amount: 0.0
+    EntryTask:
+      type: object
+      description: An SMS or email task sending to entries of a form
+      required:
+      - id
+      - status
+      - recipient_entries
+      - failed_reason
+      - created_at
+      - sent_at
+      properties:
+        id:
+          type: string
+          description: Task id
+        status:
+          type: string
+          description: Task status, where a `template_fail` SMS task can be changed and sent again, and a `waiting_for_send` or `content_auditing` one revoked, with PATCH
+          enum:
+          - template_checking
+          - content_auditing
+          - approved
+          - rejected
+          - waiting_for_send
+          - sending
+          - all_sent
+          - partial_sent
+          - none_sent
+          - template_fail
+          - revoked
+          - template_deleted
+        recipient_entries:
+          type: integer
+          description: Number of entries in the task
+        succeeded:
+          type: integer
+          description: Entries sent successfully so far; only returned when reading one task
+        failed:
+          type: integer
+          description: Entries that failed so far; only returned when reading one task
+        failed_reason:
+          type:
+          - string
+          - 'null'
+          description: Why sending failed, e.g. the quota ran out; null when there is none
+        created_at:
+          type: string
+          format: date-time
+          description: When the task was created (UTC)
+        sent_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When sending started (UTC); null before it starts
+        auto_send:
+          type: boolean
+          description: SMS tasks only; false while a task created with `auto_send` false waits to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send`
+      examples:
+      - id: 6716f2a8c1d2e3f4a5b6c7d9
+        status: sending
+        recipient_entries: 128
+        succeeded: 100
+        failed: 0
+        failed_reason:
+        created_at: '2026-10-20T08:00:00Z'
+        sent_at: '2026-10-20T08:00:02Z'
+    EntryTaskListResponse:
+      type: object
+      required:
+      - count
+      - data
+      - next
+      properties:
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          description: Tasks, newest first
+          items:
+            $ref: '#/components/schemas/EntryTask'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
+    EntryTaskResendInput:
+      type: object
+      title: EntryTaskResendInput
+      description: Request body of POST /forms/{form_token}/sms_tasks/{id}/resend and POST /forms/{form_token}/email_tasks/{id}/resend
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - FAILED
+          - SUCCESS
+          - ALL
+          description: The same as `status` of the resend estimate
+        filters:
+          description: The same as `filters` of the resend estimate, as JSON text or the array itself
+          oneOf:
+          - type: string
+          - type: array
+            items:
+              type: object
+        keyword:
+          type: string
+          maxLength: 200
+          description: The same as `keyword` of the resend estimate
+        view_token:
+          type: string
+          description: The same as `view_token` of the resend estimate
+      additionalProperties: false
+      examples:
+      - status: FAILED
+      - status: FAILED
+        filters: '[{"field":"serial_number","operator":"none_in","value":[3,8]}]'
+    SMSTaskUpdateInput:
+      type: object
+      title: SMSTaskUpdateInput
+      description: 'Request body of PATCH /forms/{form_token}/sms_tasks/{id}; `revoked: true` alone revokes the task, the other fields change a `template_fail` task and send it again, taking `sms_template_id`; the entries stay those of the task'
+      properties:
+        revoked:
+          type: boolean
+          description: true revokes a `waiting_for_send` or `content_auditing` task so it never sends
+        entry_field:
+          type: string
+          description: api_code of the mobile field to send to, or `<table api_code>.<column api_code>` for a mobile column of a table field; omitted, the task's current `entry_field`
+        sms_template_id:
+          type: string
+          description: SMS template to send with (`id` from `GET /sms/templates`)
+        placeholder_keys:
+          type: array
+          description: Field api_code filling each template variable, in order, with blank items dropped; a variable left without one is filled from the field whose api_code is its name; omitted, the task's current `placeholder_keys`
+          items:
+            type: string
+        send_at:
+          type: string
+          format: date-time
+          description: When to send once review passes, a future time in ISO 8601 with a time zone offset like `2026-10-21T09:00:00+08:00`; omitted, right away
+        auto_send:
+          type: boolean
+          default: true
+          description: 'false makes the task wait to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send` once it has passed review, even when the template has already passed review'
+      additionalProperties: false
+      examples:
+      - revoked: true
+      - sms_template_id: 6512a3f0c1d2e3f4a5b6c7d8
+      - sms_template_id: 6512a3f0c1d2e3f4a5b6c7d8
+        send_at: '2026-10-21T09:00:00+08:00'
+        auto_send: false
+    SMSTaskActivity:
+      type: object
+      description: The result of sending an SMS task to one mobile number
+      required:
+      - serial_number
+      - mobile
+      - status
+      - error
+      - created_at
+      properties:
+        serial_number:
+          type:
+          - integer
+          - 'null'
+          description: Serial number of the entry the number came from; null when the entry no longer exists
+        mobile:
+          type: string
+          description: Mobile number sent to
+        status:
+          type: string
+          description: Sending result; see `error` when `FAILED`
+          enum:
+          - SUCCESS
+          - FAILED
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why sending failed, e.g. the quota ran out or the number was rejected by the SMS provider; null when it succeeded
+        created_at:
+          type: string
+          format: date-time
+          description: When it was sent (UTC)
+      examples:
+      - serial_number: 36
+        mobile: '13800000001'
+        status: SUCCESS
+        error:
+        created_at: '2026-10-20T08:00:03Z'
+    EmailTaskActivity:
+      type: object
+      description: The result of sending an email task to one entry
+      required:
+      - serial_number
+      - email
+      - status
+      - error
+      - created_at
+      properties:
+        serial_number:
+          type:
+          - integer
+          - 'null'
+          description: Serial number of the entry; null when the entry no longer exists
+        email:
+          type: array
+          description: The entry's email addresses the email went to
+          items:
+            type: string
+        status:
+          type: string
+          description: Sending result; see `error` when `FAILED`
+          enum:
+          - SUCCESS
+          - FAILED
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why sending failed, e.g. the quota ran out; null when it succeeded
+        created_at:
+          type: string
+          format: date-time
+          description: When it was sent (UTC)
+      examples:
+      - serial_number: 36
+        email:
+        - someone@example.com
+        status: SUCCESS
+        error:
+        created_at: '2026-10-20T08:00:03Z'
+    SMSTaskActivityListResponse:
+      type: object
+      required:
+      - count
+      - data
+      - next
+      properties:
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          description: One record per mobile number, in the order they were sent
+          items:
+            $ref: '#/components/schemas/SMSTaskActivity'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
+    EmailTaskActivityListResponse:
+      type: object
+      required:
+      - count
+      - data
+      - next
+      properties:
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          description: One record per entry, in the order they were sent
+          items:
+            $ref: '#/components/schemas/EmailTaskActivity'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
     TimeOfDay:
       type: object
       required:
@@ -18873,6 +20264,37 @@ components:
           - integer
           - 'null'
           description: Row offset of the next page; null on the last page
+    SMTPAccountListResponse:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          type: array
+          description: SMTP accounts the account can send email through
+          items:
+            $ref: '#/components/schemas/SMTPAccount'
+      examples:
+      - data:
+        - id: 6512a3f0c1d2e3f4a5b6c7d9
+          name: Jinshuju Events
+          email: events@example.com
+    SMTPAccount:
+      type: object
+      required:
+      - id
+      - name
+      - email
+      properties:
+        id:
+          type: string
+          description: SMTP account id; pass it as `smtp_account_id` when sending email to entries
+        name:
+          type: string
+          description: Sender name the emails go out under
+        email:
+          type: string
+          description: Sender email address
     BillingAccountInvoice:
       type: object
       required:

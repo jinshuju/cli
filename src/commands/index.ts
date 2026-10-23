@@ -11,6 +11,7 @@
 import { ACCOUNT } from './account.js';
 import { CHECKIN } from './checkin.js';
 import { COMMENT } from './comment.js';
+import { EMAIL } from './email.js';
 import { ENTRY } from './entry.js';
 import { FIELD } from './field.js';
 import { FILL } from './fill.js';
@@ -95,7 +96,8 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'transaction', summary: 'Payment orders placed on payment forms' },
   { name: 'refund', summary: 'Refunds of payment orders' },
   { name: 'payout', summary: 'Payouts to the settlement account' },
-  { name: 'sms', summary: 'Manage SMS signatures and templates' },
+  { name: 'sms', summary: 'Manage SMS signatures and templates, and send SMS to entries' },
+  { name: 'email', summary: 'Send email to entries' },
   { name: 'config', summary: 'Manage CLI configuration' }
 ];
 
@@ -115,7 +117,8 @@ export const COMMANDS: readonly Command[] = [
   ...CHECKIN,
   ...FILL,
   ...TRADE,
-  ...SMS
+  ...SMS,
+  ...EMAIL
 ];
 
 /** The command whose path the words begin with, longest match first. */

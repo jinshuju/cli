@@ -1,5 +1,7 @@
 import type { HttpRequest } from '../http.js';
 import {
+  FILTER_OPTION,
+  FILTERS_OPTION,
   UsageError,
   parseFilter,
   parseSort,
@@ -148,4 +150,86 @@ export function requiredOption(input: CommandInput, key: string): string {
   const value = input.options[key] as string | undefined;
   if (!value) throw new UsageError(`--${key.replace(/_/g, '-')} is required`);
   return value;
+}
+
+/** Sending to entries belongs to a form: the API has no table counterpart. */
+export const FORM_OPTION: OptionSpec = {
+  name: '--form',
+  type: 'string',
+  placeholder: '<token>',
+  description: 'Form token, six letters and digits, e.g. Kp7mQ2'
+};
+
+/** The entries a send picks, narrowed the way `entry count` narrows them. */
+export const NARROWING_OPTIONS: readonly OptionSpec[] = [
+  { name: '--keyword', type: 'string', placeholder: '<kw>', description: 'Search every searchable field at once' },
+  {
+    name: '--view',
+    type: 'string',
+    placeholder: '<view>',
+    description: 'Only the entries this view shows; a filter narrows them further'
+  },
+  FILTER_OPTION,
+  FILTERS_OPTION
+];
+
+/**
+ * The API answers 400 rather than send to a whole form nothing narrowed, so
+ * every entry is asked for out loud.
+ */
+export const SELECT_ALL_OPTION: OptionSpec = {
+  name: '--select-all',
+  type: 'boolean',
+  description: 'Every entry of the form; needed when no filter, keyword or view narrows them'
+};
+
+export const ESTIMATE_OPTION: OptionSpec = {
+  name: '--estimate',
+  type: 'boolean',
+  description: 'Estimate what it would send and cost, and send nothing'
+};
+
+export const SEND_OPTION: OptionSpec = { name: '--yes', type: 'boolean', description: 'Confirm the sending' };
+
+/** The narrowing as a read sends it, the conditions as JSON text. */
+export function narrowingQuery(input: CommandInput): Record<string, string | undefined> {
+  return {
+    filters: filters(input),
+    keyword: input.options.keyword as string | undefined,
+    view_token: input.options.view as string | undefined
+  };
+}
+
+/** The narrowing as a write sends it, the conditions as they are. */
+export function narrowingBody(input: CommandInput): Record<string, unknown> {
+  return {
+    filters: filterConditions(input),
+    keyword: input.options.keyword as string | undefined,
+    view_token: input.options.view as string | undefined
+  };
+}
+
+export function selectAll(input: CommandInput): true | undefined {
+  return input.options.select_all ? true : undefined;
+}
+
+/**
+ * A send uses quota and cannot be recalled. Nothing here prompts, so the
+ * sending is a flag, and leaving it out sends nothing.
+ */
+export function sendingConfirmed(input: CommandInput, what: string): void {
+  if (!input.options.yes) throw new UsageError(`${what} uses quota and cannot be recalled; pass --yes to send`);
+}
+
+/** Whether to estimate instead of sending; a send still wants its --yes. */
+export function estimating(input: CommandInput, what: string): boolean {
+  if (input.options.estimate && input.options.yes)
+    throw new UsageError('--estimate and --yes are alternatives, not both');
+  if (input.options.estimate) return true;
+  if (!input.options.yes) {
+    throw new UsageError(
+      `${what} uses quota and cannot be recalled; pass --estimate to see what it takes, or --yes to send`
+    );
+  }
+  return false;
 }

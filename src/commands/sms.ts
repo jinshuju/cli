@@ -2,7 +2,24 @@ import type { HttpClient } from '../http.js';
 import { PAGINATION_OPTIONS, UsageError, type OptionSpec } from '../options.js';
 import { progress } from '../progress.js';
 import { bodyChoices, call, choices } from '../spec.js';
-import { confirmed, LISTING, paging, YES_OPTION } from './shared.js';
+import {
+  confirmed,
+  ESTIMATE_OPTION,
+  estimating,
+  FORM_OPTION,
+  given,
+  LISTING,
+  NARROWING_OPTIONS,
+  narrowingBody,
+  narrowingQuery,
+  paging,
+  requiredOption as required,
+  SELECT_ALL_OPTION,
+  selectAll,
+  SEND_OPTION,
+  sendingConfirmed,
+  YES_OPTION
+} from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { upload } from './upload.js';
 import { basename } from 'node:path';
@@ -102,6 +119,55 @@ async function signatureMaterials(input: CommandInput, client: HttpClient): Prom
     if (file) body[key] = await uploadLicense(client, file);
   }
   return body;
+}
+
+const MOBILE_FIELD_OPTION: OptionSpec = {
+  name: '--field',
+  type: 'string',
+  placeholder: '<api_code>',
+  description: 'Mobile field to send to; a table column as <table api_code>.<column api_code>'
+};
+
+const TEMPLATE_ID_OPTION: OptionSpec = {
+  name: '--template-id',
+  type: 'string',
+  placeholder: '<id>',
+  description: 'Template to send, from `sms template list`'
+};
+
+const TIMING_OPTIONS: readonly OptionSpec[] = [
+  {
+    name: '--placeholder',
+    type: 'string',
+    repeatable: true,
+    placeholder: '<api_code>',
+    description:
+      'Field filling the next template variable, repeatable in variable order; a variable without one takes the ' +
+      'field whose api_code is its name'
+  },
+  {
+    name: '--send-at',
+    type: 'string',
+    placeholder: '<time>',
+    description: 'Send at this future time, ISO 8601 with a time zone offset, e.g. 2026-10-24T09:00:00+08:00'
+  },
+  { name: '--manual', type: 'boolean', description: 'Wait to be sent with `sms task send` once it passes review' }
+];
+
+const TASK_ARG = [{ name: 'id', required: true, description: 'Task id, from `sms task list`' }];
+
+function placeholders(input: CommandInput): string[] | undefined {
+  const keys = (input.options.placeholder as string[] | undefined) ?? [];
+  return keys.length > 0 ? keys : undefined;
+}
+
+/** When and how it sends, only as far as the flags say. */
+function timing(input: CommandInput): Record<string, unknown> {
+  return {
+    placeholder_keys: placeholders(input),
+    send_at: input.options.send_at as string | undefined,
+    auto_send: input.options.manual ? false : undefined
+  };
 }
 
 /** Only the keys whose flags were given, so an update leaves the rest as it was. */
@@ -361,5 +427,207 @@ export const SMS: readonly Command[] = [
       return call('deleteSmsTemplate', { path: { id: input.args.id } });
     },
     examples: ['jinshuju sms template delete 6512a1c2d3e4f5a6b7c8d9e0 --yes']
+  },
+  {
+    path: ['sms', 'send'],
+    summary: 'Send an SMS template to the entries of a form',
+    description:
+      'Picks the entries the way `entry count` narrows them, or the whole form with --select-all, and sends to the ' +
+      'mobile field --field names. --estimate answers how many entries and numbers it reaches, how many are missing ' +
+      'a number, the SMS it bills and whether the quota covers them, and sends nothing; --yes sends. The entries are ' +
+      'picked again when it sends, so a change in between changes what goes out. A template still under review is ' +
+      'taken, and the task waits for it.',
+    options: [
+      FORM_OPTION,
+      MOBILE_FIELD_OPTION,
+      TEMPLATE_ID_OPTION,
+      ...TIMING_OPTIONS,
+      ...NARROWING_OPTIONS,
+      SELECT_ALL_OPTION,
+      ESTIMATE_OPTION,
+      SEND_OPTION
+    ],
+    request: (input) => {
+      const path = { form_token: required(input, 'form') };
+      const entry_field = required(input, 'field');
+      const sms_template_id = required(input, 'template_id');
+      if (estimating(input, 'Sending SMS')) {
+        return call('estimateSmsTask', {
+          path,
+          query: {
+            entry_field,
+            ...narrowingQuery(input),
+            select_all: selectAll(input),
+            sms_template_id,
+            placeholder_keys: placeholders(input)
+          }
+        });
+      }
+      return call('createSmsTask', {
+        path,
+        body: given({
+          entry_field,
+          ...narrowingBody(input),
+          select_all: selectAll(input),
+          sms_template_id,
+          ...timing(input)
+        })
+      });
+    },
+    examples: [
+      "jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --filter 'field_5 eq 已报名' --estimate",
+      "jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --filter 'field_5 eq 已报名' --yes",
+      'jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --select-all ' +
+        '--send-at 2026-10-24T09:00:00+08:00 --yes'
+    ]
+  },
+  {
+    path: ['sms', 'task', 'list'],
+    summary: "List a form's SMS tasks, newest first",
+    description: 'Without how many numbers succeeded or failed: `sms task get` has those.',
+    options: [
+      FORM_OPTION,
+      {
+        name: '--status',
+        type: 'string',
+        choices: choices('listSmsTasks', 'status'),
+        placeholder: '<status>',
+        description: 'Only the tasks in this status'
+      },
+      ...PAGINATION_OPTIONS
+    ],
+    request: (input) =>
+      call('listSmsTasks', {
+        path: { form_token: required(input, 'form') },
+        query: { status: input.options.status as string | undefined, ...paging(input) }
+      }),
+    paginate: LISTING,
+    examples: ['jinshuju sms task list --form Kp7mQ2', 'jinshuju sms task list --form Kp7mQ2 --status template_fail']
+  },
+  {
+    path: ['sms', 'task', 'get'],
+    summary: 'Show an SMS task and how many numbers succeeded or failed so far',
+    args: TASK_ARG,
+    options: [FORM_OPTION],
+    request: (input) => call('getSmsTask', { path: { form_token: required(input, 'form'), id: input.args.id } }),
+    examples: ['jinshuju sms task get 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2']
+  },
+  {
+    path: ['sms', 'task', 'activities'],
+    summary: 'List the sending result of each number an SMS task sent to',
+    args: TASK_ARG,
+    options: [
+      FORM_OPTION,
+      {
+        name: '--status',
+        type: 'string',
+        choices: choices('listSmsTaskActivities', 'status'),
+        placeholder: '<status>',
+        description: 'Only the numbers with this result; both when omitted'
+      },
+      { name: '--mobile', type: 'string', placeholder: '<mobile>', description: 'Only this number' },
+      ...PAGINATION_OPTIONS
+    ],
+    request: (input) =>
+      call('listSmsTaskActivities', {
+        path: { form_token: required(input, 'form'), id: input.args.id },
+        query: {
+          status: input.options.status as string | undefined,
+          mobile: input.options.mobile as string | undefined,
+          ...paging(input)
+        }
+      }),
+    paginate: LISTING,
+    examples: ['jinshuju sms task activities 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED']
+  },
+  {
+    path: ['sms', 'task', 'revoke'],
+    summary: 'Revoke an SMS task waiting to send or under content review, so it never sends',
+    args: TASK_ARG,
+    options: [FORM_OPTION],
+    request: (input) =>
+      call('updateSmsTask', {
+        path: { form_token: required(input, 'form'), id: input.args.id },
+        body: { revoked: true }
+      }),
+    examples: ['jinshuju sms task revoke 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2']
+  },
+  {
+    path: ['sms', 'task', 'change'],
+    summary: 'Change an SMS task whose template failed review, and send it again',
+    description:
+      'Only a task in template_fail. It keeps its entries and its id; --field and --placeholder left out keep what ' +
+      'the task has. --estimate answers what it would bill with the new template and sends nothing; --yes sends.',
+    args: TASK_ARG,
+    options: [
+      FORM_OPTION,
+      TEMPLATE_ID_OPTION,
+      { ...MOBILE_FIELD_OPTION, description: `${MOBILE_FIELD_OPTION.description}; the task's own when omitted` },
+      ...TIMING_OPTIONS,
+      ESTIMATE_OPTION,
+      SEND_OPTION
+    ],
+    request: (input) => {
+      const path = { form_token: required(input, 'form'), id: input.args.id };
+      const sms_template_id = required(input, 'template_id');
+      const entry_field = input.options.field as string | undefined;
+      if (estimating(input, `Sending task ${input.args.id} again`)) {
+        return call('estimateSmsTaskChange', {
+          path,
+          query: { entry_field, sms_template_id, placeholder_keys: placeholders(input) }
+        });
+      }
+      return call('updateSmsTask', { path, body: given({ entry_field, sms_template_id, ...timing(input) }) });
+    },
+    examples: [
+      'jinshuju sms task change 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --template-id 6512a1c2d3e4f5a6b7c8d9e1 --estimate',
+      'jinshuju sms task change 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --template-id 6512a1c2d3e4f5a6b7c8d9e1 --yes'
+    ]
+  },
+  {
+    path: ['sms', 'task', 'send'],
+    summary: 'Send an SMS task created with --manual',
+    description: 'Once it has passed review. A task given a send time waits until then.',
+    args: TASK_ARG,
+    options: [FORM_OPTION, SEND_OPTION],
+    request: (input) => {
+      sendingConfirmed(input, `Sending task ${input.args.id}`);
+      return call('sendSmsTask', { path: { form_token: required(input, 'form'), id: input.args.id } });
+    },
+    examples: ['jinshuju sms task send 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --yes']
+  },
+  {
+    path: ['sms', 'task', 'resend'],
+    summary: 'Send an SMS task again to the entries that got a result',
+    description:
+      'A new task, with the same template and variables, to the entries of this one that got --status: FAILED, ' +
+      'SUCCESS or ALL. A filter, keyword or view narrows them further, and a serial_number none_in condition leaves ' +
+      'some out. It sends at once. --estimate answers what it would send and bill and sends nothing; --yes sends.',
+    args: TASK_ARG,
+    options: [
+      FORM_OPTION,
+      {
+        name: '--status',
+        type: 'string',
+        choices: bodyChoices('resendSmsTask', 'status'),
+        placeholder: '<status>',
+        description: 'Send again to the entries with this result; ALL for every one the task sent to'
+      },
+      ...NARROWING_OPTIONS,
+      ESTIMATE_OPTION,
+      SEND_OPTION
+    ],
+    request: (input) => {
+      const path = { form_token: required(input, 'form'), id: input.args.id };
+      const status = required(input, 'status');
+      if (estimating(input, `Sending task ${input.args.id} again`)) {
+        return call('estimateSmsTaskResend', { path, query: { status, ...narrowingQuery(input) } });
+      }
+      return call('resendSmsTask', { path, body: given({ status, ...narrowingBody(input) }) });
+    },
+    examples: [
+      'jinshuju sms task resend 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED --estimate',
+      "jinshuju sms task resend 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED --filter 'serial_number none_in 3,8' --yes"
+    ]
   }
 ];

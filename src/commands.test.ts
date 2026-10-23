@@ -703,6 +703,157 @@ test('sms template create and update send what their flags say', async () => {
   assert.deepEqual(mock.requests[1].body, { content: '后天开课' });
 });
 
+test('sms send estimates with --estimate, sends with --yes, and sends nothing with neither', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) =>
+    cli(['sms', 'send', '--form', 'Kp7mQ2', '--field', 'field_2', '--template-id', 'tpl_1', ...args], {
+      env: WRITE_ENV,
+      client: mock.client
+    });
+
+  const unconfirmed = await run(['--select-all']);
+  assert.notEqual(unconfirmed.exitCode, 0);
+  assert.match(unconfirmed.stderr, /pass --estimate to see what it takes, or --yes to send/);
+  const both = await run(['--select-all', '--estimate', '--yes']);
+  assert.match(both.stderr, /--estimate and --yes are alternatives/);
+  assert.equal(mock.requests.length, 0);
+
+  await run(['--filter', 'field_5 eq 已报名', '--placeholder', 'field_1', '--estimate']);
+  await run([
+    '--select-all',
+    '--placeholder',
+    '',
+    '--placeholder',
+    'field_1',
+    '--send-at',
+    '2026-10-24T09:00:00+08:00',
+    '--manual',
+    '--yes'
+  ]);
+
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/sms_tasks/estimate');
+  assert.deepEqual(mock.requests[0].query, {
+    entry_field: 'field_2',
+    filters: JSON.stringify([{ field: 'field_5', operator: 'eq', value: '已报名' }]),
+    sms_template_id: 'tpl_1',
+    placeholder_keys: ['field_1']
+  });
+  assert.equal(mock.requests[1].method, 'POST');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/sms_tasks');
+  assert.deepEqual(mock.requests[1].body, {
+    entry_field: 'field_2',
+    select_all: true,
+    sms_template_id: 'tpl_1',
+    placeholder_keys: ['', 'field_1'],
+    send_at: '2026-10-24T09:00:00+08:00',
+    auto_send: false
+  });
+});
+
+test('sms task change and resend estimate or send by their flags, and revoke and send act on the task', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) =>
+    cli(['sms', 'task', ...args, '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+
+  const unconfirmed = await run(['send', 'task_1']);
+  assert.match(unconfirmed.stderr, /pass --yes to send/);
+  assert.equal(mock.requests.length, 0);
+
+  await run(['change', 'task_1', '--template-id', 'tpl_2', '--estimate']);
+  await run(['change', 'task_1', '--template-id', 'tpl_2', '--field', 'field_3', '--yes']);
+  await run(['resend', 'task_1', '--status', 'FAILED', '--filter', 'serial_number none_in 3,8', '--estimate']);
+  await run(['resend', 'task_1', '--status', 'FAILED', '--filter', 'serial_number none_in 3,8', '--yes']);
+  await run(['revoke', 'task_1']);
+  await run(['send', 'task_1', '--yes']);
+  await run(['activities', 'task_1', '--status', 'FAILED', '--mobile', '13800000001']);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    [
+      'GET /api/v1/forms/Kp7mQ2/sms_tasks/task_1/estimate',
+      'PATCH /api/v1/forms/Kp7mQ2/sms_tasks/task_1',
+      'GET /api/v1/forms/Kp7mQ2/sms_tasks/task_1/resend/estimate',
+      'POST /api/v1/forms/Kp7mQ2/sms_tasks/task_1/resend',
+      'PATCH /api/v1/forms/Kp7mQ2/sms_tasks/task_1',
+      'PATCH /api/v1/forms/Kp7mQ2/sms_tasks/task_1/auto_send',
+      'GET /api/v1/forms/Kp7mQ2/sms_tasks/task_1/activities'
+    ]
+  );
+  assert.deepEqual(mock.requests[0].query, { sms_template_id: 'tpl_2' });
+  assert.deepEqual(mock.requests[1].body, { entry_field: 'field_3', sms_template_id: 'tpl_2' });
+  assert.deepEqual(mock.requests[3].body, {
+    status: 'FAILED',
+    filters: [{ field: 'serial_number', operator: 'none_in', value: ['3', '8'] }]
+  });
+  assert.deepEqual(mock.requests[4].body, { revoked: true });
+  assert.deepEqual(mock.requests[6].query, { status: 'FAILED', mobile: '13800000001' });
+});
+
+test('email send wants a subject and content only to send, and lists the SMTP accounts to send through', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['email', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run([
+    'send',
+    '--form',
+    'Kp7mQ2',
+    '--field',
+    'field_3',
+    '--select-all',
+    '--smtp-account-id',
+    'smtp_1',
+    '--estimate'
+  ]);
+  const untitled = await run(['send', '--form', 'Kp7mQ2', '--field', 'field_3', '--select-all', '--yes']);
+  assert.match(untitled.stderr, /--subject is required/);
+  await run([
+    'send',
+    '--form',
+    'Kp7mQ2',
+    '--field',
+    'field_3',
+    '--keyword',
+    '张三',
+    '--subject',
+    '上课提醒',
+    '--content',
+    '<p>明天见</p>',
+    '--yes'
+  ]);
+  await run(['task', 'resend', 'task_1', '--form', 'Kp7mQ2', '--status', 'ALL', '--yes']);
+  await run(['smtp-account', 'list']);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    [
+      'GET /api/v1/forms/Kp7mQ2/email_tasks/estimate',
+      'POST /api/v1/forms/Kp7mQ2/email_tasks',
+      'POST /api/v1/forms/Kp7mQ2/email_tasks/task_1/resend',
+      'GET /api/v1/smtp_accounts'
+    ]
+  );
+  assert.deepEqual(mock.requests[0].query, { entry_field: 'field_3', select_all: 'true', smtp_account_id: 'smtp_1' });
+  assert.deepEqual(mock.requests[1].body, {
+    entry_field: 'field_3',
+    keyword: '张三',
+    subject: '上课提醒',
+    content: '<p>明天见</p>'
+  });
+  assert.deepEqual(mock.requests[2].body, { status: 'ALL' });
+});
+
+test('form copy takes the notification rules along only when asked', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['form', 'copy', 'Kp7mQ2', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['--name', '第二期']);
+  await run(['--name', '第二期', '--with-notification-rules']);
+
+  assert.deepEqual(mock.requests[0].body, { name: '第二期' });
+  assert.deepEqual(mock.requests[1].body, { name: '第二期', with_notification_rules: true });
+});
+
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_ACCESS_TOKEN: 'tok' },

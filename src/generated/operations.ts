@@ -21,6 +21,7 @@ export type OperationId =
   | 'countTableEntries'
   | 'countTableViewEntries'
   | 'createCheckinCampaign'
+  | 'createEmailTask'
   | 'createEntriesBatch'
   | 'createEntry'
   | 'createEntryComment'
@@ -37,6 +38,7 @@ export type OperationId =
   | 'createPredefinedChoicesSet'
   | 'createRoutine'
   | 'createSmsSignature'
+  | 'createSmsTask'
   | 'createSmsTemplate'
   | 'createTable'
   | 'createTableEntry'
@@ -59,9 +61,15 @@ export type OperationId =
   | 'deleteTableEntry'
   | 'deleteTableEntryComment'
   | 'deleteTableView'
+  | 'estimateEmailTask'
+  | 'estimateEmailTaskResend'
+  | 'estimateSmsTask'
+  | 'estimateSmsTaskChange'
+  | 'estimateSmsTaskResend'
   | 'getBillingAccount'
   | 'getCheckinCampaign'
   | 'getCurrentUser'
+  | 'getEmailTask'
   | 'getEntry'
   | 'getEntryImport'
   | 'getEntryStats'
@@ -78,6 +86,7 @@ export type OperationId =
   | 'getNotificationRule'
   | 'getOpensearchQuery'
   | 'getRoutine'
+  | 'getSmsTask'
   | 'getTable'
   | 'getTableEntry'
   | 'getTableView'
@@ -88,6 +97,8 @@ export type OperationId =
   | 'listBillingAccountUsers'
   | 'listCheckinCampaigns'
   | 'listContacts'
+  | 'listEmailTaskActivities'
+  | 'listEmailTasks'
   | 'listEntries'
   | 'listEntryComments'
   | 'listExtendedAttributes'
@@ -108,7 +119,10 @@ export type OperationId =
   | 'listRoutines'
   | 'listSmsAuditStatuses'
   | 'listSmsSignatures'
+  | 'listSmsTaskActivities'
+  | 'listSmsTasks'
   | 'listSmsTemplates'
+  | 'listSmtpAccounts'
   | 'listTableEntries'
   | 'listTableEntryComments'
   | 'listTableViewEntries'
@@ -125,10 +139,13 @@ export type OperationId =
   | 'previewTableFieldTypeChange'
   | 'replaceEntry'
   | 'replaceTableEntry'
+  | 'resendEmailTask'
+  | 'resendSmsTask'
   | 'resumeRoutine'
   | 'runRoutine'
   | 'searchEntriesAcrossForms'
   | 'searchMySubmittedEntries'
+  | 'sendSmsTask'
   | 'summarizeEntries'
   | 'summarizeFormViewEntries'
   | 'summarizeTableEntries'
@@ -150,6 +167,7 @@ export type OperationId =
   | 'updatePredefinedChoicesSet'
   | 'updateRoutine'
   | 'updateSmsSignature'
+  | 'updateSmsTask'
   | 'updateSmsTemplate'
   | 'updateTable'
   | 'updateTableEntry'
@@ -404,6 +422,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [],
     body: { required: true, content: { 'application/json': { $ref: 'CheckinCampaignCreateInput' } } }
   },
+  createEmailTask: {
+    method: 'POST',
+    path: '/forms/{form_token}/email_tasks',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'EmailTaskCreateInput' } } }
+  },
   createEntriesBatch: {
     method: 'POST',
     path: '/forms/{form_token}/entries/batch',
@@ -569,6 +593,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [],
     body: { required: true, content: { 'application/json': { $ref: 'SMSSignatureCreateInput' } } }
   },
+  createSmsTask: {
+    method: 'POST',
+    path: '/forms/{form_token}/sms_tasks',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'SMSTaskCreateInput' } } }
+  },
   createSmsTemplate: {
     method: 'POST',
     path: '/sms/templates',
@@ -720,6 +750,88 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } }
     ]
   },
+  estimateEmailTask: {
+    method: 'GET',
+    path: '/forms/{form_token}/email_tasks/estimate',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'entry_field', in: 'query', required: true, schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
+      { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
+      { name: 'view_token', in: 'query', schema: { type: 'string' } },
+      { name: 'select_all', in: 'query', schema: { type: 'boolean' } },
+      { name: 'smtp_account_id', in: 'query', schema: { type: 'string' } }
+    ]
+  },
+  estimateEmailTaskResend: {
+    method: 'GET',
+    path: '/forms/{form_token}/email_tasks/{id}/resend/estimate',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'status', in: 'query', required: true, schema: { type: 'string', enum: ['FAILED', 'SUCCESS', 'ALL'] } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
+      { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
+      { name: 'view_token', in: 'query', schema: { type: 'string' } }
+    ]
+  },
+  estimateSmsTask: {
+    method: 'GET',
+    path: '/forms/{form_token}/sms_tasks/estimate',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'entry_field', in: 'query', required: true, schema: { type: 'string' } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
+      { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
+      { name: 'view_token', in: 'query', schema: { type: 'string' } },
+      { name: 'select_all', in: 'query', schema: { type: 'boolean' } },
+      { name: 'sms_template_id', in: 'query', required: true, schema: { type: 'string' } },
+      { name: 'placeholder_keys', in: 'query', schema: { type: 'array', items: { type: 'string' } } }
+    ]
+  },
+  estimateSmsTaskChange: {
+    method: 'GET',
+    path: '/forms/{form_token}/sms_tasks/{id}/estimate',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'entry_field', in: 'query', schema: { type: 'string' } },
+      { name: 'sms_template_id', in: 'query', required: true, schema: { type: 'string' } },
+      { name: 'placeholder_keys', in: 'query', schema: { type: 'array', items: { type: 'string' } } }
+    ]
+  },
+  estimateSmsTaskResend: {
+    method: 'GET',
+    path: '/forms/{form_token}/sms_tasks/{id}/resend/estimate',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'status', in: 'query', required: true, schema: { type: 'string', enum: ['FAILED', 'SUCCESS', 'ALL'] } },
+      {
+        name: 'filters',
+        in: 'query',
+        content: 'application/json',
+        schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
+      },
+      { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
+      { name: 'view_token', in: 'query', schema: { type: 'string' } }
+    ]
+  },
   getBillingAccount: { method: 'GET', path: '/billing_account', parameters: [] },
   getCheckinCampaign: {
     method: 'GET',
@@ -727,6 +839,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }]
   },
   getCurrentUser: { method: 'GET', path: '/me', parameters: [] },
+  getEmailTask: {
+    method: 'GET',
+    path: '/forms/{form_token}/email_tasks/{id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
   getEntry: {
     method: 'GET',
     path: '/forms/{form_token}/entries/{serial_number}',
@@ -837,6 +957,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/routines/{id}',
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
+  getSmsTask: {
+    method: 'GET',
+    path: '/forms/{form_token}/sms_tasks/{id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
   getTable: {
     method: 'GET',
     path: '/tables/{table_token}',
@@ -894,6 +1022,34 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/contacts',
     parameters: [{ name: 'next', in: 'query', schema: { type: 'string' } }]
+  },
+  listEmailTaskActivities: {
+    method: 'GET',
+    path: '/forms/{form_token}/email_tasks/{id}/activities',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'status', in: 'query', schema: { type: 'string', enum: ['SUCCESS', 'FAILED'] } },
+      { name: 'email', in: 'query', schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
+  listEmailTasks: {
+    method: 'GET',
+    path: '/forms/{form_token}/email_tasks',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      {
+        name: 'status',
+        in: 'query',
+        schema: { type: 'string', enum: ['waiting_for_send', 'sending', 'all_sent', 'partial_sent', 'none_sent'] }
+      },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
   },
   listEntries: {
     method: 'GET',
@@ -1067,6 +1223,50 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
+  listSmsTaskActivities: {
+    method: 'GET',
+    path: '/forms/{form_token}/sms_tasks/{id}/activities',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'status', in: 'query', schema: { type: 'string', enum: ['SUCCESS', 'FAILED'] } },
+      { name: 'mobile', in: 'query', schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
+  listSmsTasks: {
+    method: 'GET',
+    path: '/forms/{form_token}/sms_tasks',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      {
+        name: 'status',
+        in: 'query',
+        schema: {
+          type: 'string',
+          enum: [
+            'template_checking',
+            'content_auditing',
+            'approved',
+            'rejected',
+            'waiting_for_send',
+            'sending',
+            'all_sent',
+            'partial_sent',
+            'none_sent',
+            'template_fail',
+            'revoked',
+            'template_deleted'
+          ]
+        }
+      },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
   listSmsTemplates: {
     method: 'GET',
     path: '/sms/templates',
@@ -1080,6 +1280,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
+  listSmtpAccounts: { method: 'GET', path: '/smtp_accounts', parameters: [] },
   listTableEntries: {
     method: 'GET',
     path: '/tables/{table_token}/entries',
@@ -1289,6 +1490,24 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     ],
     body: { required: true, content: { 'application/json': { $ref: 'EntryInput' } } }
   },
+  resendEmailTask: {
+    method: 'POST',
+    path: '/forms/{form_token}/email_tasks/{id}/resend',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'EntryTaskResendInput' } } }
+  },
+  resendSmsTask: {
+    method: 'POST',
+    path: '/forms/{form_token}/sms_tasks/{id}/resend',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'EntryTaskResendInput' } } }
+  },
   resumeRoutine: {
     method: 'POST',
     path: '/routines/{routine_id}/resume',
@@ -1319,6 +1538,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'keyword', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
       { name: 'form_tokens', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } }
+    ]
+  },
+  sendSmsTask: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/sms_tasks/{id}/auto_send',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
     ]
   },
   summarizeEntries: {
@@ -1538,6 +1765,15 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/sms/signatures/{id}',
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'SMSSignatureUpdateInput' } } }
+  },
+  updateSmsTask: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/sms_tasks/{id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'SMSTaskUpdateInput' } } }
   },
   updateSmsTemplate: {
     method: 'PATCH',
@@ -2188,6 +2424,21 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  EmailTaskCreateInput: {
+    type: 'object',
+    required: ['entry_field', 'subject', 'content'],
+    properties: {
+      entry_field: { type: 'string' },
+      filters: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+      keyword: { type: 'string', maxLength: 200 },
+      view_token: { type: 'string' },
+      select_all: { type: 'boolean' },
+      smtp_account_id: { type: 'string' },
+      subject: { type: 'string' },
+      content: { type: 'string' }
+    },
+    additionalProperties: false
+  },
   EntryAttachmentBase64Input: {
     type: 'object',
     required: ['field_api_code', 'base64'],
@@ -2230,6 +2481,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     additionalProperties: false
   },
   EntryInput: { type: 'object', additionalProperties: true },
+  EntryTaskResendInput: {
+    type: 'object',
+    required: ['status'],
+    properties: {
+      status: { type: 'string', enum: ['FAILED', 'SUCCESS', 'ALL'] },
+      filters: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+      keyword: { type: 'string', maxLength: 200 },
+      view_token: { type: 'string' }
+    },
+    additionalProperties: false
+  },
   EvaluationSettingInput: {
     type: 'object',
     properties: {
@@ -4309,6 +4571,34 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       id_card_name: { type: 'string' },
       id_card_number: { type: 'string' },
       identity_mobile: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  SMSTaskCreateInput: {
+    type: 'object',
+    required: ['entry_field', 'sms_template_id'],
+    properties: {
+      entry_field: { type: 'string' },
+      filters: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+      keyword: { type: 'string', maxLength: 200 },
+      view_token: { type: 'string' },
+      select_all: { type: 'boolean' },
+      sms_template_id: { type: 'string' },
+      placeholder_keys: { type: 'array', items: { type: 'string' } },
+      send_at: { type: 'string' },
+      auto_send: { type: 'boolean' }
+    },
+    additionalProperties: false
+  },
+  SMSTaskUpdateInput: {
+    type: 'object',
+    properties: {
+      revoked: { type: 'boolean' },
+      entry_field: { type: 'string' },
+      sms_template_id: { type: 'string' },
+      placeholder_keys: { type: 'array', items: { type: 'string' } },
+      send_at: { type: 'string' },
+      auto_send: { type: 'boolean' }
     },
     additionalProperties: false
   },
