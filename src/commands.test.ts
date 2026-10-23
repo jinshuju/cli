@@ -918,9 +918,9 @@ test('artifact share set shares the version <artifact> names, except private, wh
   assert.deepEqual(
     mock.requests.map((request) => request.body),
     [
-      { allowedAudience: 'public', versionId: 'Xy7Qm2PaLk9W' },
-      { allowedAudience: 'internal', versionId: 'Pq4nR8sT2vWx' },
-      { allowedAudience: 'private' }
+      { allowed_audience: 'public', version_id: 'Xy7Qm2PaLk9W' },
+      { allowed_audience: 'internal', version_id: 'Pq4nR8sT2vWx' },
+      { allowed_audience: 'private' }
     ]
   );
 });
@@ -952,13 +952,14 @@ test('artifact share set has no --version of its own; the flag still shows the C
 
 test('artifact share answers what the API answered, and a 404 exits 4', async () => {
   const publishedArtifact = {
-    allowedAudience: 'public',
+    allowed_audience: 'public',
     url: 'https://k3x9ab-acme.jinapp.net/Xy7Qm2PaLk9W',
-    publishedVersion: { id: '6512a1c2d3e4f5a6b7c8d9d3', version: 2, title: '八月报告.html' },
+    published_version: { id: '6512a1c2d3e4f5a6b7c8d9d3', version: 2, title: '八月报告.html' },
     banned: false,
-    canUseInternal: true,
-    accountName: '小金培训',
-    canUseArtifactUrl: true
+    can_use_internal: true,
+    account_name: '小金培训',
+    can_use_artifact_url: true,
+    preview_url: 'https://k3x9ab-acme.jinapp.net/Xy7Qm2PaLk9W/v2'
   };
   const answering = {
     async request<T>(): Promise<T> {

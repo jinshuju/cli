@@ -41,10 +41,10 @@ export const ARTIFACT: readonly Command[] = [
     path: ['artifact', 'share', 'get'],
     summary: 'Show who can open an artifact’s share link, the link, and which version it shows',
     description:
-      'The first get creates the link, open to you only (private). canUseArtifactUrl says whether the ' +
-      'plan includes share links at all, canUseInternal whether it includes internal; accountName is the ' +
-      'account whose members internal lets in; banned, whether the link was stopped for its content and ' +
-      'opens to no one.',
+      'The first get creates the link, open to you only (private). can_use_artifact_url says whether ' +
+      'the plan includes share links at all, can_use_internal whether it includes internal; account_name ' +
+      'is the account whose members internal lets in; banned, whether the link was stopped for its ' +
+      'content and opens to no one. preview_url always shows the version <artifact> names.',
     args: [ARTIFACT_ARG],
     request: (input) => call('getPublishedArtifact', { path: { id: artifactVersion(input.args.artifact as string) } }),
     examples: [
@@ -67,7 +67,7 @@ export const ARTIFACT: readonly Command[] = [
       {
         name: '--audience',
         type: 'string',
-        choices: bodyChoices('updatePublishedArtifact', 'allowedAudience'),
+        choices: bodyChoices('updatePublishedArtifact', 'allowed_audience'),
         placeholder: '<audience>',
         description: 'Who can open the link: private, internal or public'
       }
@@ -75,11 +75,11 @@ export const ARTIFACT: readonly Command[] = [
     request: (input) => {
       const version = artifactVersion(input.args.artifact as string);
       const audience = requiredOption(input, 'audience');
-      // Without versionId the API keeps the version the link shows, so taking a share back to
+      // Without version_id the API keeps the version the link shows, so taking a share back to
       // private from an older version's receipt does not change what a later public share shows.
       return call('updatePublishedArtifact', {
         path: { id: version },
-        body: given({ allowedAudience: audience, versionId: audience === 'private' ? undefined : version })
+        body: given({ allowed_audience: audience, version_id: audience === 'private' ? undefined : version })
       });
     },
     examples: [

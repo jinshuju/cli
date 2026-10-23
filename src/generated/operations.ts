@@ -4267,10 +4267,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   PublishedArtifactInput: {
     type: 'object',
     additionalProperties: false,
-    required: ['allowedAudience'],
     properties: {
-      allowedAudience: { type: 'string', enum: ['private', 'internal', 'public'] },
-      versionId: { type: 'string' }
+      allowed_audience: { type: 'string', enum: ['private', 'internal', 'public'] },
+      version_id: { type: 'string' }
     }
   },
   RadioButtonInput: {

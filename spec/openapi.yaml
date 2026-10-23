@@ -5148,7 +5148,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: The artifact is not an HTML page, its file is gone, or it failed the content check
+          description: The artifact is not an HTML page, its file is gone, or the version is banned for breaking the usage rules (`version_banned`)
           content:
             application/json:
               schema:
@@ -5197,13 +5197,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The artifact or `versionId` does not exist, or is not the current user's in the current account
+          description: The artifact or `version_id` does not exist, or is not the current user's in the current account
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: The version is not an HTML page, its file is gone, or it failed the content check
+          description: The version is not an HTML page, its file is gone, or it is banned for breaking the usage rules (`version_banned`)
           content:
             application/json:
               schema:
@@ -12483,29 +12483,27 @@ components:
       title: PublishedArtifactInput
       type: object
       additionalProperties: false
-      required:
-      - allowedAudience
       properties:
-        allowedAudience:
+        allowed_audience:
           type: string
           enum:
           - private
           - internal
           - public
           description: "`private` only the owner, `internal` members of the account, `public` anyone with the link"
-        versionId:
+        version_id:
           type: string
-          description: Id or token of the version visitors see; defaults to the version in the path, except that setting `private` keeps the version already shown
+          description: Id or token of the version to publish; only sent to publish another version. Omitted, the share keeps the version it publishes (a new share publishes the version in the path)
     PublishedArtifact:
       type: object
       required:
-      - allowedAudience
+      - allowed_audience
       - url
-      - publishedVersion
+      - published_version
       - banned
-      - canUseInternal
+      - can_use_internal
       properties:
-        allowedAudience:
+        allowed_audience:
           type: string
           enum:
           - private
@@ -12514,7 +12512,7 @@ components:
         url:
           type: string
           description: The share link
-        publishedVersion:
+        published_version:
           type: object
           description: The version visitors see
           required:
@@ -12533,15 +12531,18 @@ components:
         banned:
           type: boolean
           description: The link was stopped for its content and opens to no one
-        canUseInternal:
+        can_use_internal:
           type: boolean
           description: The account's plan or trial includes members-only sharing (`artifact_sub_account_audience_only`); without it, `internal` cannot be set
-        accountName:
+        account_name:
           type: string
           description: Name of the account the share belongs to, whose members `internal` lets in
-        canUseArtifactUrl:
+        can_use_artifact_url:
           type: boolean
           description: The account's plan or trial includes online links (`artifact_url`); without it, only `private` can be set and the link shows as expired
+        preview_url:
+          type: string
+          description: Preview link of the version in the path (`<url>/v<version>`); it always shows that version, under the share's audience
     Folder:
       type: object
       required:
