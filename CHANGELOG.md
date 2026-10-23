@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/jinshuju/cli/compare/v0.16.0...v0.17.0) (2026-10-23)
+
+
+### Features
+
+* list what a notification rule sent, and the SMS and email tasks of a date range ([f5fae36](https://github.com/jinshuju/cli/commit/f5fae36b9460ceac1627707f0438b54c4f3ef872))
+
 ## [0.16.0](https://github.com/jinshuju/cli/compare/v0.15.0...v0.16.0) (2026-10-23)
 
 
