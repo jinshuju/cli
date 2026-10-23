@@ -75,7 +75,8 @@ export const defaultConfigPath = join(homedir(), '.jinshuju', 'config.json');
 export const defaultHost = 'https://jinshuju.net';
 export const defaultAuthHost = 'https://account.jinshuju.net';
 export const defaultOAuthClientId = 'jinshuju_cli_public';
-export const defaultScopes = 'public forms read_entries write_entries form_setting read_contacts users routines';
+export const defaultScopes =
+  'public forms read_entries write_entries form_setting share_artifacts read_contacts users routines';
 
 /**
  * One credential at a time: a login of either kind replaces whatever the last

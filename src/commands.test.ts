@@ -10,6 +10,7 @@ import { awaitImport } from './commands/entry.js';
 import { HttpError, TransportError, withQuery, type HttpRequest } from './http.js';
 import { unansweredLookups } from './spec.js';
 import { nonconformities } from './testing/conformance.js';
+import { VERSION } from './version.js';
 
 /** What the client would have put on the wire: the path with its query. */
 const url = (request: HttpRequest): string => withQuery(request.path, request.query);
@@ -852,6 +853,133 @@ test('form copy takes the notification rules along only when asked', async () =>
 
   assert.deepEqual(mock.requests[0].body, { name: '第二期' });
   assert.deepEqual(mock.requests[1].body, { name: '第二期', with_notification_rules: true });
+});
+
+test('artifact share get reads the published artifact of the version an id, a token or an address names', async () => {
+  const mock = createMockClient();
+  const run = (artifact: string) =>
+    cli(['artifact', 'share', 'get', artifact], { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client });
+
+  await run('6512a1c2d3e4f5a6b7c8d9d3');
+  await run('Xy7Qm2PaLk9W');
+  await run('https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W?from=chat#top');
+  await run('next.jinshuju.net/artifacts/Xy7Qm2PaLk9W/');
+  await run('https://next.jinshuju.net/artifacts/Xy7Qm2%5FPaLk9W');
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${url(request)}`),
+    [
+      'GET /api/v1/artifacts/6512a1c2d3e4f5a6b7c8d9d3/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'GET /api/v1/artifacts/Xy7Qm2_PaLk9W/published_artifact'
+    ]
+  );
+});
+
+test('artifact share get refuses an address that names no artifact version, before sending anything', async () => {
+  const mock = createMockClient();
+  const run = (artifact: string) =>
+    cli(['artifact', 'share', 'get', artifact], { env: WRITE_ENV, client: mock.client });
+
+  const share = await run('https://k3x9ab-acme.jinapp.net/Xy7Qm2PaLk9W');
+  assert.equal(share.exitCode, 2);
+  assert.match(share.stderr, /not an artifact address: expected https:\/\/…\/artifacts\/<token>/);
+
+  for (const address of [
+    'https://next.jinshuju.net/artifacts/',
+    'https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W/extra',
+    'https://next.jinshuju.net/artifacts/%FF'
+  ]) {
+    const refused = await run(address);
+    assert.equal(refused.exitCode, 2, address);
+    assert.match(refused.stderr, /not an artifact address/, address);
+  }
+  assert.equal(mock.requests.length, 0);
+});
+
+test('artifact share set shares the version <artifact> names, except private, which keeps the one the link shows', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['artifact', 'share', 'set', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W', '--audience', 'public']);
+  await run(['Pq4nR8sT2vWx', '--audience', 'internal']);
+  await run(['Xy7Qm2PaLk9W', '--audience', 'private']);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    [
+      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'PUT /api/v1/artifacts/Pq4nR8sT2vWx/published_artifact',
+      'PUT /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact'
+    ]
+  );
+  assert.deepEqual(
+    mock.requests.map((request) => request.body),
+    [
+      { allowed_audience: 'public', version_id: 'Xy7Qm2PaLk9W' },
+      { allowed_audience: 'internal', version_id: 'Pq4nR8sT2vWx' },
+      { allowed_audience: 'private' }
+    ]
+  );
+});
+
+test('artifact share set wants an audience the spec lists, and sends nothing without one', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['artifact', 'share', 'set', ...args], { env: WRITE_ENV, client: mock.client });
+
+  const missing = await run(['Xy7Qm2PaLk9W']);
+  assert.equal(missing.exitCode, 2);
+  assert.match(missing.stderr, /--audience is required/);
+
+  const unknown = await run(['Xy7Qm2PaLk9W', '--audience', 'everyone']);
+  assert.equal(unknown.exitCode, 2);
+  assert.match(unknown.stderr, /--audience must be one of private, internal, public/);
+
+  assert.equal(mock.requests.length, 0);
+});
+
+test('artifact share set has no --version of its own; the flag still shows the CLI version', async () => {
+  const mock = createMockClient();
+  const result = await cli(['artifact', 'share', 'set', 'Xy7Qm2PaLk9W', '--audience', 'public', '--version'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  assert.equal(result.stdout.trim(), VERSION);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('artifact share answers what the API answered, and a 404 exits 4', async () => {
+  const publishedArtifact = {
+    allowed_audience: 'public',
+    url: 'https://k3x9ab-acme.jinapp.net/Xy7Qm2PaLk9W',
+    published_version: { id: '6512a1c2d3e4f5a6b7c8d9d3', version: 2, title: '八月报告.html' },
+    banned: false,
+    can_use_internal: true,
+    account_name: '小金培训',
+    can_use_artifact_url: true,
+    preview_url: 'https://k3x9ab-acme.jinapp.net/Xy7Qm2PaLk9W/v2'
+  };
+  const answering = {
+    async request<T>(): Promise<T> {
+      return publishedArtifact as T;
+    }
+  };
+  const shown = await cli(['artifact', 'share', 'get', 'Xy7Qm2PaLk9W', '--output', 'json'], {
+    env: WRITE_ENV,
+    client: answering
+  });
+  assert.equal(shown.exitCode, 0);
+  assert.deepEqual(JSON.parse(shown.stdout), publishedArtifact);
+
+  const missing = {
+    async request<T>(): Promise<T> {
+      throw new HttpError('artifact cannot be found', 404, undefined);
+    }
+  };
+  const notFound = await cli(['artifact', 'share', 'get', 'Xy7Qm2PaLk9W'], { env: WRITE_ENV, client: missing });
+  assert.equal(notFound.exitCode, 4);
 });
 
 test('page and per-page options are not exposed as CLI options', async () => {

@@ -115,14 +115,16 @@ test('loginWithOAuth validates callback state, exchanges token, and stores OAuth
   rmSync(dir, { recursive: true, force: true });
 
   // Left to its default, a login asks for every scope a command needs: a token
-  // without `routines` is refused by every routine command. Checked once the
-  // server is closed, so a failure here fails the run rather than holding it open.
+  // without `routines` is refused by every routine command, one without
+  // `share_artifacts` by artifact share. Checked once the server is closed, so a
+  // failure here fails the run rather than holding it open.
   assert.deepEqual(new URL(authorizeUrl).searchParams.get('scope')?.split(' '), [
     'public',
     'forms',
     'read_entries',
     'write_entries',
     'form_setting',
+    'share_artifacts',
     'read_contacts',
     'users',
     'routines'

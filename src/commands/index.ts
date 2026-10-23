@@ -9,6 +9,7 @@
  */
 
 import { ACCOUNT } from './account.js';
+import { ARTIFACT } from './artifact.js';
 import { CHECKIN } from './checkin.js';
 import { COMMENT } from './comment.js';
 import { EMAIL } from './email.js';
@@ -98,6 +99,13 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'payout', summary: 'Payouts to the settlement account' },
   { name: 'sms', summary: 'Manage SMS signatures and templates, and send SMS to entries' },
   { name: 'email', summary: 'Send email to entries' },
+  {
+    name: 'artifact',
+    summary: 'Files Jiri made in a conversation: who can open their share links',
+    note:
+      'OAuth sessions need the share_artifacts scope. `jinshuju auth login` asks for it; a session from ' +
+      'an older CLI has to log in again. An account access token is refused: a share belongs to a person.'
+  },
   { name: 'config', summary: 'Manage CLI configuration' }
 ];
 
@@ -118,7 +126,8 @@ export const COMMANDS: readonly Command[] = [
   ...FILL,
   ...TRADE,
   ...SMS,
-  ...EMAIL
+  ...EMAIL,
+  ...ARTIFACT
 ];
 
 /** The command whose path the words begin with, longest match first. */
