@@ -1580,6 +1580,37 @@ test('notification delete asks for --yes, then deletes the rule on its form', as
   assert.equal(remove.requests[0].path, '/api/v1/forms/Kp7mQ2/notification_rules/6650b2');
 });
 
+test('notification log and the task lists pass --from and --to as start_date and end_date', async () => {
+  const log = createMockClient();
+  const tasks = createMockClient();
+
+  await cli(
+    [
+      'notification',
+      'log',
+      '6650b2',
+      '--form',
+      'Kp7mQ2',
+      '--status',
+      'FAILED',
+      '--from',
+      '2026-10-01',
+      '--to',
+      '2026-10-31'
+    ],
+    { env: WRITE_ENV, client: log.client }
+  );
+  await cli(['sms', 'task', 'list', '--form', 'Kp7mQ2', '--from', '2026-10-01'], {
+    env: WRITE_ENV,
+    client: tasks.client
+  });
+
+  assert.equal(log.requests[0].path, '/api/v1/forms/Kp7mQ2/notification_rules/6650b2/notifications');
+  assert.deepEqual(log.requests[0].query, { status: 'FAILED', start_date: '2026-10-01', end_date: '2026-10-31' });
+  assert.equal(tasks.requests[0].path, '/api/v1/forms/Kp7mQ2/sms_tasks');
+  assert.deepEqual(tasks.requests[0].query, { start_date: '2026-10-01' });
+});
+
 test('several --name keywords stay separate, so the API matches any of them', async () => {
   const forms = createMockClient();
   const tables = createMockClient();

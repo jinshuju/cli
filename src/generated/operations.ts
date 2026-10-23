@@ -111,6 +111,7 @@ export type OperationId =
   | 'listForms'
   | 'listMyFilledForms'
   | 'listMySubmittedEntries'
+  | 'listNotificationRuleNotifications'
   | 'listNotificationRules'
   | 'listOpensearchQueries'
   | 'listOpensearchQuerySuggestions'
@@ -1046,7 +1047,9 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         in: 'query',
         schema: { type: 'string', enum: ['waiting_for_send', 'sending', 'all_sent', 'partial_sent', 'none_sent'] }
       },
-      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'start_date', in: 'query', schema: { type: 'string' } },
+      { name: 'end_date', in: 'query', schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
@@ -1176,6 +1179,27 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
+  listNotificationRuleNotifications: {
+    method: 'GET',
+    path: '/forms/{form_token}/notification_rules/{id}/notifications',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'start_date', in: 'query', schema: { type: 'string' } },
+      { name: 'end_date', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'status',
+        in: 'query',
+        schema: {
+          type: 'string',
+          enum: ['SUCCESS', 'FAILED', 'WAITING', 'AUDITING', 'APPROVED', 'REJECTED', 'CANCELLED', 'REVOKED']
+        }
+      },
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 1000 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
   listNotificationRules: {
     method: 'GET',
     path: '/forms/{form_token}/notification_rules',
@@ -1262,7 +1286,9 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
           ]
         }
       },
-      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'start_date', in: 'query', schema: { type: 'string' } },
+      { name: 'end_date', in: 'query', schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]

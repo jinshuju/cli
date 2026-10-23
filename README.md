@@ -256,6 +256,7 @@ jinshuju checkin create --form Kp7mQ2             # needs the check-in plugin en
 jinshuju checkin edit 42 --disable
 jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --sms-template 6650a1 --placeholders field_1
 jinshuju notification list --form Kp7mQ2             # each rule says whether it can send, and why not
+jinshuju notification log 6650b2 --form Kp7mQ2 --from 2026-10-01   # what the rule sent: how many succeeded, failed, and why
 ```
 
 Deletion always requires `--yes`. This CLI is non-interactive — stdin belongs to
@@ -507,7 +508,7 @@ sent again with `sms task resend` to the entries that got a result.
 ```bash
 jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --filter 'field_5 eq 已报名' --estimate
 jinshuju sms send --form Kp7mQ2 --field field_2 --template-id 6512a1c2d3e4f5a6b7c8d9e0 --filter 'field_5 eq 已报名' --yes
-jinshuju sms task list --form Kp7mQ2
+jinshuju sms task list --form Kp7mQ2 --from 2026-10-01   # each task with how many numbers succeeded or failed
 jinshuju sms task activities 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED
 jinshuju sms task resend 6716f2a8c1d2e3f4a5b6c7d9 --form Kp7mQ2 --status FAILED --yes
 jinshuju email smtp-account list

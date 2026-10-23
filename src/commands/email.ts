@@ -1,6 +1,8 @@
 import { PAGINATION_OPTIONS, type OptionSpec } from '../options.js';
 import { bodyChoices, call, choices } from '../spec.js';
 import {
+  DAY_RANGE_OPTIONS,
+  dayRange,
   ESTIMATE_OPTION,
   estimating,
   FORM_OPTION,
@@ -81,8 +83,8 @@ export const EMAIL: readonly Command[] = [
   },
   {
     path: ['email', 'task', 'list'],
-    summary: "List a form's email tasks, newest first",
-    description: 'Without how many addresses succeeded or failed: `email task get` has those.',
+    summary: "List a form's email tasks, newest first, with how many addresses succeeded or failed so far",
+    description: '--from and --to pick the tasks by the day they were created. A page holds at most 100 tasks.',
     options: [
       FORM_OPTION,
       {
@@ -92,15 +94,16 @@ export const EMAIL: readonly Command[] = [
         placeholder: '<status>',
         description: 'Only the tasks in this status'
       },
+      ...DAY_RANGE_OPTIONS,
       ...PAGINATION_OPTIONS
     ],
     request: (input) =>
       call('listEmailTasks', {
         path: { form_token: requiredOption(input, 'form') },
-        query: { status: input.options.status as string | undefined, ...paging(input) }
+        query: { status: input.options.status as string | undefined, ...dayRange(input), ...paging(input) }
       }),
     paginate: LISTING,
-    examples: ['jinshuju email task list --form Kp7mQ2']
+    examples: ['jinshuju email task list --form Kp7mQ2', 'jinshuju email task list --form Kp7mQ2 --from 2026-10-01']
   },
   {
     path: ['email', 'task', 'get'],

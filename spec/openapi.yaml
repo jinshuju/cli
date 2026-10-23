@@ -1670,6 +1670,89 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/notification_rules/{id}/notifications":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - name: id
+      in: path
+      required: true
+      description: Notification rule id
+      schema:
+        type: string
+    get:
+      tags:
+      - Form Settings
+      summary: List a notification rule's sending records
+      operationId: listNotificationRuleNotifications
+      description: |
+        Lists the notifications a rule sent, newest first, with a summary of the matching records. Covers the last 180 days, as the form's notification log page does; notifications scheduled for later are not included.
+        OAuth scope: form_setting
+      parameters:
+      - name: start_date
+        in: query
+        required: false
+        description: Only notifications sent on or after this day, Beijing time (UTC+8)
+        schema:
+          type: string
+          format: date
+        example: '2026-10-01'
+      - name: end_date
+        in: query
+        required: false
+        description: Only notifications sent on or before this day, Beijing time (UTC+8)
+        schema:
+          type: string
+          format: date
+        example: '2026-10-31'
+      - name: status
+        in: query
+        required: false
+        description: Return only the notifications in this status
+        schema:
+          type: string
+          enum:
+          - SUCCESS
+          - FAILED
+          - WAITING
+          - AUDITING
+          - APPROVED
+          - REJECTED
+          - CANCELLED
+          - REVOKED
+      - name: limit
+        in: query
+        required: false
+        description: Page size
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+      - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Sending records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The form, or the notification rule on this form, does not exist or is not accessible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/forms/{form_token}/theme":
     patch:
       tags:
@@ -2635,7 +2718,9 @@ paths:
           - template_fail
           - revoked
           - template_deleted
-      - $ref: '#/components/parameters/EntryTaskLimit'
+      - $ref: '#/components/parameters/EntryTaskStartDate'
+      - $ref: '#/components/parameters/EntryTaskEndDate'
+      - $ref: '#/components/parameters/EntryTaskListLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
@@ -3093,7 +3178,9 @@ paths:
           - all_sent
           - partial_sent
           - none_sent
-      - $ref: '#/components/parameters/EntryTaskLimit'
+      - $ref: '#/components/parameters/EntryTaskStartDate'
+      - $ref: '#/components/parameters/EntryTaskEndDate'
+      - $ref: '#/components/parameters/EntryTaskListLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
@@ -7662,6 +7749,34 @@ components:
       schema:
         type: integer
         minimum: 0
+    EntryTaskListLimit:
+      name: limit
+      in: query
+      required: false
+      description: Page size
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    EntryTaskStartDate:
+      name: start_date
+      in: query
+      required: false
+      description: Only tasks created on or after this day, Beijing time (UTC+8)
+      schema:
+        type: string
+        format: date
+      example: '2026-10-01'
+    EntryTaskEndDate:
+      name: end_date
+      in: query
+      required: false
+      description: Only tasks created on or before this day, Beijing time (UTC+8)
+      schema:
+        type: string
+        format: date
+      example: '2026-10-31'
     EntryTaskActivityStatus:
       name: status
       in: query
@@ -18369,7 +18484,7 @@ components:
         auto_send:
           type: boolean
           default: true
-          description: 'false makes the task wait to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send` once it has passed review, even when the template has already passed review'
+          description: false makes the task wait to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send` once it has passed review, even when the template has already passed review
       additionalProperties: false
       examples:
       - entry_field: field_2
@@ -18581,10 +18696,10 @@ components:
           description: Number of entries in the task
         succeeded:
           type: integer
-          description: Entries sent successfully so far; only returned when reading one task
+          description: Entries sent successfully so far; returned when listing or reading tasks
         failed:
           type: integer
-          description: Entries that failed so far; only returned when reading one task
+          description: Entries that failed so far; returned when listing or reading tasks
         failed_reason:
           type:
           - string
@@ -18691,7 +18806,7 @@ components:
         auto_send:
           type: boolean
           default: true
-          description: 'false makes the task wait to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send` once it has passed review, even when the template has already passed review'
+          description: false makes the task wait to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send` once it has passed review, even when the template has already passed review
       additionalProperties: false
       examples:
       - revoked: true
@@ -18815,6 +18930,120 @@ components:
           description: One record per entry, in the order they were sent
           items:
             $ref: '#/components/schemas/EmailTaskActivity'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
+    Notification:
+      type: object
+      description: A notification a rule sent for one entry
+      required:
+      - id
+      - status
+      - recipient
+      - error
+      - serial_number
+      - send_at
+      properties:
+        id:
+          type: string
+          description: Notification id
+        status:
+          type: string
+          description: Sending status
+          enum:
+          - SUCCESS
+          - FAILED
+          - WAITING
+          - AUDITING
+          - APPROVED
+          - REJECTED
+          - CANCELLED
+          - REVOKED
+        recipient:
+          type:
+          - string
+          - 'null'
+          description: Mobile number or email address it went to; null for push notifications
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why it failed or was cancelled, for a bot or webhook what its URL answered; null when there is none
+        serial_number:
+          type:
+          - integer
+          - 'null'
+          description: Serial number of the entry that triggered it; null once the entry is deleted
+        send_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When it was sent
+      examples:
+      - id: 6716f2a8c1d2e3f4a5b6c7e1
+        status: FAILED
+        recipient: '13800000000'
+        error: 余额不足
+        serial_number: 12
+        send_at: '2026-10-20T08:00:02Z'
+    NotificationListResponse:
+      type: object
+      required:
+      - triggered_count
+      - summary
+      - count
+      - data
+      - next
+      properties:
+        triggered_count:
+          type: integer
+          description: How many notifications the rule has made, retries included, all time; the send count shown on the rule in the notification settings page
+        summary:
+          type: object
+          description: Counts over every notification matching the query, not just this page
+          required:
+          - total
+          - succeeded
+          - failed
+          - failed_reasons
+          properties:
+            total:
+              type: integer
+              description: Notifications matching the query
+            succeeded:
+              type: integer
+              description: Notifications in `SUCCESS`
+            failed:
+              type: integer
+              description: Notifications in `FAILED`
+            failed_reasons:
+              type: array
+              description: The failed notifications grouped by reason, most frequent first
+              items:
+                type: object
+                required:
+                - reason
+                - count
+                properties:
+                  reason:
+                    type:
+                    - string
+                    - 'null'
+                    description: Failure reason as `error` gives it, but for a bot or webhook the HTTP status its URL answered; null when none was recorded
+                  count:
+                    type: integer
+                    description: Failed notifications with this reason
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          description: Notifications, newest first
+          items:
+            $ref: '#/components/schemas/Notification'
         next:
           type:
           - integer
