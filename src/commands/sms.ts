@@ -4,6 +4,8 @@ import { progress } from '../progress.js';
 import { bodyChoices, call, choices } from '../spec.js';
 import {
   confirmed,
+  DAY_RANGE_OPTIONS,
+  dayRange,
   ESTIMATE_OPTION,
   estimating,
   FORM_OPTION,
@@ -483,8 +485,8 @@ export const SMS: readonly Command[] = [
   },
   {
     path: ['sms', 'task', 'list'],
-    summary: "List a form's SMS tasks, newest first",
-    description: 'Without how many numbers succeeded or failed: `sms task get` has those.',
+    summary: "List a form's SMS tasks, newest first, with how many numbers succeeded or failed so far",
+    description: '--from and --to pick the tasks by the day they were created. A page holds at most 100 tasks.',
     options: [
       FORM_OPTION,
       {
@@ -494,15 +496,20 @@ export const SMS: readonly Command[] = [
         placeholder: '<status>',
         description: 'Only the tasks in this status'
       },
+      ...DAY_RANGE_OPTIONS,
       ...PAGINATION_OPTIONS
     ],
     request: (input) =>
       call('listSmsTasks', {
         path: { form_token: required(input, 'form') },
-        query: { status: input.options.status as string | undefined, ...paging(input) }
+        query: { status: input.options.status as string | undefined, ...dayRange(input), ...paging(input) }
       }),
     paginate: LISTING,
-    examples: ['jinshuju sms task list --form Kp7mQ2', 'jinshuju sms task list --form Kp7mQ2 --status template_fail']
+    examples: [
+      'jinshuju sms task list --form Kp7mQ2',
+      'jinshuju sms task list --form Kp7mQ2 --status template_fail',
+      'jinshuju sms task list --form Kp7mQ2 --from 2026-10-01 --to 2026-10-31'
+    ]
   },
   {
     path: ['sms', 'task', 'get'],

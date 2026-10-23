@@ -63,6 +63,16 @@ export function paging(input: CommandInput): { limit?: number; next?: string } {
   return { limit: input.options.limit as number | undefined, next: input.options.next as string | undefined };
 }
 
+/** A range of days, Asia/Shanghai; either end can be left open. */
+export const DAY_RANGE_OPTIONS: readonly OptionSpec[] = [
+  { name: '--from', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'First day, Asia/Shanghai' },
+  { name: '--to', type: 'string', placeholder: '<YYYY-MM-DD>', description: 'Last day, inclusive' }
+];
+
+export function dayRange(input: CommandInput): { start_date?: string; end_date?: string } {
+  return { start_date: input.options.from as string | undefined, end_date: input.options.to as string | undefined };
+}
+
 /** The sort rules as the API's own objects, for a body. */
 export function sortRules(input: CommandInput): { api_code: string; order: string }[] | undefined {
   const rules = (input.options.sort as string[] | undefined) ?? [];

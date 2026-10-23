@@ -1,6 +1,15 @@
-import { JSON_OPTION, UsageError, type OptionSpec } from '../options.js';
-import { bodyChoices, call } from '../spec.js';
-import { YES_OPTION, confirmed, overriding, requiredOption } from './shared.js';
+import { JSON_OPTION, PAGINATION_OPTIONS, UsageError, type OptionSpec } from '../options.js';
+import { bodyChoices, call, choices } from '../spec.js';
+import {
+  DAY_RANGE_OPTIONS,
+  LISTING,
+  YES_OPTION,
+  confirmed,
+  dayRange,
+  overriding,
+  paging,
+  requiredOption
+} from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
 const RULE_ARG = { name: 'rule', required: true, description: 'Notification rule id' };
@@ -141,5 +150,35 @@ export const NOTIFICATION: readonly Command[] = [
         path: { form_token: requiredOption(input, 'form'), id: input.args.rule }
       });
     }
+  },
+  {
+    path: ['notification', 'log'],
+    summary: 'List what a notification rule sent, with how many succeeded or failed and why',
+    description:
+      'Covers the last 180 days, as the notification log page does; notifications scheduled for later are not listed. ' +
+      '--from and --to pick them by the day they were sent. The summary counts every match, not just the page.',
+    args: [RULE_ARG],
+    options: [
+      FORM_OPTION,
+      {
+        name: '--status',
+        type: 'string',
+        choices: choices('listNotificationRuleNotifications', 'status'),
+        placeholder: '<status>',
+        description: 'Only the notifications in this status, e.g. FAILED'
+      },
+      ...DAY_RANGE_OPTIONS,
+      ...PAGINATION_OPTIONS
+    ],
+    request: (input) =>
+      call('listNotificationRuleNotifications', {
+        path: { form_token: requiredOption(input, 'form'), id: input.args.rule },
+        query: { status: input.options.status as string | undefined, ...dayRange(input), ...paging(input) }
+      }),
+    paginate: LISTING,
+    examples: [
+      'jinshuju notification log 6650b2 --form Kp7mQ2',
+      'jinshuju notification log 6650b2 --form Kp7mQ2 --status FAILED --from 2026-10-01 --to 2026-10-31'
+    ]
   }
 ];
