@@ -20,6 +20,7 @@ import { FORM } from './form.js';
 import { LOCAL } from './local.js';
 import { NOTIFICATION } from './notification.js';
 import { OPENSEARCH } from './opensearch.js';
+import { ROUTINE } from './routine.js';
 import { SMS } from './sms.js';
 import { TABLE } from './table.js';
 import { TRADE } from './trade.js';
@@ -59,6 +60,15 @@ export const RESOURCES: readonly Resource[] = [
       'An SMS rule needs an approved template of your own, shared in the account or from the system (`sms status`). ' +
       'A rule under review is saved but does not send; `notification get` says why a rule cannot send. ' +
       'Only a manager of the form can create, edit or delete its rules. `notification edit --disable` turns a rule off for now.'
+  },
+  {
+    name: 'routine',
+    summary: 'Manage routines (自动任务): Jiri at work on a schedule or when data changes',
+    note:
+      'Routines are your own: an account access token cannot manage them. An OAuth session needs the routines ' +
+      'scope, which `jinshuju auth login` asks for; a session from before this version needs a new login. ' +
+      'Letting a routine delete data (delete_authorized) is turned on on the 自动任务 page only; no flag or ' +
+      'payload here can set it.'
   },
   {
     name: 'checkin',
@@ -103,6 +113,7 @@ export const COMMANDS: readonly Command[] = [
   ...COMMENT,
   ...OPENSEARCH,
   ...NOTIFICATION,
+  ...ROUTINE,
   ...CHECKIN,
   ...FILL,
   ...TRADE,

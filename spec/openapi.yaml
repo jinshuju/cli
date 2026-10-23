@@ -19,7 +19,7 @@ info:
       - Personal access token: acts as that user, on the forms they created or that are shared with them;
       - Account access token (Enterprise plan): acts across the account, on all of its forms. Endpoints then have no "current user", and create operations are recorded under the account owner;
       - OAuth 2.0 token: the endpoints it can call are limited by the token's scope; insufficient scope returns `403`. Each endpoint's description states the scope it needs
-        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `read_contacts` / `users` / `public`).
+        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `read_contacts` / `users` / `routines` / `public`).
     - An invalid or revoked token returns `401`; a plan without API v1 returns `402`.
 
     ## Cooperator permissions
@@ -65,7 +65,7 @@ info:
     ## Input validation
     The server validates the path parameters, query parameters and JSON request body of every request against this document (except the multipart body of upload endpoints).
     - An invalid request returns `400` directly, with the response body `{ error_description, errors: [{ pointer, message, code }] }`; a request body that is not `application/json` returns `415`.
-    - Keys not listed in a request body schema are errors (except the field values of entry writes, which the form's field definitions decide).
+    - Keys not listed in a request body schema are errors, except where the schema says they are ignored (the routines body) and the field values of entry writes, which the form's field definitions decide.
 servers:
 - url: https://jinshuju.net/api/v1
   description: Production
@@ -106,6 +106,8 @@ tags:
   description: Uploading attachments, form images, license images and import files.
 - name: Utilities
   description: Utility endpoints.
+- name: Routines
+  description: 'Routines (`自动任务`): instructions Jiri carries out as you, on a schedule or when data changes, and their runs. The rules and messages are those of the routines page; times are in Beijing time (+08:00). OAuth tokens need the `routines` scope. As routines run unattended and spend AI points, self-registered clients cannot get it; only a registered application with `routines` among its scopes (such as the Jinshuju CLI) can ask for it.'
 paths:
   "/forms":
     get:
@@ -6987,6 +6989,295 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  "/routines":
+    get:
+      tags:
+      - Routines
+      summary: List routines
+      operationId: listRoutines
+      description: |
+        The current user's own routines, newest first.
+        OAuth scope: routines
+        - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
+        - Routines belong to a person: a credential with no current user (an account access token and the like) returns `403`, and so does an account that cannot use routines yet.
+      parameters:
+      - name: state
+        in: query
+        required: false
+        description: 'Only routines in this state: `active` (enabled) or `paused`. Any other value returns `400`.'
+        schema:
+          type: string
+          enum:
+          - active
+          - paused
+      - $ref: '#/components/parameters/PageLimit'
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Routine list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutineListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+    post:
+      tags:
+      - Routines
+      summary: Create a routine
+      operationId: createRoutine
+      description: |
+        Creates a routine, enabled from the start. The rules and messages are those of the routines page: a name of at most 60 characters, an instruction of at most 2000, only forms, tables, views and query pages you can reach as objects, at most 20 enabled routines per person, and a one-off time later than now. A data trigger's source is added to the objects.
+        OAuth scope: routines
+        - A routine against the rules returns `422`, and `errors` gives each reason with its `code` and the page's message.
+        - Delete authorization (`delete_authorized`) cannot be set here: a body that names it, true or false, returns `422` `delete_authorization_page_only` and creates nothing.
+        - Jiri running a routine cannot create routines (`403`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutineInput'
+      responses:
+        '201':
+          description: The routine created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '422':
+          $ref: '#/components/responses/RoutineRefused'
+  "/routines/{id}":
+    parameters:
+    - $ref: '#/components/parameters/RoutineId'
+    get:
+      tags:
+      - Routines
+      summary: Get a routine
+      operationId: getRoutine
+      description: |
+        One of your own routines. Someone else's, or one that does not exist, returns `404`.
+        OAuth scope: routines
+      responses:
+        '200':
+          description: The routine
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
+    patch:
+      tags:
+      - Routines
+      summary: Update a routine
+      operationId: updateRoutine
+      description: |
+        Changes the name, instruction, objects, trigger kind, schedule or data trigger. A key left out, or null, keeps what the routine has; `objects` given replaces them all.
+        OAuth scope: routines
+        - The rules and messages are those of creating. A changed schedule cancels the runs queued for the old one; a changed instruction or objects stops a run in progress.
+        - A body that names `delete_authorized`, true or false, returns `422` `delete_authorization_page_only` and changes nothing.
+        - Jiri running a routine cannot update routines (`403`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutineInput'
+      responses:
+        '200':
+          description: The routine as updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
+        '422':
+          $ref: '#/components/responses/RoutineRefused'
+    delete:
+      tags:
+      - Routines
+      summary: Delete a routine
+      operationId: deleteRoutine
+      description: |
+        Deletes the routine for good: it never runs again, and its queued and running runs are cancelled. The conversations of its past runs stay.
+        OAuth scope: routines
+        - Jiri running a routine cannot delete routines (`403`).
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - id
+                - deleted
+                properties:
+                  id:
+                    type: string
+                    description: The ID of the routine deleted
+                  deleted:
+                    type: boolean
+                    const: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
+  "/routines/{routine_id}/pause":
+    parameters:
+    - $ref: '#/components/parameters/RoutineIdNested'
+    post:
+      tags:
+      - Routines
+      summary: Pause a routine
+      operationId: pauseRoutine
+      description: |
+        The routine stops running, and its queued and running runs are cancelled. Pausing a paused routine returns it as it is.
+        OAuth scope: routines
+        - Jiri running a routine cannot pause routines (`403`).
+      responses:
+        '200':
+          description: The routine, paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
+  "/routines/{routine_id}/resume":
+    parameters:
+    - $ref: '#/components/parameters/RoutineIdNested'
+    post:
+      tags:
+      - Routines
+      summary: Resume a routine
+      operationId: resumeRoutine
+      description: |
+        Enables a paused routine, which runs again from its next time after now; times missed while it was paused are not made up. Resuming an enabled routine returns it as it is.
+        OAuth scope: routines
+        - As with creating, at most 20 routines can be enabled (`422` `active_limit`). A one-off whose time has passed returns `422` `once_passed`; a data trigger whose fields no longer work returns `422`.
+        - Jiri running a routine cannot resume routines (`403`).
+      responses:
+        '200':
+          description: The routine, enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Routine'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
+        '422':
+          $ref: '#/components/responses/RoutineRefused'
+  "/routines/{routine_id}/run":
+    parameters:
+    - $ref: '#/components/parameters/RoutineIdNested'
+    post:
+      tags:
+      - Routines
+      summary: Run a routine now
+      operationId: runRoutine
+      description: |
+        Queues one run now, paused routines included, and returns it. When it starts it is checked as a scheduled run is: AI points, the daily run limit, and access to the objects. Its outcome shows in the routine's runs.
+        OAuth scope: routines
+        - A run still in progress returns `422` `invalid`; so does a data trigger whose fields no longer work.
+        - Jiri running a routine cannot run routines (`403`).
+      responses:
+        '202':
+          description: The run queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - run
+                properties:
+                  run:
+                    $ref: '#/components/schemas/RoutineRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
+        '422':
+          $ref: '#/components/responses/RoutineRefused'
+  "/routines/{routine_id}/runs":
+    parameters:
+    - $ref: '#/components/parameters/RoutineIdNested'
+    get:
+      tags:
+      - Routines
+      summary: List a routine's runs
+      operationId: listRoutineRuns
+      description: |
+        The runs of one of your own routines, latest planned time first. Paged as `GET /routines` is.
+        OAuth scope: routines
+      parameters:
+      - $ref: '#/components/parameters/PageLimit'
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutineRunListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/RoutineForbidden'
+        '404':
+          $ref: '#/components/responses/RoutineNotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -6995,7 +7286,7 @@ components:
       description: |
         `Authorization: Bearer ACCESS_TOKEN`. Accepts personal access tokens, account access tokens (Enterprise plan) and OAuth 2.0 tokens.
         OAuth tokens can call only the endpoints their scopes allow: `forms` (forms / tables / views / folders / public queries / templates), `form_setting` (form settings, predefined choice sets),
-        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `public` (everything else).
+        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `public` (everything else).
   parameters:
     FormToken:
       name: form_token
@@ -7478,6 +7769,20 @@ components:
       description: "`next` from the previous page's response (a page number, starting at 1); pass it back unchanged to get the next page. Defaults to page 1."
       schema:
         type: integer
+    RoutineId:
+      name: id
+      in: path
+      required: true
+      description: The routine's ID (`id` from `GET /routines`)
+      schema:
+        type: string
+    RoutineIdNested:
+      name: routine_id
+      in: path
+      required: true
+      description: The routine's ID (`id` from `GET /routines`)
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Invalid request parameters or data
@@ -7568,6 +7873,33 @@ components:
             oneOf:
             - $ref: '#/components/schemas/Error'
             - $ref: '#/components/schemas/FormFrozenError'
+    RoutineForbidden:
+      description: 'Forbidden: the OAuth token lacks the `routines` scope; the credential has no current user (an account access token and the like, as routines belong to a person); the account cannot use routines yet; or Jiri running a routine tried to create, update, pause, resume, delete or run one (it can only read them).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_description: 自动任务运行时不能管理自动任务
+    RoutineNotFound:
+      description: The routine does not exist or is not the current user's
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_description: 找不到这个自动任务
+    RoutineRefused:
+      description: Against the rules for routines; nothing was changed. `errors` gives each reason, and `error_description` is the first one's `message`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RoutineRefusal'
+          example:
+            error_description: 启用中的自动任务最多 20 条，请先暂停或删除一些
+            errors:
+            - code: active_limit
+              message: 启用中的自动任务最多 20 条，请先暂停或删除一些
   schemas:
     ScopeCondition:
       type: object
@@ -20410,3 +20742,472 @@ components:
               properties:
                 image_base64s:
                   minItems: 1
+    RoutineRefusal:
+      type: object
+      required:
+      - error_description
+      - errors
+      properties:
+        error_description:
+          type: string
+          description: The first reason's `message`
+        errors:
+          type: array
+          items:
+            type: object
+            required:
+            - code
+            - message
+            properties:
+              code:
+                type: string
+                enum:
+                - active_limit
+                - once_passed
+                - object_unavailable
+                - field_unavailable
+                - invalid
+                - delete_authorization_page_only
+                description: |
+                  What kind of reason it is: `active_limit` 20 routines are enabled already; `once_passed` a one-off's time has passed; `object_unavailable` an object or the data trigger's source does not exist or you cannot reach it;
+                  `field_unavailable` a trigger field does not exist, cannot be seen or cannot be watched (formula and association fields); `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else.
+              message:
+                type: string
+                description: The message the routines page shows, word for word
+    RoutineInput:
+      type: object
+      description: |
+        The same settings as the routines page. Creating needs `name` and `instruction`, and `trigger_kind` defaults to `schedule`; updating keeps what a key left out, or null, had.
+        This schema only fixes each key's type: values against the rules (an incomplete schedule, a field that cannot be watched, a limit reached) return `422`, with the page's messages in `errors`.
+        Keys not listed here, inside `schedule`, `event`, the objects and the conditions too, are ignored rather than refused, so a routine from `GET` can be sent back with a few keys changed.
+      properties:
+        name:
+          type:
+          - string
+          - 'null'
+          description: The name, at most 60 characters
+        description:
+          type:
+          - string
+          - 'null'
+          description: One sentence on what the routine does, for people reading the routines list, at most 100 characters
+        instruction:
+          type:
+          - string
+          - 'null'
+          description: What Jiri does on each run, at most 2000 characters
+        objects:
+          type:
+          - array
+          - 'null'
+          description: The objects Jiri reads first, at most 10 and no duplicates; on update they replace the routine's. Only forms and tables you created or that are shared with you, their views you can see, and query pages you created.
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                description: form, table, view or opensearch
+              token:
+                type: string
+        trigger_kind:
+          type:
+          - string
+          - 'null'
+          description: "`schedule` (fill in `schedule`) or `event`, when data changes (fill in `event`)"
+        schedule:
+          oneOf:
+          - $ref: '#/components/schemas/RoutineScheduleInput'
+          - type: 'null'
+        event:
+          oneOf:
+          - $ref: '#/components/schemas/RoutineEventInput'
+          - type: 'null'
+        delete_authorized:
+          description: Not accepted. A body that names it, whatever its value, returns `422` `delete_authorization_page_only`.
+    RoutineScheduleInput:
+      type: object
+      description: |
+        A schedule, always in Beijing time. Each frequency reads only its own keys:
+        `once` reads `at`; `hourly` reads `minute`; `daily` and `workdays` read `time`; `weekly` reads `weekdays` and `time`; `monthly` reads `month_days` and `time`.
+      properties:
+        freq:
+          type: string
+          description: once, hourly, daily, workdays (Monday to Friday, public holidays not considered), weekly or monthly
+        at:
+          type: string
+          description: "`once`: when to run, Beijing time as `YYYY-MM-DDTHH:MM`, or ISO 8601 with an offset (e.g. `2026-10-08T10:00:00+08:00`); must be later than now"
+        minute:
+          type: integer
+          description: "`hourly`: the minute of each hour"
+        time:
+          type: string
+          description: "`daily`, `workdays`, `weekly` and `monthly`: the time of day, `HH:MM`"
+        weekdays:
+          type: array
+          items:
+            type: integer
+          description: "`weekly`: 1 = Monday … 7 = Sunday"
+        month_days:
+          type: array
+          items:
+            type: integer
+          description: "`monthly`: 1–31, or -1 for the last day; a month without the day (the 31st, say) is skipped"
+    RoutineEventInput:
+      type: object
+      description: When data changes. The source must be a form or table you created, or whose data you can read; it is added to the objects on save.
+      properties:
+        source_kind:
+          type: string
+          description: form or table
+        source_token:
+          type: string
+          description: The source's token
+        'on':
+          type: string
+          description: "`created`, when there is new data (conditions optional); `updated`, when given fields are changed (fill in `field_codes`; conditions optional, judged on the changed data); `matched`, when data comes to meet the conditions (conditions required), once, new data that meets them included"
+        field_codes:
+          type: array
+          items:
+            type: string
+          description: "`updated`: the api_codes of the fields watched, 1–10; fields the system computes (formula, association) cannot be watched"
+        scope_conditions:
+          type: array
+          description: Data conditions, written as view filters are. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. Each item reads only the keys below.
+          items:
+            type: object
+            properties:
+              trigger:
+                type: string
+                description: The field's api_code (a table column as `<field>.<column>`)
+              operator:
+                type: string
+                description: The comparison, such as eq, ne, gt, lt, any_in, none_in, null, not_null, like or between
+              value:
+                description: The value compared with
+              group_index:
+                type: integer
+                description: The condition's group
+              scope_attr:
+                type: string
+                description: The attribute the condition applies to
+        include_bulk:
+          type: boolean
+          default: false
+          description: Imports and bulk edits trigger it too (one import or bulk edit is one run)
+    Routine:
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - instruction
+      - state
+      - paused_reason
+      - trigger_kind
+      - trigger_text
+      - schedule
+      - next_run_at
+      - next_runs
+      - event
+      - objects
+      - delete_authorized
+      - runs_count
+      - last_run
+      - url
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        instruction:
+          type: string
+        state:
+          type: string
+          enum:
+          - active
+          - paused
+          description: "`active` enabled, `paused` paused"
+        paused_reason:
+          type:
+          - string
+          - 'null'
+          enum:
+          - user
+          - completed
+          - failures
+          - insufficient_points
+          - lost_access
+          - content_rejected
+          - invalid_trigger
+          -
+          description: 'Why it is paused: by the user, a one-off that has run, failed runs in a row, AI points short in a row, access to an object lost, content that did not pass the safety check, or a data trigger whose fields no longer work. null when enabled.'
+        trigger_kind:
+          type: string
+          enum:
+          - schedule
+          - event
+        trigger_text:
+          type:
+          - string
+          - 'null'
+          description: When it runs, in the page's words, such as `每周一 09:00` or `表单《报名表》有新数据时`. null when the trigger is not complete, or the data trigger's source is gone.
+        schedule:
+          type:
+          - object
+          - 'null'
+          description: The schedule, with only the keys its frequency uses (`at` in ISO 8601, Beijing time); null for a data trigger
+        next_run_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When an enabled schedule runs next (Beijing time); null when paused or for a data trigger
+        next_runs:
+          type: array
+          items:
+            type: string
+            format: date-time
+          description: The next runs of an enabled schedule, at most 5 (Beijing time); empty otherwise
+        event:
+          type:
+          - object
+          - 'null'
+          description: The data trigger; null for a schedule, or when its source is gone
+          required:
+          - source_kind
+          - source_token
+          - source_name
+          - 'on'
+          - fields
+          - scope_conditions
+          - conditions
+          - include_bulk
+          properties:
+            source_kind:
+              type: string
+              enum:
+              - form
+              - table
+            source_token:
+              type: string
+            source_name:
+              type: string
+            'on':
+              type: string
+              enum:
+              - created
+              - updated
+              - matched
+            fields:
+              type: array
+              description: The fields watched
+              items:
+                type: object
+                required:
+                - code
+                - label
+                properties:
+                  code:
+                    type: string
+                  label:
+                    type:
+                    - string
+                    - 'null'
+                    description: The field's name; null when it is deleted or you can no longer see it
+            scope_conditions:
+              type: array
+              description: The conditions as stored, in the shape `RoutineEventInput.scope_conditions` takes, so they can be sent back; empty when you can no longer read the source
+              items:
+                type: object
+            conditions:
+              type: array
+              description: The conditions in words, one sentence per group, such as `「性别」包含任一「男」，且「人数」大于「2」`; groups after the first start with `或者`
+              items:
+                type: string
+            include_bulk:
+              type: boolean
+        objects:
+          type: array
+          items:
+            type: object
+            required:
+            - kind
+            - token
+            - name
+            - parent_name
+            properties:
+              kind:
+                type: string
+                enum:
+                - form
+                - table
+                - view
+                - opensearch
+              token:
+                type: string
+              name:
+                type: string
+                description: The name when the routine was saved
+              parent_name:
+                type:
+                - string
+                - 'null'
+                description: The name of the form or table a view or query page belongs to; null otherwise
+        delete_authorized:
+          type: boolean
+          description: Whether runs may delete data in the linked forms and tables
+        runs_count:
+          type: integer
+          description: How many times it has run
+        last_run:
+          oneOf:
+          - $ref: '#/components/schemas/RoutineRun'
+          - type: 'null'
+          description: The latest run whose planned time has come
+        url:
+          type: string
+          description: The routine's page
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RoutineRun:
+      type: object
+      required:
+      - id
+      - state
+      - trigger_kind
+      - scheduled_at
+      - started_at
+      - finished_at
+      - error
+      - title
+      - summary
+      - severity
+      - url
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+          enum:
+          - queued
+          - starting
+          - running
+          - completed
+          - failed
+          - skipped
+          - cancelling
+          - cancelled
+        trigger_kind:
+          type: string
+          enum:
+          - schedule
+          - manual
+          - event
+          description: On schedule, run now, or when data changed
+        scheduled_at:
+          type: string
+          format: date-time
+          description: The planned time (Beijing time)
+        started_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        finished_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        error:
+          type:
+          - string
+          - 'null'
+          enum:
+          - timeout
+          - jiri_error
+          - start_failed
+          - content_rejected
+          - lost_access
+          - invalid_trigger
+          - insufficient_points
+          - billing_unavailable
+          -
+          description: Why it failed
+        title:
+          type:
+          - string
+          - 'null'
+          description: The run's result in a title; null until it has one
+        summary:
+          type:
+          - string
+          - 'null'
+          description: The run's result in brief
+        severity:
+          type:
+          - string
+          - 'null'
+          enum:
+          - info
+          - warning
+          - critical
+          -
+        url:
+          type: string
+          description: The run's page
+    RoutineListResponse:
+      type: object
+      required:
+      - total
+      - count
+      - data
+      - next
+      properties:
+        total:
+          type: integer
+          description: How many routines match
+        count:
+          type: integer
+          description: How many are on this page
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Routine'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: The next page's row offset; null on the last page
+    RoutineRunListResponse:
+      type: object
+      required:
+      - total
+      - count
+      - data
+      - next
+      properties:
+        total:
+          type: integer
+          description: How many runs the routine has
+        count:
+          type: integer
+          description: How many are on this page
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutineRun'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: The next page's row offset; null on the last page

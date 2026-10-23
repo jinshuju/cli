@@ -112,9 +112,24 @@ function describeFailure(response: Response, text: string, parsed: ParsedBody): 
 
   const body = parsed.value as Record<string, unknown>;
   const stated = body.message ?? body.error_description;
-  if (typeof stated === 'string' && stated.trim()) return stated;
+  if (typeof stated === 'string' && stated.trim()) return everyReason(body, stated) ?? stated;
 
   return rowErrors(body) ?? `${status}: ${snippet(JSON.stringify(parsed.value))}`;
+}
+
+/**
+ * A refusal with several reasons that states only the first: a routine against
+ * two of the page's rules answers `{error_description, errors: [{code, message}]}`
+ * with error_description the first message. Repeating that alone would send the
+ * caller round again to learn the second. A body whose error_description says
+ * something of its own, as a 400 does, is left to say it.
+ */
+function everyReason(body: Record<string, unknown>, stated: string): string | undefined {
+  const errors = body.errors;
+  if (!Array.isArray(errors) || errors.length < 2) return undefined;
+  const messages = errors.map((item) => (item as { message?: unknown } | null)?.message);
+  if (messages[0] !== stated || !messages.every((message) => typeof message === 'string')) return undefined;
+  return messages.join('; ');
 }
 
 /**

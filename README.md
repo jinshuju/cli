@@ -312,6 +312,47 @@ person at it can do — a captcha, an SMS code, WeChat, a payment — lists it u
 `blockers`, and is refused until it is filled in a browser. An OAuth session
 needs the `submit_entries` scope for these.
 
+## Routines (自动任务)
+
+A routine is an instruction Jiri carries out on a schedule, or when the data of
+a form or table changes. One created here is active at once, the same as one
+created on the 自动任务 page, and is held to that page's rules and words.
+
+```bash
+jinshuju routine create --name 每周报名汇总 --description 每周一汇总上周报名，按渠道统计 \
+  --instruction '汇总上周报名表新增的数据' --object form:Kp7mQ2 --schedule 'weekly 1 09:00'
+jinshuju routine create --json @routine.json         # an event trigger and its conditions
+jinshuju routine list --state active
+jinshuju routine get 6ac5f0e2b1d4c3a2f1e0d9c8         # trigger_text, next_runs, objects, url
+jinshuju routine update 6ac5f0e2b1d4c3a2f1e0d9c8 --schedule 'workdays 08:30'
+jinshuju routine pause 6ac5f0e2b1d4c3a2f1e0d9c8
+jinshuju routine resume 6ac5f0e2b1d4c3a2f1e0d9c8
+jinshuju routine run 6ac5f0e2b1d4c3a2f1e0d9c8          # once, now
+jinshuju routine runs 6ac5f0e2b1d4c3a2f1e0d9c8
+jinshuju routine delete 6ac5f0e2b1d4c3a2f1e0d9c8 --yes
+```
+
+`--schedule` is Beijing time and covers the six frequencies: `once 2026-10-12
+09:00`, `hourly 30`, `daily 09:00`, `workdays 09:00`, `weekly 1,5 09:00` (1 is
+Monday) and `monthly 1,-1 09:00` (-1 is the last day). `--object kind:token`
+names a form, table, view or public query, and given, it is the whole list.
+`--description` is the one sentence the routines list shows people, up to 100
+characters; the instruction is written for Jiri.
+Flags lay over `--json`; `routine create --help` shows the full payload, events
+and conditions included. A routine against the page's rules exits 5 with every
+reason the page gives.
+
+Letting a routine delete data (`delete_authorized`) is turned on on the
+自动任务 page only. There is no flag for it, and a payload naming it, true or
+false, is refused before anything is sent — `routine get` answers with it, so
+take it out before sending a routine read back. A routine's own run cannot
+create or change routines; it may read them.
+
+Routines belong to a person, so an account access token cannot manage them. A
+browser login asks for the `routines` OAuth scope; a login made with an older
+version has no such scope, and the routine commands answer it with 403 (exit
+3). Run `jinshuju auth login` again to get a token that has it.
+
 ## Working with files
 
 Seven commands take a file. The CLI uploads with its own credential; there is no
