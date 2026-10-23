@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.0](https://github.com/jinshuju/cli/compare/v0.15.0...v0.16.0) (2026-10-23)
+
+
+### Features
+
+* copy a form with its notification rules when asked ([8f6b3af](https://github.com/jinshuju/cli/commit/8f6b3af9c9392d021ecc7744c46cdc70571e2362))
+* estimate and send SMS or email to the entries of a form ([7d1c4a8](https://github.com/jinshuju/cli/commit/7d1c4a81dca1ad5ec878d604c9482d004dfd1e23))
+* manage a form's notification rules from the command line ([8cd4f97](https://github.com/jinshuju/cli/commit/8cd4f970da06c1654085975abc6c316765180f23))
+* manage routines (自动任务) from the command line ([#66](https://github.com/jinshuju/cli/issues/66)) ([bd3e63e](https://github.com/jinshuju/cli/commit/bd3e63e046e1ce67d32b9994841fd9a9bba97deb))
+* show the template ids in sms status ([d429995](https://github.com/jinshuju/cli/commit/d429995df87fb865a8f8d235f00dcd3f4c66ac16))
+
 ## [0.15.0](https://github.com/jinshuju/cli/compare/v0.14.0...v0.15.0) (2026-10-22)
 
 
