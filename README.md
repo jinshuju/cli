@@ -223,6 +223,7 @@ issues exactly one request, and payload keys are field `api_code`s.
 jinshuju folder create Ledgers --kind table       # folders are form or table; a table cannot go in a form folder
 jinshuju form edit Kp7mQ2 --json '{"name":"2026 signups"}'
 jinshuju form copy Kp7mQ2 --name Copy
+jinshuju form copy Kp7mQ2 --name 第二期 --with-notification-rules
 jinshuju form move Kp7mQ2 --folder Fd2xK8         # without --folder, moves it out of its folder
 jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"
 jinshuju table create --json @table.json --folder Nf7mDC

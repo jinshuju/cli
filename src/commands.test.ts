@@ -843,6 +843,17 @@ test('email send wants a subject and content only to send, and lists the SMTP ac
   assert.deepEqual(mock.requests[2].body, { status: 'ALL' });
 });
 
+test('form copy takes the notification rules along only when asked', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['form', 'copy', 'Kp7mQ2', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['--name', '第二期']);
+  await run(['--name', '第二期', '--with-notification-rules']);
+
+  assert.deepEqual(mock.requests[0].body, { name: '第二期' });
+  assert.deepEqual(mock.requests[1].body, { name: '第二期', with_notification_rules: true });
+});
+
 test('page and per-page options are not exposed as CLI options', async () => {
   const result = await cli(['entry', 'list', '--form', 'BaLZpn', '--output', 'text', '--per-page', '100'], {
     env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
