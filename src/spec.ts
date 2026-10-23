@@ -285,7 +285,11 @@ function walk(from: Schema | undefined, steps: readonly string[]): Schema | unde
   return schema;
 }
 
-/** A property as an object schema or any of its allOf parts declares it. */
+/**
+ * A property as an object schema or any of its allOf parts declares it. A body
+ * that is one of several shapes (oneOf / anyOf) declares it in each shape that
+ * has it, and the property takes what any of them allows.
+ */
 function propertyOf(schema: Schema, name: string): Schema | undefined {
   const here = resolved(schema);
   const own = here.properties?.[name];
@@ -295,14 +299,22 @@ function propertyOf(schema: Schema, name: string): Schema | undefined {
     const found = propertyOf(part, name);
     if (found) return found;
   }
-  return undefined;
+  const shapes = [...(here.oneOf ?? []), ...(here.anyOf ?? [])].flatMap((part) => {
+    const found = typeof part === 'object' ? propertyOf(part, name) : undefined;
+    return found ? [found] : [];
+  });
+  return shapes.length > 0 ? { anyOf: shapes } : undefined;
 }
 
 function enumOf(schema: Schema | undefined, what: string): readonly string[] | undefined {
-  const values = (schema ? (resolved(schema).enum ?? []) : []).filter(
-    (value): value is string => typeof value === 'string'
-  );
+  const values = [...new Set(schema ? valuesOf(schema) : [])];
   if (values.length > 0) return values;
   unanswered.push(what);
   return undefined;
+}
+
+function valuesOf(schema: Schema): string[] {
+  const here = resolved(schema);
+  const own = (here.enum ?? []).filter((value): value is string => typeof value === 'string');
+  return [...own, ...(here.anyOf ?? []).flatMap((part) => (typeof part === 'object' ? valuesOf(part) : []))];
 }

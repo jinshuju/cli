@@ -253,6 +253,8 @@ jinshuju comment create --form Kp7mQ2 --entry 12 "Contacted, awaiting reply"
 jinshuju opensearch edit Qy7nR3 --disable
 jinshuju checkin create --form Kp7mQ2             # needs the check-in plugin enabled for the account
 jinshuju checkin edit 42 --disable
+jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --sms-template 6650a1 --placeholders field_1
+jinshuju notification list --form Kp7mQ2             # each rule says whether it can send, and why not
 ```
 
 Deletion always requires `--yes`. This CLI is non-interactive — stdin belongs to

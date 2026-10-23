@@ -32,6 +32,7 @@ export type OperationId =
   | 'createForm'
   | 'createFormView'
   | 'createFormWebhook'
+  | 'createNotificationRule'
   | 'createOpensearchQuery'
   | 'createPredefinedChoicesSet'
   | 'createRoutine'
@@ -49,6 +50,7 @@ export type OperationId =
   | 'deleteForm'
   | 'deleteFormView'
   | 'deleteFormWebhook'
+  | 'deleteNotificationRule'
   | 'deletePredefinedChoicesSet'
   | 'deleteRoutine'
   | 'deleteSmsSignature'
@@ -73,6 +75,7 @@ export type OperationId =
   | 'getFormSetting'
   | 'getFormView'
   | 'getManuallyCloseRule'
+  | 'getNotificationRule'
   | 'getOpensearchQuery'
   | 'getRoutine'
   | 'getTable'
@@ -97,6 +100,7 @@ export type OperationId =
   | 'listForms'
   | 'listMyFilledForms'
   | 'listMySubmittedEntries'
+  | 'listNotificationRules'
   | 'listOpensearchQueries'
   | 'listOpensearchQuerySuggestions'
   | 'listPredefinedChoicesSets'
@@ -141,6 +145,7 @@ export type OperationId =
   | 'updateFormTheme'
   | 'updateFormView'
   | 'updateManuallyCloseRule'
+  | 'updateNotificationRule'
   | 'updateOpensearchQuery'
   | 'updatePredefinedChoicesSet'
   | 'updateRoutine'
@@ -486,6 +491,36 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'WebhookInput' } } }
   },
+  createNotificationRule: {
+    method: 'POST',
+    path: '/forms/{form_token}/notification_rules',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          allOf: [
+            {
+              required: ['approach'],
+              properties: {
+                approach: { type: 'string', enum: ['SMS', 'EMAIL', 'WEIXIN_ONETIME', 'WXWORK', 'DING_TALK', 'WEBHOOK'] }
+              }
+            },
+            {
+              oneOf: [
+                { $ref: 'SMSNotificationRuleInput' },
+                { $ref: 'EmailNotificationRuleInput' },
+                { $ref: 'WeixinOnetimeNotificationRuleInput' },
+                { $ref: 'WxworkNotificationRuleInput' },
+                { $ref: 'DingTalkNotificationRuleInput' },
+                { $ref: 'WebhookNotificationRuleInput' }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
   createOpensearchQuery: {
     method: 'POST',
     path: '/opensearch/queries',
@@ -626,6 +661,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'DELETE',
     path: '/forms/{form_token}/webhook',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  deleteNotificationRule: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/notification_rules/{id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ]
   },
   deletePredefinedChoicesSet: {
     method: 'DELETE',
@@ -775,6 +818,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/forms/{form_token}/manually_close_rule',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getNotificationRule: {
+    method: 'GET',
+    path: '/forms/{form_token}/notification_rules/{id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ]
   },
   getOpensearchQuery: {
     method: 'GET',
@@ -968,6 +1019,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
+  },
+  listNotificationRules: {
+    method: 'GET',
+    path: '/forms/{form_token}/notification_rules',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
   listOpensearchQueries: {
     method: 'GET',
@@ -1425,6 +1481,29 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/manually_close_rule',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'FormManuallyCloseRuleInput' } } }
+  },
+  updateNotificationRule: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/notification_rules/{id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ],
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          anyOf: [
+            { $ref: 'SMSNotificationRuleInput' },
+            { $ref: 'EmailNotificationRuleInput' },
+            { $ref: 'WeixinOnetimeNotificationRuleInput' },
+            { $ref: 'WxworkNotificationRuleInput' },
+            { $ref: 'DingTalkNotificationRuleInput' },
+            { $ref: 'WebhookNotificationRuleInput' }
+          ]
+        }
+      }
+    }
   },
   updateOpensearchQuery: {
     method: 'PATCH',
@@ -1990,6 +2069,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', items: { $ref: 'ChoiceInput' } }
     }
   },
+  DingTalkNotificationRuleInput: {
+    type: 'object',
+    properties: {
+      approach: { type: 'string', enum: ['DING_TALK'] },
+      enabled: { type: 'boolean' },
+      trigger_scope: { $ref: 'NotificationRuleTriggerScope' },
+      scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
+      schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
+      url: { type: 'string' },
+      content: { type: 'string' },
+      mentioned_mobile_list: { type: 'array', items: { type: 'string' } }
+    },
+    additionalProperties: false
+  },
   DropDownInput: {
     type: 'object',
     additionalProperties: false,
@@ -2079,6 +2172,21 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       placeholder: { type: 'string' }
     }
+  },
+  EmailNotificationRuleInput: {
+    type: 'object',
+    properties: {
+      approach: { type: 'string', enum: ['EMAIL'] },
+      enabled: { type: 'boolean' },
+      trigger_scope: { $ref: 'NotificationRuleTriggerScope' },
+      scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
+      schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
+      recipients: { type: 'array', items: { type: 'string' } },
+      subject: { type: 'string' },
+      content: { type: 'string' },
+      smtp_account_id: { type: ['string', 'null'] }
+    },
+    additionalProperties: false
   },
   EntryAttachmentBase64Input: {
     type: 'object',
@@ -3613,6 +3721,54 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  NotificationRuleScheduleTimeRule: {
+    type: 'object',
+    required: ['date_key'],
+    properties: {
+      date_key: { type: 'string' },
+      reservation_item_key: { type: 'string' },
+      date_offset_action: { type: 'string', enum: ['before', 'that_day', 'after'] },
+      date_offset_number: { type: 'integer', minimum: 0 },
+      date_offset_unit: { type: 'string', enum: ['minute', 'hour', 'day', 'week', 'month'] },
+      hour: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
+      minute: { type: ['integer', 'null'], minimum: 0, maximum: 59 }
+    },
+    additionalProperties: false
+  },
+  NotificationRuleScopeCondition: {
+    type: 'object',
+    required: ['trigger', 'operator'],
+    properties: {
+      trigger: { type: 'string' },
+      operator: {
+        type: 'string',
+        enum: [
+          'eq',
+          'ne',
+          'any_in',
+          'none_in',
+          'between',
+          'not_between',
+          'gte',
+          'gt',
+          'lte',
+          'lt',
+          'null',
+          'not_null',
+          'like',
+          'not_like',
+          'match'
+        ]
+      },
+      value: {},
+      group_index: { type: 'integer' }
+    },
+    additionalProperties: false
+  },
+  NotificationRuleTriggerScope: {
+    type: 'string',
+    enum: ['all_new', 'all_update', 'matched_new', 'matched_update', 'schedule_time']
+  },
   NpsFieldInput: {
     type: 'object',
     additionalProperties: false,
@@ -4099,6 +4255,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       weekdays: { type: 'array', items: { type: 'integer' } },
       month_days: { type: 'array', items: { type: 'integer' } }
     }
+  },
+  SMSNotificationRuleInput: {
+    type: 'object',
+    properties: {
+      approach: { type: 'string', enum: ['SMS'] },
+      enabled: { type: 'boolean' },
+      trigger_scope: { $ref: 'NotificationRuleTriggerScope' },
+      scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
+      schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
+      recipients: { type: 'array', items: { type: 'string' } },
+      sms_template_id: { type: 'string' },
+      placeholder_keys: { type: 'array', items: { type: 'string' } }
+    },
+    additionalProperties: false
   },
   SMSSignatureCreateInput: {
     type: 'object',
@@ -4593,6 +4763,32 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     ]
   },
   WebhookInput: { type: 'object', properties: { entry_post_url: { type: 'string' } }, additionalProperties: false },
+  WebhookNotificationRuleInput: {
+    type: 'object',
+    properties: {
+      approach: { type: 'string', enum: ['WEBHOOK'] },
+      enabled: { type: 'boolean' },
+      trigger_scope: { $ref: 'NotificationRuleTriggerScope' },
+      scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
+      schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
+      url: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  WeixinOnetimeNotificationRuleInput: {
+    type: 'object',
+    properties: {
+      approach: { type: 'string', enum: ['WEIXIN_ONETIME'] },
+      enabled: { type: 'boolean' },
+      trigger_scope: { $ref: 'NotificationRuleTriggerScope' },
+      scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
+      schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
+      subject: { type: 'string', maxLength: 15 },
+      content: { type: 'string', maxLength: 200 },
+      weixin_onetime_url: { type: 'string' }
+    },
+    additionalProperties: false
+  },
   WidgetButtonInput: {
     type: 'object',
     additionalProperties: false,
@@ -4693,5 +4889,19 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       entries_number_visible: { type: 'boolean' },
       marquee_data_type: { type: 'string', enum: ['fake', 'real'] }
     }
+  },
+  WxworkNotificationRuleInput: {
+    type: 'object',
+    properties: {
+      approach: { type: 'string', enum: ['WXWORK'] },
+      enabled: { type: 'boolean' },
+      trigger_scope: { $ref: 'NotificationRuleTriggerScope' },
+      scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
+      schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
+      url: { type: 'string' },
+      content: { type: 'string' },
+      mentioned_mobile_list: { type: 'array', items: { type: 'string' } }
+    },
+    additionalProperties: false
   }
 };

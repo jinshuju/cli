@@ -17,6 +17,7 @@ import { FILL } from './fill.js';
 import { FOLDER } from './folder.js';
 import { FORM } from './form.js';
 import { LOCAL } from './local.js';
+import { NOTIFICATION } from './notification.js';
 import { OPENSEARCH } from './opensearch.js';
 import { ROUTINE } from './routine.js';
 import { SMS } from './sms.js';
@@ -51,6 +52,14 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'entry', summary: 'Manage entries' },
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
+  {
+    name: 'notification',
+    summary: 'Notification rules: SMS, email and WeChat to submitters, bots and webhooks to your team',
+    note:
+      'An SMS rule needs an approved template of your own, shared in the account or from the system (`sms status`). ' +
+      'A rule under review is saved but does not send; `notification get` says why a rule cannot send. ' +
+      'Only a manager of the form can create, edit or delete its rules. `notification edit --disable` turns a rule off for now.'
+  },
   {
     name: 'routine',
     summary: 'Manage routines (自动任务): Jiri at work on a schedule or when data changes',
@@ -101,6 +110,7 @@ export const COMMANDS: readonly Command[] = [
   ...ENTRY,
   ...COMMENT,
   ...OPENSEARCH,
+  ...NOTIFICATION,
   ...ROUTINE,
   ...CHECKIN,
   ...FILL,

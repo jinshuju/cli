@@ -961,6 +961,35 @@ test('entry aggregate turns --metric and --by into the JSON the API reads', asyn
   assert.equal(query.get('limit'), '5');
 });
 
+test('sms status shows each template id with its signature, while --output json keeps the API shape', async () => {
+  const body = {
+    signatures: [
+      {
+        id: 'sig1',
+        signature: '小金金',
+        status: 'SUCCESS',
+        reason: null,
+        templates: [{ id: '6650a1', content: '报名成功', status: 'SUCCESS', reason: null }]
+      },
+      { id: 'sig2', signature: '新签名', status: 'CHECKING', reason: null, templates: [] }
+    ]
+  };
+  const client = {
+    async request<T>(): Promise<T> {
+      return body as T;
+    }
+  };
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  const asText = await cli(['sms', 'status', '--output', 'text'], { env, client });
+  assert.equal(asText.exitCode, 0);
+  assert.match(asText.stdout, /6650a1/);
+  assert.match(asText.stdout, /新签名/);
+
+  const asJson = await cli(['sms', 'status', '--output', 'json'], { env, client });
+  assert.deepEqual(JSON.parse(asJson.stdout), body);
+});
+
 test('entry aggregate reads as a table, while --output json keeps the shape a script indexes', async () => {
   const body = {
     columns: [
@@ -1306,6 +1335,98 @@ test('an empty body prints null as JSON instead of failing a request that went t
     const result = await cli(['form', 'get', 'Kp7mQ2', '--output', output], { env: WRITE_ENV, client });
     assert.deepEqual(result, { exitCode: 0, stdout: 'null\n', stderr: '' });
   }
+});
+
+test('notification create sends the named keys for the approach, with --json for the rest', async () => {
+  const sms = createMockClient();
+  const missing = await cli(['notification', 'create', '--form', 'Kp7mQ2'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  await cli(
+    [
+      'notification',
+      'create',
+      '--form',
+      'Kp7mQ2',
+      '--approach',
+      'SMS',
+      '--recipients',
+      'field_2',
+      '--sms-template',
+      '6650a1',
+      '--placeholders',
+      'field_1',
+      '--trigger',
+      'schedule_time',
+      '--disable',
+      '--json',
+      '{"schedule_time_rule":{"date_key":"field_5","date_offset_action":"before","date_offset_number":1,"date_offset_unit":"day","hour":9,"minute":0}}'
+    ],
+    { env: WRITE_ENV, client: sms.client }
+  );
+
+  assert.equal(sms.requests[0].method, 'POST');
+  assert.equal(sms.requests[0].path, '/api/v1/forms/Kp7mQ2/notification_rules');
+  assert.deepEqual(sms.requests[0].body, {
+    schedule_time_rule: {
+      date_key: 'field_5',
+      date_offset_action: 'before',
+      date_offset_number: 1,
+      date_offset_unit: 'day',
+      hour: 9,
+      minute: 0
+    },
+    trigger_scope: 'schedule_time',
+    recipients: ['field_2'],
+    sms_template_id: '6650a1',
+    placeholder_keys: ['field_1'],
+    approach: 'SMS',
+    enabled: false
+  });
+  assert.equal(missing.exitCode, 2);
+  assert.match(missing.stderr, /--approach is required/);
+});
+
+test('notification list, get and edit address the rule on its form', async () => {
+  const list = createMockClient();
+  const get = createMockClient();
+  const edit = createMockClient();
+
+  await cli(['notification', 'list', '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: list.client });
+  await cli(['notification', 'get', '6650b2', '--form', 'Kp7mQ2'], { env: WRITE_ENV, client: get.client });
+  await cli(['notification', 'edit', '6650b2', '--form', 'Kp7mQ2', '--disable', '--content', '明天开课'], {
+    env: WRITE_ENV,
+    client: edit.client
+  });
+  const both = await cli(['notification', 'edit', '6650b2', '--form', 'Kp7mQ2', '--enable', '--disable'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  assert.equal(list.requests[0].path, '/api/v1/forms/Kp7mQ2/notification_rules');
+  assert.equal(get.requests[0].path, '/api/v1/forms/Kp7mQ2/notification_rules/6650b2');
+  assert.equal(edit.requests[0].method, 'PATCH');
+  assert.deepEqual(edit.requests[0].body, { content: '明天开课', enabled: false });
+  assert.equal(both.exitCode, 2);
+});
+
+test('notification delete asks for --yes, then deletes the rule on its form', async () => {
+  const remove = createMockClient();
+  const guarded = await cli(['notification', 'delete', '6650b2', '--form', 'Kp7mQ2'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  await cli(['notification', 'delete', '6650b2', '--form', 'Kp7mQ2', '--yes'], {
+    env: WRITE_ENV,
+    client: remove.client
+  });
+
+  assert.match(guarded.stderr, /pass --yes/);
+  assert.equal(remove.requests[0].method, 'DELETE');
+  assert.equal(remove.requests[0].path, '/api/v1/forms/Kp7mQ2/notification_rules/6650b2');
 });
 
 test('several --name keywords stay separate, so the API matches any of them', async () => {
