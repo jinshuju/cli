@@ -136,6 +136,9 @@ export type OperationId =
   | 'moveTableToFolder'
   | 'patchEntriesBatch'
   | 'pauseRoutine'
+  | 'prepareEntryAttachmentUpload'
+  | 'prepareFormImageUpload'
+  | 'prepareImportFileUpload'
   | 'previewFormFieldTypeChange'
   | 'previewTableFieldTypeChange'
   | 'replaceEntry'
@@ -1470,6 +1473,57 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/routines/{routine_id}/pause',
     parameters: [{ name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } }]
   },
+  prepareEntryAttachmentUpload: {
+    method: 'POST',
+    path: '/forms/{form_token}/entry_attachment_upload_urls',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          type: 'object',
+          required: ['field_api_code'],
+          properties: { field_api_code: { type: 'string' }, dimension_api_code: { type: 'string' } },
+          additionalProperties: false
+        }
+      }
+    }
+  },
+  prepareFormImageUpload: {
+    method: 'POST',
+    path: '/form_image_upload_urls',
+    parameters: [],
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          type: 'object',
+          required: ['image_type'],
+          properties: {
+            image_type: {
+              type: 'string',
+              enum: [
+                'field_choice',
+                'header',
+                'wallpaper',
+                'carousel',
+                'opensearch_header',
+                'description',
+                'goods_item',
+                'contact_widget'
+              ]
+            }
+          },
+          additionalProperties: false
+        }
+      }
+    }
+  },
+  prepareImportFileUpload: {
+    method: 'POST',
+    path: '/forms/{form_token}/import_file_upload_urls',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   previewFormFieldTypeChange: {
     method: 'GET',
     path: '/forms/{form_token}/fields/preview_convert',
@@ -1873,12 +1927,9 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
           properties: {
             field_api_code: { type: 'string' },
             dimension_api_code: { type: 'string' },
-            attachment_token: { type: 'string' },
             file: { type: 'string' },
             base64: { type: 'string' },
-            data: { type: 'string' },
             file_name: { type: 'string' },
-            filename: { type: 'string' },
             content_type: { type: 'string' }
           },
           additionalProperties: false
@@ -1896,13 +1947,21 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       content: {
         'multipart/form-data': {
           type: 'object',
-          required: ['file'],
+          required: ['image_type', 'file'],
           properties: {
             image_type: {
               type: 'string',
-              enum: ['field_choice', 'header', 'wallpaper', 'carousel', 'opensearch_header', 'description']
+              enum: [
+                'field_choice',
+                'header',
+                'wallpaper',
+                'carousel',
+                'opensearch_header',
+                'description',
+                'goods_item',
+                'contact_widget'
+              ]
             },
-            form_image_token: { type: 'string' },
             file: { type: 'string' }
           },
           additionalProperties: false
@@ -1920,7 +1979,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         'multipart/form-data': {
           type: 'object',
           required: ['file'],
-          properties: { import_file_token: { type: 'string' }, file: { type: 'string' } },
+          properties: { file: { type: 'string' } },
           additionalProperties: false
         }
       }
@@ -2327,7 +2386,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: 'string', pattern: '\\S' },
       api_code: { type: 'string' },
       cid: { type: 'string' },
-      required: { type: 'boolean' },
       choices: { type: 'array', items: { $ref: 'ChoiceInput' } }
     }
   },
@@ -2471,11 +2529,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     properties: {
       field_api_code: { type: 'string' },
       dimension_api_code: { type: 'string' },
-      attachment_token: { type: 'string' },
       base64: { type: 'string' },
-      data: { type: 'string' },
       file_name: { type: 'string' },
-      filename: { type: 'string' },
       content_type: { type: 'string' }
     },
     additionalProperties: false
@@ -3531,7 +3586,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         }
       },
       image_urls: { type: 'array', items: { type: 'string' } },
-      image_base64s: { type: 'array', items: { type: 'string' } }
+      image_base64s: { type: 'array', items: { type: 'string' } },
+      attachment_ids: { type: 'array', items: { type: 'string' } }
     },
     dependentRequired: { dimensions: ['skus'], skus: ['dimensions'] },
     allOf: [
@@ -3544,7 +3600,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         then: {
           anyOf: [
             { required: ['image_urls'], properties: { image_urls: { minItems: 1 } } },
-            { required: ['image_base64s'], properties: { image_base64s: { minItems: 1 } } }
+            { required: ['image_base64s'], properties: { image_base64s: { minItems: 1 } } },
+            { required: ['attachment_ids'], properties: { attachment_ids: { minItems: 1 } } }
           ]
         }
       }
@@ -3610,7 +3667,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         }
       },
       image_urls: { type: 'array', items: { type: 'string' } },
-      image_base64s: { type: 'array', items: { type: 'string' } }
+      image_base64s: { type: 'array', items: { type: 'string' } },
+      attachment_ids: { type: 'array', items: { type: 'string' } }
     },
     dependentRequired: { dimensions: ['skus'], skus: ['dimensions'] },
     if: { not: { required: ['api_code'] } },
@@ -3626,7 +3684,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           then: {
             anyOf: [
               { required: ['image_urls'], properties: { image_urls: { minItems: 1 } } },
-              { required: ['image_base64s'], properties: { image_base64s: { minItems: 1 } } }
+              { required: ['image_base64s'], properties: { image_base64s: { minItems: 1 } } },
+              { required: ['attachment_ids'], properties: { attachment_ids: { minItems: 1 } } }
             ]
           }
         }
@@ -3704,7 +3763,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     additionalProperties: false,
     allOf: [
       { anyOf: [{ required: ['value'] }, { required: ['name'] }] },
-      { anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['image_upload_token'] }] }
+      { anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['attachment_id'] }] }
     ],
     properties: {
       value: { type: 'string' },
@@ -3714,7 +3773,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       selected: { type: 'boolean' },
       image_url: { type: 'string' },
       image_base64: { type: 'string' },
-      image_upload_token: { type: 'string' }
+      attachment_id: { type: 'string' }
     }
   },
   ImageMultiSelectInput: {
@@ -4178,7 +4237,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             type: 'object',
             properties: {
               attachment_id: { type: 'string' },
-              image_upload_token: { type: 'string' },
               position_x: { type: 'number' },
               position_y: { type: 'number' }
             },
@@ -4521,6 +4579,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     type: 'object',
     properties: {
       name: { type: ['string', 'null'] },
+      name_set_by_user: { type: ['boolean', 'null'] },
       description: { type: ['string', 'null'] },
       instruction: { type: ['string', 'null'] },
       objects: {
@@ -4697,6 +4756,41 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_part_description: { type: 'boolean' }
     }
   },
+  SequenceFieldInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'SequenceField' },
+      label: { type: 'string' },
+      cid: { type: 'string' },
+      notes: { type: 'string' },
+      private: { type: 'boolean' },
+      required: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      segments: { type: 'array', minItems: 1, items: { $ref: 'SequenceSegmentInput' } }
+    }
+  },
+  SequenceSegmentInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['kind'],
+    properties: {
+      kind: { type: 'string', enum: ['fixed_text', 'field_value', 'sequence_number'] },
+      value: { type: 'string', minLength: 1, maxLength: 6 },
+      api_code: { type: 'string' },
+      cid: { type: 'string' },
+      digits: { type: 'integer', minimum: 1, maximum: 12 }
+    },
+    allOf: [
+      { if: { properties: { kind: { const: 'fixed_text' } } }, then: { required: ['value'] } },
+      {
+        if: { properties: { kind: { const: 'field_value' } } },
+        then: { anyOf: [{ required: ['api_code'] }, { required: ['cid'] }] }
+      },
+      { if: { properties: { kind: { const: 'sequence_number' } } }, then: { required: ['digits'] } }
+    ]
+  },
   ShortAnswerInput: {
     type: 'object',
     additionalProperties: false,
@@ -4810,7 +4904,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'LinkField',
           'AttachmentField',
           'FormulaField',
-          'RelationField'
+          'RelationField',
+          'SequenceField'
         ]
       },
       label: { type: 'string' }
@@ -4827,7 +4922,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       { $ref: 'LinkFieldInput' },
       { $ref: 'AttachmentFieldInput' },
       { $ref: 'FormulaFieldInput' },
-      { $ref: 'RelationFieldInput' }
+      { $ref: 'RelationFieldInput' },
+      { $ref: 'SequenceFieldInput' }
     ]
   },
   TableCreateInput: {
@@ -4953,7 +5049,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         properties: {
           background_color: { type: 'string' },
           background_image_url: { type: 'string' },
-          background_image_upload_token: { type: 'string' },
           background_image_attachment_id: { type: ['string', 'null'] }
         },
         additionalProperties: false
@@ -4967,18 +5062,13 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           text_style: { type: 'object', additionalProperties: { type: 'string' } },
           header_image_url: { type: 'string' },
           header_image_base64: { type: 'string' },
-          header_image_upload_token: { type: 'string' },
           carousel_images: {
             type: 'array',
             minItems: 1,
             maxItems: 5,
             items: {
               type: 'object',
-              properties: {
-                image_upload_token: { type: 'string' },
-                image_url: { type: 'string' },
-                attachment_id: { type: 'string' }
-              },
+              properties: { image_url: { type: 'string' }, attachment_id: { type: 'string' } },
               additionalProperties: false
             }
           },
@@ -5162,12 +5252,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   WidgetImageInput: {
     type: 'object',
     additionalProperties: false,
-    anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['image_upload_token'] }],
-    properties: {
-      image_url: { type: 'string' },
-      image_base64: { type: 'string' },
-      image_upload_token: { type: 'string' }
-    }
+    anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['attachment_id'] }],
+    properties: { image_url: { type: 'string' }, image_base64: { type: 'string' }, attachment_id: { type: 'string' } }
   },
   WidgetMapInput: {
     type: 'object',
