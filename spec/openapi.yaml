@@ -79,7 +79,7 @@ tags:
 - name: Plugins
   description: Plugin center plugins (check-in for now). A plugin campaign is bound to one form, and only its creator can see and change it. The account must have enabled the plugin in the plugin center, or the request returns 402.
 - name: Entries
-  description: 'Form entries: list, query, create, update, delete and batch operations.'
+  description: 'Form entries: list, query, create, update, delete and batch operations, and sending SMS / email to entries.'
 - name: Tables
   description: 'Tables (kind=table): structure and entries; field types are limited to the column types tables support.'
 - name: Views
@@ -375,7 +375,7 @@ paths:
         Use before deleting a field or choice: checks in batch whether fields (or single choices of a field) already have submitted entries. Deleting a field or choice that still has entries deletes those entries with it, and they cannot be recovered.
         Matches the check the web editor runs before deleting.
         - Put every deletion target of one edit in the `checks` of a single call (at most 100, may span several fields); `results` matches `checks` one to one, in order.
-        - When a target cannot be checked (for example, the field does not exist), its row returns `unavailable` with the reason; the other targets return as usual.
+        - When a target cannot be checked (the field or the `parent_field` column does not exist, or `choice_value` matches nothing of the kind `choice_type` names, or names more than one), its row returns `unavailable` with the reason; the other targets return as usual.
         - Returns 400 when `checks` is missing, empty, over 100, not a JSON array, or has an item that is not an object.
 
         OAuth scope: forms
@@ -1761,13 +1761,12 @@ paths:
       description: |
         Partially updates the form's theme (colors, background, header image, typography, form container, submit button); PUT is accepted too.
         - The request body must contain at least one of primary_color / secondary_color / wallpaper / header / typography / form_container / submit_button (`generate_header_image` is turned into header.header_image_url, so it counts too); otherwise 400.
-        - Header image source precedence: header_image_upload_token > header_image_base64 > header_image_url > header_image_attachment_id; when a header image is set and header.type is not given, header.type is set to image.
-        - Background image source precedence: background_image_upload_token > background_image_url > background_image_attachment_id. Setting or removing the background image also removes the preset background image that comes with the theme template; the background color is kept.
+        - Header image source precedence: header_image_base64 > header_image_url > header_image_attachment_id; when a header image is set and header.type is not given, header.type is set to image.
+        - Background image source precedence: background_image_url > background_image_attachment_id. Setting or removing the background image also removes the preset background image that comes with the theme template; the background color is kept.
         - `header_image_attachment_id` / `background_image_attachment_id` take the `attachment_id` returned by "Upload a form image" (image_type header / wallpaper); pass an empty string `""` to remove the current image.
-        - `header.carousel_images` replaces the carousel images as a whole: at most 5, not empty; each item gives one of image_upload_token / image_url / attachment_id, and an attachment_id must be a carousel image the form already has; when it is passed and header.type is not given, header.type is set to carousel.
+        - `header.carousel_images` replaces the carousel images as a whole: at most 5, not empty; each item gives one of image_url / attachment_id; when it is passed and header.type is not given, header.type is set to carousel.
         - Keys in `text_style` and `typography.*` use underscores (e.g. font_size); the server converts them to hyphenated CSS keys and merges them into the existing styles; the response uses the hyphenated keys.
         - `generate_header_image` has AI generate a header image and consumes AI points; returns 402 when points are insufficient, 400 when generation fails.
-        - An image upload_token is the `form_image_token` used by "Upload a form image"; the image purpose it records must match (header / wallpaper / carousel), and its upload must be complete.
 
         OAuth scope: form_setting
       operationId: updateFormTheme
@@ -2393,19 +2392,8 @@ paths:
       - Uploads
       summary: Upload an entry attachment
       operationId: uploadEntryAttachment
-      security:
-      - {}
-      - bearerAuth: []
       description: |
-        Uploads a file ahead of time for a form's attachment field (or an attachment column in a table field) and returns the attachment ID; then, when creating / updating an entry, put that ID (or the upload token) into the matching field to bind it. An uploaded attachment that no entry references stays unused.
-        Authenticate in one of two ways:
-        1. Regular API credentials (a Bearer token).
-        2. A one-time upload token `attachment_token` (instead of regular credentials): the token starts with `entry_att_tok_`, is valid for 30 minutes, can be used only once, and is bound to the form, field, column and file metadata. When the request carries `attachment_token`, regular credentials are not checked and the request acts as the token's user; returns 400 `attachment_token is invalid or expired; prepare upload again` when the token is invalid, expired, already used, its user has been deleted, or it does not match the requested form / field / column; also returns 400 when the uploaded file's name, Content-Type or byte size does not match the token.
-        Returns 401 when there are neither credentials nor `attachment_token`.
-        Send the file content in one of two ways: the `file` field of `multipart/form-data`; or a Base64 string in the `base64` (or `data`) field of a JSON / form-encoded body (a `data:<mime>;base64,` prefix is allowed), with `file_name` (or `filename`) and `content_type`. Base64 content cannot exceed 5 MB once decoded; larger returns 400 `attachment exceeds 5MB limit`, and a decoding failure returns 400 `base64 is invalid`; returns 400 `file or base64 is required` when neither is given.
-        `field_api_code` must point to an attachment field or a table field; for a table field, `dimension_api_code` must also be passed and point to an attachment column in that table field, otherwise returns 400; returns 404 when the field or column does not exist.
-        The file size is capped by the per-file limit set on the field (or column); a larger file returns 422, with the specific validation message in `error_description` (e.g. `文件超过了10 MB`); returns 422 `上传失败，请重试` when uploading to object storage fails (the server's wording is authoritative).
-        Returns 404 `form cannot be found` when the form does not exist or is not accessible to the current identity.
+        Uploads a file for an attachment field of the form, or for an attachment column of a table field.
 
         OAuth scope: write_entries
       parameters:
@@ -2425,9 +2413,6 @@ paths:
                 dimension_api_code:
                   type: string
                   description: api_code of the attachment column in a table field; required when `field_api_code` is a table field
-                attachment_token:
-                  type: string
-                  description: One-time upload token, starting with `entry_att_tok_`; when passed, it replaces the regular credentials
                 file:
                   type: string
                   description: The file to upload; pass either this or `base64`
@@ -2435,15 +2420,9 @@ paths:
                 base64:
                   type: string
                   description: The file content as a Base64 string, optionally with a data URI prefix; pass either this or `file`
-                data:
-                  type: string
-                  description: Alias of `base64`
                 file_name:
                   type: string
                   description: File name for a Base64 upload; defaults to `attachment`
-                filename:
-                  type: string
-                  description: Alias of `file_name`
                 content_type:
                   type: string
                   description: MIME type for a Base64 upload; defaults to the one in the data URI prefix, otherwise `application/octet-stream`
@@ -2480,24 +2459,61 @@ paths:
                   error_description:
                     type: string
                     description: Why validation failed
+  "/forms/{form_token}/entry_attachment_upload_urls":
+    post:
+      tags:
+      - Uploads
+      summary: Prepare an entry attachment upload
+      operationId: prepareEntryAttachmentUpload
+      description: |
+        Issues a one-time link for uploading a local file to an attachment field, or to an attachment column of a table field, without sending its bytes in a request body.
+        - With a shell that can read the file and reach the network, run `curl -F file=@<path> <upload_url>`, then put the returned `attachment_id` in the field when creating or updating an entry.
+        - Without one, or when curl fails (for example under a sandbox's network limits), send small content as Base64 to "Upload an entry attachment".
+
+        OAuth scope: write_entries
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - field_api_code
+              properties:
+                field_api_code:
+                  type: string
+                  description: api_code of the attachment field; for an attachment column in a table field, pass the table field's api_code
+                dimension_api_code:
+                  type: string
+                  description: api_code of the attachment column in a table field; required when `field_api_code` is a table field
+              additionalProperties: false
+      responses:
+        '201':
+          description: Upload link issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedUpload'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   "/forms/{form_token}/import_files":
     post:
       tags:
       - Uploads
       summary: Upload an import file
       operationId: uploadImportFile
-      security:
-      - {}
-      - bearerAuth: []
       description: |
-        Uploads a spreadsheet file (`.xlsx` / `.xls` / `.csv`) for bulk-importing entries into the given form, and returns the import attachment ID; then pass it as `attachment_id` to "Import entries from an uploaded spreadsheet" (`POST /forms/{form_token}/entry_imports`) to start the import.
-        Authenticate in one of two ways:
-        1. Regular API credentials (a Bearer token).
-        2. A one-time upload token `import_file_token` (instead of regular credentials): the token starts with `import_file_tok_`, is valid for 30 minutes, can be used only once, and is bound to the form and the file metadata. When the request carries `import_file_token`, regular credentials are not checked, and the request acts as the user the token belongs to; the uploaded file's original file name, Content-Type and byte size must match what the token recorded, otherwise returns 400. Returns 400 `import_file_token is invalid or expired; prepare upload again` when the token does not exist, has expired, has been used, or its user has been deleted; returns 400 `import_file_token was issued for another form; prepare upload again` when the token belongs to another form.
-        Returns 401 when there are neither credentials nor an `import_file_token`.
-        The request must be `multipart/form-data`, with the file in the `file` field; a missing file returns 400 `file is required`.
-        The file size is capped by the plan's Excel import limit (in MB), and the extension must be xls / xlsx / csv; otherwise returns 422, with the validation details in `error_description` (with an upload token, the token stays usable, so the file can be uploaded again).
-        Returns 404 `form cannot be found` when the form does not exist or is not accessible to the current caller.
+        Uploads a spreadsheet (`.xlsx` / `.xls` / `.csv`) for importing entries into the form.
 
         OAuth scope: write_entries
       parameters:
@@ -2511,12 +2527,9 @@ paths:
               required:
               - file
               properties:
-                import_file_token:
-                  type: string
-                  description: One-time upload token, starting with `import_file_tok_`; when passed, it replaces the regular credentials
                 file:
                   type: string
-                  description: The xlsx / xls / csv file to import; with an upload token, its file name, Content-Type and size must match what the token recorded
+                  description: The xlsx / xls / csv file to import
                   contentMediaType: application/octet-stream
               additionalProperties: false
       responses:
@@ -2548,6 +2561,35 @@ paths:
                   error_description:
                     type: string
                     description: Why validation failed
+  "/forms/{form_token}/import_file_upload_urls":
+    post:
+      tags:
+      - Uploads
+      summary: Prepare an import file upload
+      operationId: prepareImportFileUpload
+      description: |
+        Issues a one-time link for uploading a local spreadsheet (`.xlsx` / `.xls` / `.csv`) to import into the form, without sending its bytes in a request body.
+        - With a shell that can read the file and reach the network, run `curl -F file=@<path> <upload_url>`, then pass the returned `attachment_id` to "Import entries from an uploaded spreadsheet"; read the header row from your local copy.
+        - Without one, or when curl fails, the file cannot be uploaded: spreadsheets have no Base64 route.
+
+        OAuth scope: write_entries
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      responses:
+        '201':
+          description: Upload link issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedUpload'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   "/forms/{form_token}/entry_imports":
     post:
       tags:
@@ -3427,17 +3469,15 @@ paths:
       - Uploads
       summary: Upload a form image
       operationId: uploadFormImage
-      security:
-      - {}
-      - bearerAuth: []
       description: |
-        Uploads an image that belongs to the form itself (a picture choice image, a header image, a background image, one frame of the header carousel, the header image of the form's public query page, or an inline image in the form description / a field description), and returns the image attachment ID. The image is not bound to any form yet; it takes effect only when a form or theme references it later.
-        Authenticate in one of two ways:
-        1. Regular API credentials (a Bearer token). `image_type` must then say what the image is for, and can only be `header` (header image), `wallpaper` (background image), `opensearch_header` (public query page header image) or `description` (inline description image): pass the returned `attachment_id` to `header.header_image_attachment_id` / `wallpaper.background_image_attachment_id` of "Update a form's theme", or to `header.background_image.attachment_id` of "Update a public query"; `description` also returns the image address `url`, which goes into the `<img src>` of the form `description` or of a field's `notes`. When the form is saved, the image belongs to that form (at most 30 per form); images not used by any form within 7 days are cleaned up. Returns 400 `image_type must be one of: field_choice, header, wallpaper, carousel, opensearch_header, description.` when `image_type` is missing or not one of `field_choice` / `header` / `wallpaper` / `carousel` / `opensearch_header` / `description`; `field_choice` / `carousel` have nowhere that accepts an attachment ID, so they can only be uploaded with an upload token, otherwise returns 400.
-        2. A one-time upload token `form_image_token` (instead of regular credentials): the token starts with `form_img_tok_`, is valid for 30 minutes, can be used only once, and has already recorded the image purpose (`field_choice` / `header` / `wallpaper` / `carousel` / `opensearch_header` / `description`; `image_type` is then ignored) and the file metadata; the uploaded file's original file name, Content-Type and byte size must match what the token recorded, otherwise returns 400. After a successful upload, do not use the returned `attachment_id` directly; instead reference the same token in a choice's `image_upload_token` in "Create a form" / "Edit a form", in `header.header_image_upload_token` / `wallpaper.background_image_upload_token` / `header.carousel_images[].image_upload_token` of "Update a form's theme", or in `header.background_image.image_upload_token` of "Update a public query"; for the `description` purpose nothing references the token, so use the returned `url` directly. Returns 400 `form_image_token is invalid or expired; prepare upload again` when the token does not exist, has expired, has been used, or its user has been deleted.
-        Returns 401 when there are neither credentials nor a `form_image_token`. The request must be `multipart/form-data`, with the image binary in the `file` field; a missing file returns 400 `file is required`.
+        Uploads an image for a form; it takes effect once a form, theme or public query references it.
+        - `field_choice` / `goods_item` / `contact_widget`: a choice's `attachment_id`, a goods item's `attachment_ids` or a contact widget image's `attachment_id` in "Create a form" / "Edit a form".
+        - `header` / `wallpaper` / `carousel`: `header.header_image_attachment_id`, `wallpaper.background_image_attachment_id` or `header.carousel_images[].attachment_id` in "Update a form's theme".
+        - `opensearch_header`: `header.background_image.attachment_id` in "Update a public query".
+        - `description`: the returned `url`, in an `<img src>` of the form `description` or a field's `notes`; a form takes at most 30 such images.
+        - An `attachment_id` is taken only where its `image_type` goes, and only while the image is unused or already that form's; an image nothing uses within 7 days is deleted.
 
-        OAuth scope: forms when `image_type` (or the purpose the token recorded) is field_choice, opensearch_header or description; form_setting otherwise
+        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, opensearch_header or description; form_setting otherwise
       requestBody:
         required: true
         content:
@@ -3445,6 +3485,7 @@ paths:
             schema:
               type: object
               required:
+              - image_type
               - file
               properties:
                 image_type:
@@ -3456,13 +3497,12 @@ paths:
                   - carousel
                   - opensearch_header
                   - description
-                  description: What the image is for; without an upload token it is required and can only be header / wallpaper / opensearch_header / description; ignored with an upload token
-                form_image_token:
-                  type: string
-                  description: One-time upload token, starting with `form_img_tok_`; when passed, it replaces the regular credentials
+                  - goods_item
+                  - contact_widget
+                  description: What the image is for
                 file:
                   type: string
-                  description: The image file; with an upload token, its file name, Content-Type and size must match what the token recorded
+                  description: The image file
                   contentMediaType: application/octet-stream
               additionalProperties: false
       responses:
@@ -3482,6 +3522,55 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/form_image_upload_urls":
+    post:
+      tags:
+      - Uploads
+      summary: Prepare a form image upload
+      operationId: prepareFormImageUpload
+      description: |
+        Issues a one-time link for uploading a local image for a form, without sending its bytes in a request body.
+        - With a shell that can read the file and reach the network, run `curl -F file=@<path> <upload_url>`, then use the returned `attachment_id` (or `url`) as "Upload a form image" says for its `image_type`.
+        - Without one, or when curl fails (for example under a sandbox's network limits), give a public image URL or a small Base64 image where the image goes.
+
+        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, opensearch_header or description; form_setting otherwise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - image_type
+              properties:
+                image_type:
+                  type: string
+                  enum:
+                  - field_choice
+                  - header
+                  - wallpaper
+                  - carousel
+                  - opensearch_header
+                  - description
+                  - goods_item
+                  - contact_widget
+                  description: What the image is for
+              additionalProperties: false
+      responses:
+        '201':
+          description: Upload link issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedUpload'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   "/user/license_attachments":
     post:
       tags:
@@ -3568,7 +3657,7 @@ paths:
       operationId: createTable
       description: |
         Creates a table. Same as creating a form, except:
-        - field types can only be the column types tables support: `TextArea`, `RadioButton`, `CheckBox`, `BooleanField`, `MobileField`, `NumberField`, `DateTimeField`, `EmailField`, `LinkField`, `AttachmentField`, `FormulaField`, `RelationField`;
+        - field types can only be the column types tables support: `TextArea`, `RadioButton`, `CheckBox`, `BooleanField`, `MobileField`, `NumberField`, `DateTimeField`, `EmailField`, `LinkField`, `AttachmentField`, `FormulaField`, `RelationField`, `SequenceField`;
         - attachment columns do not accept limit properties such as count / size limits, and number / formula columns have limited precision; a violation returns 400 listing the offending columns;
         - choice columns do not get an "Other" choice; `folder_token` must be a table folder; `layout` is not supported.
         - with `with_default_entries: true`, 3 blank entries are added after creation (as when creating a table in the product); by default none are added.
@@ -5492,8 +5581,7 @@ paths:
       description: |
         Returns the account the current credential belongs to: plan, this month's usage and quota, feature trial status, and the bound payment merchant / WeChat Pay / Alipay accounts.
         OAuth scope: users
-        `usage` is null when the account has no usage record for this month yet; for an add-on service with unlimited quota, only `unit`, `unlimited: true`, `consumed_quota` and `available` are returned.
-        Each `usage` entry says whether the service can be used now (`available`). Which paid features the plan includes is in `GET /billing_account/paid_features`.
+        `usage` is null when the account has no usage record for this month yet.
       responses:
         '200':
           description: Account details
@@ -5663,12 +5751,10 @@ paths:
     get:
       tags:
       - Account
-      summary: List which paid features the account's plan includes
+      summary: List the paid features and whether the account has each
       operationId: listBillingAccountPaidFeatures
       description: |
-        Lists every paid feature, its Chinese name as the product shows it, and whether the current account's plan includes it now (feature trials and features granted on their own count). Check it before planning work that needs a plan feature, so the plan does not stop half way.
-        Find a feature by its `name`; new paid features appear here as the product adds them, so there is no list to keep on the caller's side.
-        It only says whether the plan includes a feature; using it may still be refused for other reasons (quota, a bound account, the form's setup). For add-on service quotas and whether each can still be used, use `usage` of `GET /billing_account`; bound payment accounts are in its `merchant_accounts` / `wxpay_accounts` / `alipay_accounts`. Whether something can be done may take several of these together, e.g. taking direct payments needs `goods_field_payment_setting` here, a bound account (Alipay also needs `show_alipay` here) and `usage.entry_transaction_quota.available` of `GET /billing_account`.
+        Lists every paid feature with its Chinese name and whether the account has it now; one bought or granted on its own counts. Quotas, and whether each add-on service can still be used, are in `usage` of `GET /billing_account`.
         OAuth scope: users
       responses:
         '200':
@@ -8140,12 +8226,13 @@ components:
       properties:
         field_api_code:
           type: string
-          description: api_code of the field to check; to check one column of a table / matrix field, that column's api_code, with `parent_field` set
+          description: api_code of the field to check; for a column of a table / matrix field, the table / matrix field's api_code
         choice_value:
           type: string
-          description: api_code of one choice to check; omitted, checks whether the whole field has any data
+          description: The choice to check, by its value or its name as GET /forms/{form_token} shows them; omitted, checks whether the whole field has any data
         choice_type:
           type: string
+          default: choice
           enum:
           - choice
           - statement
@@ -8154,10 +8241,10 @@ components:
           - level_2
           - level_3
           - level_4
-          description: What `choice_value` names, `choice` by default; `statement` / `dimension` for matrix fields, `level_1` to `level_4` for cascading drop-downs
+          description: What `choice_value` names; `statement` for a matrix row, `dimension` for a matrix, table or multiple-blank column, `level_1` to `level_4` for a cascading drop-down level
         parent_field:
           type: string
-          description: api_code of the parent field when checking one column of a matrix / table field
+          description: api_code of the column, when checking a choice inside one column of a table / matrix field
         check_extended_text:
           type: boolean
           description: When true, checks whether the choice's "Other" extra text has any data
@@ -8429,7 +8516,7 @@ components:
             $ref: '#/components/schemas/Statement'
         dimensions:
           type: array
-          description: Sub-fields (matrix fill-in / matrix scale / table / inline blanks); each item is a single-key object keyed by the sub-field's api_code, and sub-fields carry only the common properties
+          description: Sub-fields (matrix fill-in / matrix scale / table / inline blanks), each a single-key object keyed by the sub-field's api_code; a sub-field's validation.required comes from the field's own, and a required sub-field must be filled in every submitted row (or statement)
           items:
             $ref: '#/components/schemas/FieldMap'
         placeholder:
@@ -8898,7 +8985,7 @@ components:
         | Time | `{"hour": "12", "minute": "15"}` |
         | Address | `{"province","city","district","street"}` |
         | Geolocation | `{"longitude","latitude","address"}` |
-        | File upload (multiple allowed) | Array; each item is one of: the id of an uploaded attachment; the download URL of an attachment already on this form (to keep it); `{"base64": "...", "file_name": "a.png", "content_type": "image/png"}` (≤ 5MB; `base64` may also be a data URI); `{"attachment_token": "..."}` (pre-upload token) |
+        | File upload (multiple allowed) | Array; each item is one of: the id of an uploaded attachment; the download URL of an attachment already on this form (to keep it); `{"base64": "...", "file_name": "a.png", "content_type": "image/png"}` (≤ 5MB; `base64` may also be a data URI) |
         | Goods | `[{"value": "goods item api_code", "number": 2, "specification": {"spec dimension": "option"}?}]` |
         | Matrix fill-in / matrix scale | `{"<statement api_code>": {"<column api_code>": value}}` |
         | Matrix single choice | `{"<statement api_code>": "choice api_code"}` |
@@ -8978,6 +9065,7 @@ components:
       - last_entry_created_at
       - creator
       - entries_count
+      - folder_token
       properties:
         name:
           type: string
@@ -9003,6 +9091,11 @@ components:
           $ref: '#/components/schemas/Creator'
         entries_count:
           type: integer
+        folder_token:
+          type:
+          - string
+          - 'null'
+          description: Token of the folder the current identity put this table in (for an account token, the account owner's); null when the table is not in a folder
     TableListResponse:
       type: object
       required:
@@ -9367,9 +9460,6 @@ components:
           type: string
         cid:
           type: string
-        required:
-          type: boolean
-          description: Required
         choices:
           type: array
           items:
@@ -9520,6 +9610,11 @@ components:
           items:
             type: string
           description: Base64 goods images for layout=images
+        attachment_ids:
+          type: array
+          items:
+            type: string
+          description: Goods images for layout=images, by the `attachment_id` an image_type=goods_item upload returns, or an image this form already has
       dependentRequired:
         dimensions:
         - skus
@@ -9553,6 +9648,11 @@ components:
             - image_base64s
             properties:
               image_base64s:
+                minItems: 1
+          - required:
+            - attachment_ids
+            properties:
+              attachment_ids:
                 minItems: 1
     ReservationItemInput:
       type: object
@@ -11979,14 +12079,11 @@ components:
             background_image_url:
               type: string
               description: The server fetches this URL and uses it as the background image
-            background_image_upload_token:
-              type: string
-              description: The `form_image_token` used by "Upload a form image"; the image purpose must be wallpaper; takes precedence over background_image_url
             background_image_attachment_id:
               type:
               - string
               - 'null'
-              description: attachment_id returned by "Upload a form image" (image_type=wallpaper); an empty string removes the current background image. Lower priority than background_image_upload_token / background_image_url
+              description: attachment_id returned by "Upload a form image" (image_type=wallpaper); an empty string removes the current background image. Lower priority than background_image_url
           additionalProperties: false
         header:
           type: object
@@ -12015,9 +12112,6 @@ components:
             header_image_base64:
               type: string
               description: Base64-encoded header image; takes precedence over header_image_url
-            header_image_upload_token:
-              type: string
-              description: The `form_image_token` used by "Upload a form image"; the image purpose must be header; highest priority
             carousel_images:
               type: array
               minItems: 1
@@ -12025,16 +12119,13 @@ components:
               description: Carousel images; replaced as a whole and shown in array order
               items:
                 type: object
-                description: Provide one of image_upload_token / image_url / attachment_id
+                description: Provide one of image_url / attachment_id
                 properties:
-                  image_upload_token:
-                    type: string
-                    description: The `form_image_token` used by "Upload a form image"; the image purpose must be carousel
                   image_url:
                     type: string
                   attachment_id:
                     type: string
-                    description: Keeps an existing carousel image of this form
+                    description: An existing carousel image of this form, or the `attachment_id` returned by "Upload a form image" (image_type carousel)
                 additionalProperties: false
             header_image_attachment_id:
               type:
@@ -12281,10 +12372,24 @@ components:
       properties:
         attachment_id:
           type: string
-          description: Image attachment ID (see "Upload a form image")
+          description: Image attachment ID; pass it where its `image_type` goes
         url:
           type: string
           description: Image URL, returned only when `image_type=description`; put it in the `<img src>` of a form description or field description
+    PreparedUpload:
+      type: object
+      required:
+      - upload_url
+      - expires_at
+      properties:
+        upload_url:
+          type: string
+          format: uri
+          description: 'One-time upload link: POST the file to it as the `file` part of `multipart/form-data`, without credentials; it answers `{ "attachment_id" }` (plus `url` for a `description` image), or 400 once used or expired or when the file breaks the size or type limits'
+        expires_at:
+          type: string
+          format: date-time
+          description: When the link expires (UTC)
     UploadedLicenseAttachment:
       type: object
       required:
@@ -12354,21 +12459,12 @@ components:
         dimension_api_code:
           type: string
           description: api_code of the attachment column in a table field; required when `field_api_code` is a table field
-        attachment_token:
-          type: string
-          description: One-time upload token, starting with `entry_att_tok_`; when passed, it replaces the regular credentials
         base64:
           type: string
-          description: File content as a Base64 string, optionally with a `data:<mime>;base64,` prefix, at most 5 MB once decoded; the `data` key also works
-        data:
-          type: string
-          description: Alias of `base64`
+          description: File content as a Base64 string, optionally with a `data:<mime>;base64,` prefix, at most 5 MB once decoded
         file_name:
           type: string
-          description: File name, defaults to `attachment`; the `filename` key also works
-        filename:
-          type: string
-          description: Alias of `file_name`
+          description: File name, defaults to `attachment`
         content_type:
           type: string
           description: MIME type, defaults to the one in the data URI prefix, otherwise `application/octet-stream`
@@ -12814,7 +12910,7 @@ components:
       properties:
         available:
           type: boolean
-          description: Whether the service can be used now, by the same check its use runs. A paid account may keep using SMS, email, entries and attachment storage past total_balance while its account balance lasts, so available can be true with total_balance 0. For entry_transaction_quota it says nothing about whether a payment account is bound or the plan allows direct payments; see `GET /billing_account/paid_features`.
+          description: Whether the service can be used now; a paid account may keep using it past total_balance on its account balance
         unit:
           type: string
           enum:
@@ -13505,7 +13601,7 @@ components:
           description: Whether the searcher may export results
         header:
           type: object
-          description: Header settings; only attachment_id, image_upload_token, position_x and position_y of background_image are read (defined by the server implementation)
+          description: Header settings; only attachment_id, position_x and position_y of background_image are read (defined by the server implementation)
           properties:
             background_image:
               type: object
@@ -13513,9 +13609,6 @@ components:
                 attachment_id:
                   type: string
                   description: Background image attachment id, returned by "Upload a form image" (`POST /form_image_attachments`, `image_type=opensearch_header`)
-                image_upload_token:
-                  type: string
-                  description: 'Instead of attachment_id: after uploading with a `form_image_token` (purpose opensearch_header), pass that token directly. The token must be uploaded, unexpired, owned by the caller and have the purpose opensearch_header; otherwise returns 400'
                 position_x:
                   type: number
                   description: Horizontal position of the background image
@@ -15433,7 +15526,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WidgetImageInput'
-          description: Images; each gives one of image_url / image_base64 / image_upload_token
+          description: Images; each gives one of image_url / image_base64 / attachment_id
         widget_max_images_number:
           type: integer
           minimum: 1
@@ -16703,6 +16796,7 @@ components:
           - AttachmentField
           - FormulaField
           - RelationField
+          - SequenceField
         label:
           type: string
           description: Field label
@@ -16721,6 +16815,7 @@ components:
           AttachmentField: "#/components/schemas/AttachmentFieldInput"
           FormulaField: "#/components/schemas/FormulaFieldInput"
           RelationField: "#/components/schemas/RelationFieldInput"
+          SequenceField: "#/components/schemas/SequenceFieldInput"
       oneOf:
       - $ref: '#/components/schemas/TextAreaInput'
       - $ref: '#/components/schemas/RadioButtonInput'
@@ -16734,12 +16829,13 @@ components:
       - $ref: '#/components/schemas/AttachmentFieldInput'
       - $ref: '#/components/schemas/FormulaFieldInput'
       - $ref: '#/components/schemas/RelationFieldInput'
+      - $ref: '#/components/schemas/SequenceFieldInput'
       title: TableColumnInput
     ImageChoiceInput:
       type: object
       title: ImageChoiceInput
       additionalProperties: false
-      description: An image choice; value is its text label, and one of image_url / image_base64 / image_upload_token is required
+      description: An image choice; value is its text label, and one of image_url / image_base64 / attachment_id is required
       allOf:
       - anyOf:
         - required:
@@ -16752,7 +16848,7 @@ components:
         - required:
           - image_base64
         - required:
-          - image_upload_token
+          - attachment_id
       properties:
         value:
           type: string
@@ -16776,9 +16872,9 @@ components:
         image_base64:
           type: string
           description: The image as Base64; only for very small images
-        image_upload_token:
+        attachment_id:
           type: string
-          description: The `form_image_token` used by "Upload a form image"; the image purpose must be field_choice
+          description: The `attachment_id` of an image_type=field_choice upload, or an image this form already has
     CascadeChoiceInput:
       type: object
       title: CascadeChoiceInput
@@ -17070,15 +17166,16 @@ components:
       - required:
         - image_base64
       - required:
-        - image_upload_token
+        - attachment_id
       properties:
         image_url:
           type: string
           format: uri
         image_base64:
           type: string
-        image_upload_token:
+        attachment_id:
           type: string
+          description: The `attachment_id` of an image_type=contact_widget upload, or an image this form already has
     FormCreateConstraints:
       title: FormCreateConstraints
       description: Constraints between fields and scene / layout when creating a form
@@ -18219,7 +18316,14 @@ components:
       allOf:
       - $ref: '#/components/schemas/Form'
       - type: object
+        required:
+        - folder_token
         properties:
+          folder_token:
+            type:
+            - string
+            - 'null'
+            description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
           theme:
             type: object
             description: Form theme (present when `include_theme=true`); same shape as `FormTheme`, but without `form_token`. An empty object when the form has no theme
@@ -20748,7 +20852,7 @@ components:
           description: The feature's Chinese name as the product shows it
         available:
           type: boolean
-          description: Whether the account's plan includes the feature now
+          description: Whether the account has the feature now
       examples:
       - key: opensearch
         name: 对外查询
@@ -20929,6 +21033,11 @@ components:
           items:
             type: string
           description: Base64 goods images for layout=images
+        attachment_ids:
+          type: array
+          items:
+            type: string
+          description: Goods images for layout=images, by the `attachment_id` an image_type=goods_item upload returns, or an image this form already has
       dependentRequired:
         dimensions:
         - skus
@@ -20971,6 +21080,103 @@ components:
               properties:
                 image_base64s:
                   minItems: 1
+            - required:
+              - attachment_ids
+              properties:
+                attachment_ids:
+                  minItems: 1
+    SequenceFieldInput:
+      type: object
+      title: SequenceFieldInput
+      description: SequenceField field
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: SequenceField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Field notes
+        private:
+          type: boolean
+          description: Hidden field; a hidden field is not checked for required
+        required:
+          type: boolean
+          description: Required
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        segments:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SequenceSegmentInput'
+          description: Numbering rule, joined in order; exactly one sequence_number part. Defaults to a single 4-digit sequence number
+    SequenceSegmentInput:
+      type: object
+      title: SequenceSegmentInput
+      additionalProperties: false
+      description: One part of a numbering rule
+      required:
+      - kind
+      properties:
+        kind:
+          type: string
+          enum:
+          - fixed_text
+          - field_value
+          - sequence_number
+          description: 'fixed_text: fixed characters; field_value: the value of another field of the entry; sequence_number: the auto-increment number'
+        value:
+          type: string
+          minLength: 1
+          maxLength: 6
+          description: 'fixed_text: the characters'
+        api_code:
+          type: string
+          description: 'field_value: api_code of an existing text, name, email, mobile, ID card, number, single choice, drop-down or date field, created_at / updated_at included'
+        cid:
+          type: string
+          description: 'field_value: cid of a field created in the same request, instead of api_code'
+        digits:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: 'sequence_number: digits, zero-padded'
+      allOf:
+      - if:
+          properties:
+            kind:
+              const: fixed_text
+        then:
+          required:
+          - value
+      - if:
+          properties:
+            kind:
+              const: field_value
+        then:
+          anyOf:
+          - required:
+            - api_code
+          - required:
+            - cid
+      - if:
+          properties:
+            kind:
+              const: sequence_number
+        then:
+          required:
+          - digits
     RoutineRefusal:
       type: object
       required:
@@ -21015,6 +21221,11 @@ components:
           - string
           - 'null'
           description: The name, at most 60 characters
+        name_set_by_user:
+          type:
+          - boolean
+          - 'null'
+          description: For Jiri, with `name`, when the user gave that name. Jiri's `name` without it leaves a name the user set as it is; from any other caller a changed `name` is the user's own.
         description:
           type:
           - string
@@ -21128,6 +21339,7 @@ components:
       required:
       - id
       - name
+      - name_set_by_user
       - description
       - instruction
       - state
@@ -21150,6 +21362,9 @@ components:
           type: string
         name:
           type: string
+        name_set_by_user:
+          type: boolean
+          description: Whether the user set the name (on the routines page, through the API, or by telling Jiri); Jiri no longer renames such a routine on its own
         description:
           type:
           - string
