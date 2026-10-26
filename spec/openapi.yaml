@@ -6260,7 +6260,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SMSTemplate'
         '400':
-          description: The signature is not an applied-for notification signature with `channel` normal, or the content is empty, contains `【】` or carries `$(...)` variables
+          description: The signature is not an applied-for notification signature with `channel` normal; the content is empty, contains `【】` or sensitive words, puts three variables in a row, or carries `$(...)` variables without `variables`; or the variables do not match `variables`
           content:
             application/json:
               schema:
@@ -6304,7 +6304,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SMSTemplate'
         '400':
-          description: The template is under review, the signature is not allowed or missing, or the content is empty or contains `【】`
+          description: The template is under review; the signature is not allowed or missing; the content is empty, contains `【】` or sensitive words, or puts three variables in a row; the variables do not match `variables`, or change without `variables`; or the variables change in number or order while notification rules or SMS tasks use the template
           content:
             application/json:
               schema:
@@ -20250,6 +20250,7 @@ components:
       - content
       - status
       - reason
+      - variables
       properties:
         id:
           type: string
@@ -20274,6 +20275,11 @@ components:
           - string
           - 'null'
           description: Review note; the reason when rejected
+        variables:
+          type: array
+          description: The variables in the order the content uses them
+          items:
+            $ref: '#/components/schemas/SMSTemplateVariable'
     SMSSignatureCreateInput:
       type: object
       required:
@@ -20434,6 +20440,12 @@ components:
           type: string
           maxLength: 200
           description: What the SMS is used for, shown to the reviewer
+        variables:
+          type: array
+          minItems: 1
+          description: The variables the content uses as `$(var_1)`, `$(var_2)` and so on, each once
+          items:
+            $ref: '#/components/schemas/SMSTemplateVariableInput'
       additionalProperties: false
     SMSTemplateUpdateInput:
       type: object
@@ -20444,11 +20456,17 @@ components:
           description: Signature text, without `【】`; a notification signature with `channel` normal
         content:
           type: string
-          description: Template content, without the signature; may keep the template's `$(...)` variables
+          description: Template content, without the signature; keeps the template's `$(...)` variables unless `variables` declares new ones
         apply_description:
           type: string
           maxLength: 200
           description: What the SMS is used for, shown to the reviewer
+        variables:
+          type: array
+          minItems: 1
+          description: The variables the content uses as `$(var_1)`, `$(var_2)` and so on, each once; replaces the declared ones as a whole
+          items:
+            $ref: '#/components/schemas/SMSTemplateVariableInput'
       additionalProperties: false
     SMSTemplate:
       type: object
@@ -20476,9 +20494,9 @@ components:
           description: Template content as saved
         variables:
           type: array
+          description: The variables in the order the content uses them; when sending with the template, pass `placeholder_keys` with one field api_code per variable in this order
           items:
-            type: string
-          description: Variable names in the order they appear in the content; when sending with the template, pass `placeholder_keys` with one field api_code per variable in this order
+            $ref: '#/components/schemas/SMSTemplateVariable'
         status:
           type:
           - string
@@ -20515,13 +20533,85 @@ components:
       examples:
       - id: 6512a1c2d3e4f5a6b7c8d9e0
         signature: 小金培训
-        content: 你报名的课程将于明天上午 9 点开课，请准时参加。
-        variables: []
+        content: "$(var_1)，你报名的课程将于 $(var_2) 开课，请准时参加。"
+        variables:
+        - key: var_1
+          label: 姓名
+          type: name
+          example: 姓名，示例：张三
+        - key: var_2
+          label: 开课时间
+          type: time
+          example: 2026-10-27 09:00
         status: CHECKING
         reason:
         scope: owned
         scene:
         channel: normal
+    SMSTemplateVariableInput:
+      type: object
+      required:
+      - label
+      - type
+      - example
+      properties:
+        label:
+          type: string
+          pattern: "\\S"
+          description: What the variable stands for, e.g. `姓名`
+        type:
+          type: string
+          enum:
+          - code
+          - nickname
+          - name
+          - address
+          - amount
+          - link
+          - time
+          - other
+          description: What the reviewer checks the value against; code is a number such as an order code, nickname also covers the name of a company or team, name is a person's name of 2 to 5 Chinese characters
+        example:
+          type: string
+          minLength: 6
+          pattern: "\\S"
+          description: A sample value, shown to the reviewer, e.g. `姓名，示例：张三`
+      additionalProperties: false
+    SMSTemplateVariable:
+      type: object
+      required:
+      - key
+      - label
+      - type
+      - example
+      properties:
+        key:
+          type: string
+          description: The name inside `$(...)`
+        label:
+          type:
+          - string
+          - 'null'
+          description: What the variable stands for; null for a form field code of a template made in a form
+        type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - code
+          - nickname
+          - name
+          - address
+          - amount
+          - link
+          - time
+          - other
+          -
+        example:
+          type:
+          - string
+          - 'null'
+          description: The sample value shown to the reviewer
     SMSSignatureListResponse:
       type: object
       required:

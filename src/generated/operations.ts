@@ -4693,7 +4693,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     properties: {
       signature: { type: 'string' },
       content: { type: 'string' },
-      apply_description: { type: 'string', maxLength: 200 }
+      apply_description: { type: 'string', maxLength: 200 },
+      variables: { type: 'array', minItems: 1, items: { $ref: 'SMSTemplateVariableInput' } }
     },
     additionalProperties: false
   },
@@ -4702,7 +4703,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     properties: {
       signature: { type: 'string' },
       content: { type: 'string' },
-      apply_description: { type: 'string', maxLength: 200 }
+      apply_description: { type: 'string', maxLength: 200 },
+      variables: { type: 'array', minItems: 1, items: { $ref: 'SMSTemplateVariableInput' } }
+    },
+    additionalProperties: false
+  },
+  SMSTemplateVariableInput: {
+    type: 'object',
+    required: ['label', 'type', 'example'],
+    properties: {
+      label: { type: 'string', pattern: '\\S' },
+      type: { type: 'string', enum: ['code', 'nickname', 'name', 'address', 'amount', 'link', 'time', 'other'] },
+      example: { type: 'string', minLength: 6, pattern: '\\S' }
     },
     additionalProperties: false
   },
