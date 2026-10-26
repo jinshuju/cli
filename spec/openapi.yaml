@@ -9811,7 +9811,7 @@ components:
       properties:
         trigger:
           type: string
-          description: Field api_code; `trade_status` matches the payment status, e.g. `paid`
+          description: Field api_code, or `trade_status` for the payment status
         operator:
           type: string
           enum:
@@ -9886,7 +9886,7 @@ components:
       - matched_update
       - schedule_time
       default: all_new
-      description: 'When it sends: on new entries, on changed entries, on new / changed entries matching `scope_conditions`, or at a time set by `schedule_time_rule`'
+      description: 'When it sends: on new entries, on changed entries, on new / changed entries matching `scope_conditions`, or at a time set by `schedule_time_rule`. To send when an entry is paid, use `matched_update` with the condition `{trigger: trade_status, operator: any_in, value: [paid]}`'
     SMSNotificationRuleInput:
       type: object
       description: An SMS notification rule, sent to the submitter. The text and signature come from the SMS template.
