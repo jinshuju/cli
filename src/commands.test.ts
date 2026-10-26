@@ -748,6 +748,35 @@ test('sms template create and update send what their flags say', async () => {
   assert.deepEqual(mock.requests[1].body, { content: '后天开课' });
 });
 
+test('sms template create sends each --variable in order, keeping the colons of its example', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['sms', 'template', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run([
+    'create',
+    '--signature',
+    '小金培训',
+    '--content',
+    '$(var_1)，课程 $(var_2) 开课',
+    '--variable',
+    '姓名:name:姓名，示例：张三',
+    '--variable',
+    '开课时间:time:2026-10-27 09:00'
+  ]);
+  const malformed = await run(['create', '--signature', '小金培训', '--content', '$(var_1)', '--variable', '姓名']);
+
+  assert.deepEqual(mock.requests[0].body, {
+    signature: '小金培训',
+    content: '$(var_1)，课程 $(var_2) 开课',
+    variables: [
+      { label: '姓名', type: 'name', example: '姓名，示例：张三' },
+      { label: '开课时间', type: 'time', example: '2026-10-27 09:00' }
+    ]
+  });
+  assert.match(malformed.stderr, /--variable must be '<label>:<type>:<example>', got "姓名"/);
+  assert.equal(mock.requests.length, 1);
+});
+
 test('sms send estimates with --estimate, sends with --yes, and sends nothing with neither', async () => {
   const mock = createMockClient();
   const run = (args: string[]) =>

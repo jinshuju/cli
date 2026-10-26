@@ -482,10 +482,17 @@ with it.
 While your own are under review, `sms template list --scope official` lists the official
 templates, which are approved already and can be sent right away.
 
+A template's variables are written `$(var_1)`, `$(var_2)` and so on, each once,
+and each is declared with a `--variable <label>:<type>:<example>`;
+the reviewer sees the examples, which take 6 characters or more. A notification or `sms send --placeholder` then
+fills them from form fields in the order the content uses them.
+
 ```bash
 jinshuju sms signature create 小金培训 --license ./license.jpg --company-name 小金培训有限公司 --company-id 91110000MA00000000 \
   --id-card-front ./front.jpg --id-card-back ./back.jpg --id-card-name 张三 --id-card-number 110101199001011234 --mobile 13800000000
 jinshuju sms template create --signature 小金培训 --content "你报名的课程明天上午 9 点开课，请准时参加。"
+jinshuju sms template create --signature 小金培训 --content '$(var_1)，你好，套餐 $(var_2) 到期。' \
+  --variable 姓名:name:姓名，示例：张三 --variable 到期日期:time:2026-10-25
 jinshuju sms status
 jinshuju sms signature list --status FAIL
 jinshuju sms template list --keyword 开课 --scope owned

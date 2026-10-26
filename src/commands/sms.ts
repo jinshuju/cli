@@ -81,6 +81,26 @@ const TEMPLATE_DESCRIPTION_OPTION: OptionSpec = {
   description: 'What the SMS is for, shown to the reviewer'
 };
 
+const TEMPLATE_VARIABLE_OPTION: OptionSpec = {
+  name: '--variable',
+  type: 'string',
+  repeatable: true,
+  placeholder: '<label>:<type>:<example>',
+  description:
+    'Declare the next of $(var_1), $(var_2)... the content uses, repeatable in that order; type is one of ' +
+    'code, nickname, name, address, amount, link, time, other, e.g. 姓名:name:姓名，示例：张三; the example takes 6 characters or more'
+};
+
+const VARIABLE_SHAPE = "--variable must be '<label>:<type>:<example>'";
+
+/** `姓名:name:姓名，示例：张三`; the example keeps any further `:`, as a time or a link has. */
+function parseVariable(input: string): Record<string, string> {
+  const [label, type, ...rest] = input.split(':');
+  const example = rest.join(':');
+  if (!label || !type || !example) throw new UsageError(`${VARIABLE_SHAPE}, got ${JSON.stringify(input)}`);
+  return { label, type, example };
+}
+
 function requiredOption(input: CommandInput, key: string, flag: string): string {
   const value = input.options[key] as string | undefined;
   if (!value) throw new UsageError(`${flag} is required`);
@@ -204,6 +224,8 @@ function templateBody(input: CommandInput): Record<string, unknown> {
   if (input.options.signature !== undefined) body.signature = input.options.signature;
   if (input.options.content !== undefined) body.content = input.options.content;
   if (input.options.description !== undefined) body.apply_description = input.options.description;
+  const variables = input.options.variable as string[] | undefined;
+  if (variables?.length) body.variables = variables.map(parseVariable);
   return body;
 }
 
@@ -414,7 +436,8 @@ export const SMS: readonly Command[] = [
     summary: 'Submit an SMS template for review',
     description:
       'The signature must have been applied for, though it need not be approved yet. Review takes a while: ' +
-      'follow it with `sms status`. Once approved, the template id is what a notification sends.',
+      'follow it with `sms status`. Once approved, the template id is what a notification sends. Variables are ' +
+      'written $(var_1), $(var_2)... in the content, each once, and each declared with --variable.',
     options: [
       { name: '--signature', type: 'string', placeholder: '<signature>', description: 'Signature to send it under' },
       {
@@ -423,7 +446,8 @@ export const SMS: readonly Command[] = [
         placeholder: '<text>',
         description: 'Template content, without the signature'
       },
-      TEMPLATE_DESCRIPTION_OPTION
+      TEMPLATE_DESCRIPTION_OPTION,
+      TEMPLATE_VARIABLE_OPTION
     ],
     request: (input) => {
       requiredOption(input, 'signature', '--signature <signature>');
@@ -431,7 +455,9 @@ export const SMS: readonly Command[] = [
       return call('createSmsTemplate', { body: templateBody(input) });
     },
     examples: [
-      'jinshuju sms template create --signature 小金培训 --content "你报名的课程明天上午 9 点开课，请准时参加。"'
+      'jinshuju sms template create --signature 小金培训 --content "你报名的课程明天上午 9 点开课，请准时参加。"',
+      "jinshuju sms template create --signature 小金培训 --content '$(var_1)，你好，套餐 $(var_2) 到期。' " +
+        '--variable 姓名:name:姓名，示例：张三 --variable 到期日期:time:2026-10-25'
     ]
   },
   {
@@ -439,7 +465,9 @@ export const SMS: readonly Command[] = [
     summary: 'Change an SMS template and submit it for review again',
     description:
       'Not while it is under review. Only the flags given change; with none, it is submitted again as it is. ' +
-      'An approved template goes back to review and cannot be sent until approved again.',
+      'An approved template goes back to review and cannot be sent until approved again. Changing the variables ' +
+      'of the content takes a --variable for each; while a notification or an SMS task sends the template, only ' +
+      'the text around them can change.',
     args: [{ name: 'id', required: true, description: 'Template id, from `sms template list`' }],
     options: [
       {
@@ -449,7 +477,8 @@ export const SMS: readonly Command[] = [
         description: 'Send it under this signature instead'
       },
       { name: '--content', type: 'string', placeholder: '<text>', description: 'New content, without the signature' },
-      TEMPLATE_DESCRIPTION_OPTION
+      TEMPLATE_DESCRIPTION_OPTION,
+      TEMPLATE_VARIABLE_OPTION
     ],
     request: (input) => call('updateSmsTemplate', { path: { id: input.args.id }, body: templateBody(input) }),
     examples: ['jinshuju sms template update 6512a1c2d3e4f5a6b7c8d9e0 --content "你报名的课程后天上午 9 点开课。"']
