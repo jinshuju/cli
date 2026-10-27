@@ -466,7 +466,9 @@ how much a type conversion would keep and how much it would clear.
 ## SMS signatures and templates
 
 An SMS notification needs a signature and a template, and both wait on a
-review, so submit them as early as you can. A template can go in while its
+review, so submit them as early as you can. The materials a signature is
+applied with replace your ID card information, and the account's business
+license unless the account has passed license verification. A template can go in while its
 signature is still under review; `sms status` follows both, with the reason
 when one is rejected.
 

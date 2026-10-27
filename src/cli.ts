@@ -88,8 +88,12 @@ async function runRemote(
       return { exitCode: 0, stdout: gathered, stderr: '' };
     }
     const rows: unknown[] = [];
-    await readAllPages(client, request, command.paginate, progress(), (page) => rows.push(...page));
-    const listing = { count: rows.length, data: rows };
+    let totals: Record<string, unknown> | undefined;
+    await readAllPages(client, request, command.paginate, progress(), (page, body) => {
+      totals ??= Object.fromEntries((command.paginate?.totals ?? []).map((key) => [key, body?.[key]]));
+      rows.push(...page);
+    });
+    const listing = { ...totals, count: rows.length, data: rows };
     // Every page read is still one listing, and reads the way a single page does.
     if (output === 'text' && command.render) return ok(format(command.render(listing), output, width, hints));
     return ok(format(listing, output, width, hints));
@@ -116,7 +120,7 @@ async function readAllPages(
   request: HttpRequest,
   paginate: { items: string; cursor: string },
   watching: Progress,
-  onPage: (rows: unknown[]) => void
+  onPage: (rows: unknown[], body: Record<string, unknown> | undefined) => void
 ): Promise<number> {
   let count = 0;
   let cursor: string | undefined;
@@ -128,7 +132,7 @@ async function readAllPages(
     });
     const rows = (body?.[paginate.items] as unknown[] | undefined) ?? [];
     count += rows.length;
-    onPage(rows);
+    onPage(rows, body);
     page += 1;
     watching.step(`read ${page} page${page === 1 ? '' : 's'}, ${count} rows…`);
     const next = body?.[paginate.cursor];

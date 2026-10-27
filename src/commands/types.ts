@@ -14,6 +14,11 @@ export interface ArgSpec {
 export interface Pagination {
   readonly items: string;
   readonly cursor: string;
+  /**
+   * Keys of a page that count the whole listing rather than the page, so the
+   * listing `--all` reads still answers them as the first page did.
+   */
+  readonly totals?: readonly string[];
 }
 
 export interface CommandInput {

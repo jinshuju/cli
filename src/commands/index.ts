@@ -57,7 +57,7 @@ export const RESOURCES: readonly Resource[] = [
     name: 'notification',
     summary: 'Notification rules: SMS, email and WeChat to submitters, bots and webhooks to your team',
     note:
-      'An SMS rule needs an approved template of your own, shared in the account or from the system (`sms status`). ' +
+      'An SMS rule needs an approved template of your own or shared in the account (`sms template list`). ' +
       'A rule under review is saved but does not send; `notification get` says why a rule cannot send. ' +
       'Only a manager of the form can create, edit or delete its rules. `notification edit --disable` turns a rule off for now.'
   },
