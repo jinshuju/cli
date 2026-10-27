@@ -1301,7 +1301,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/sms/templates',
     parameters: [
       { name: 'q', in: 'query', schema: { type: 'string' } },
-      { name: 'scope', in: 'query', schema: { type: 'string', enum: ['owned', 'shared'] } },
+      { name: 'scope', in: 'query', schema: { type: 'string', enum: ['owned', 'shared', 'official'] } },
       { name: 'signature_id', in: 'query', schema: { type: 'string' } },
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },

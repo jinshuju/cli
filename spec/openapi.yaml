@@ -6181,25 +6181,26 @@ paths:
       summary: List SMS templates
       operationId: listSmsTemplates
       description: |
-        Lists the templates the current user created and the ones other members share, newest first. Pagination as in the form list; 50 per page by default, up to 1000.
+        Lists the templates the current user created, the ones other members share and the official ones, newest first with the official ones last. Pagination as in the form list; 50 per page by default, up to 1000.
 
         OAuth scope: users
       parameters:
       - name: q
         in: query
         required: false
-        description: Matches the content or the signature text, case-insensitive and partial
+        description: Matches the content or the signature text, case-insensitive and partial; only the content of official templates
         schema:
           type: string
       - name: scope
         in: query
         required: false
-        description: Only owned or only shared templates; both when omitted
+        description: Only owned, only shared or only official templates; all three when omitted
         schema:
           type: string
           enum:
           - owned
           - shared
+          - official
       - name: signature_id
         in: query
         required: false
@@ -9965,7 +9966,7 @@ components:
             type: string
         sms_template_id:
           type: string
-          description: A template of the caller's own or shared in the account; one under review sends once approved
+          description: A template of the caller's own, shared in the account or official (`GET /sms/templates`); one under review sends once approved
         placeholder_keys:
           type: array
           description: The field api_code filling each `$(...)` variable of the template, in order
@@ -20455,9 +20456,11 @@ components:
       - id
       - signature
       - content
+      - variables
       - status
       - reason
       - scope
+      - scene
       - channel
       properties:
         id:
@@ -20471,6 +20474,11 @@ components:
         content:
           type: string
           description: Template content as saved
+        variables:
+          type: array
+          items:
+            type: string
+          description: Variable names in the order they appear in the content; when sending with the template, pass `placeholder_keys` with one field api_code per variable in this order
         status:
           type:
           - string
@@ -20491,7 +20499,13 @@ components:
           enum:
           - owned
           - shared
-          description: owned can be changed or deleted; shared can only be sent
+          - official
+          description: owned can be changed or deleted; shared can only be sent; official templates are approved ones Jinshuju provides to every account, sendable right away without a review, and cannot be changed or deleted
+        scene:
+          type:
+          - string
+          - 'null'
+          description: For an official template, the scene it is written for, one of a form's `scene` values; `form` ones are general-purpose and suit any form. In the product a form offers only the official templates of its own scene, while the API lets any form send with any of them. null for other templates
         channel:
           type: string
           enum:
@@ -20502,9 +20516,11 @@ components:
       - id: 6512a1c2d3e4f5a6b7c8d9e0
         signature: 小金培训
         content: 你报名的课程将于明天上午 9 点开课，请准时参加。
+        variables: []
         status: CHECKING
         reason:
         scope: owned
+        scene:
         channel: normal
     SMSSignatureListResponse:
       type: object

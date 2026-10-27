@@ -254,7 +254,8 @@ export const SMS: readonly Command[] = [
     summary: 'List SMS signatures and templates with their review status and why a review failed',
     description:
       'Your own signatures and templates, not those of the rest of the account. ' +
-      'To pick a template to send, use `sms template list`, which also has the ones the account shares.',
+      'To pick a template to send, use `sms template list`, which also has the ones the account shares and the ' +
+      'official ones.',
     request: () => call('listSmsAuditStatuses'),
     render: templatesForReading
   },
@@ -354,23 +355,27 @@ export const SMS: readonly Command[] = [
   },
   {
     path: ['sms', 'template', 'list'],
-    summary: 'List your SMS templates and the ones the account shares',
+    summary: 'List your SMS templates, the ones the account shares and the official ones',
     description:
       'scope owned is yours and can be changed or deleted with the ids it carries; scope shared is shared by ' +
-      'another member and can only be sent.',
+      'another member and can only be sent; scope official is approved already and can be sent right away, even ' +
+      'while your own signature and templates are under review. Official ones come last, with scene marking the ' +
+      'forms they are worded for: form ones suit any form, and any form can send with any of them. variables are ' +
+      'in the order `--placeholder` fills them when sending.',
     options: [
       {
         name: '--keyword',
         type: 'string',
         placeholder: '<kw>',
-        description: 'Match the content or the signature, case-insensitive and partial'
+        description:
+          'Match the content or the signature, case-insensitive and partial; only the content of official ones'
       },
       {
         name: '--scope',
         type: 'string',
         choices: choices('listSmsTemplates', 'scope'),
         placeholder: '<scope>',
-        description: 'owned (yours) or shared (shared by another member); both when omitted'
+        description: 'owned (yours), shared (shared by another member) or official; all three when omitted'
       },
       {
         name: '--signature-id',
@@ -398,7 +403,11 @@ export const SMS: readonly Command[] = [
         }
       }),
     paginate: LISTING,
-    examples: ['jinshuju sms template list --keyword 开课', 'jinshuju sms template list --scope owned --status FAIL']
+    examples: [
+      'jinshuju sms template list --keyword 开课',
+      'jinshuju sms template list --scope owned --status FAIL',
+      'jinshuju sms template list --scope official'
+    ]
   },
   {
     path: ['sms', 'template', 'create'],

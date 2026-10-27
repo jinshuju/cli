@@ -479,6 +479,9 @@ review, can be changed and sent back to review; only the flags given change. The
 same ones can be deleted with `--yes`; deleting a signature takes its templates
 with it.
 
+While your own are under review, `sms template list --scope official` lists the official
+templates, which are approved already and can be sent right away.
+
 ```bash
 jinshuju sms signature create 小金培训 --license ./license.jpg --company-name 小金培训有限公司 --company-id 91110000MA00000000 \
   --id-card-front ./front.jpg --id-card-back ./back.jpg --id-card-name 张三 --id-card-number 110101199001011234 --mobile 13800000000
@@ -486,6 +489,7 @@ jinshuju sms template create --signature 小金培训 --content "你报名的课
 jinshuju sms status
 jinshuju sms signature list --status FAIL
 jinshuju sms template list --keyword 开课 --scope owned
+jinshuju sms template list --scope official
 jinshuju sms signature update 6512a1c2d3e4f5a6b7c8d9d3 --license ./license-clear.jpg
 jinshuju sms template update 6512a1c2d3e4f5a6b7c8d9e0 --content "你报名的课程后天上午 9 点开课。"
 jinshuju sms template delete 6512a1c2d3e4f5a6b7c8d9e0 --yes
