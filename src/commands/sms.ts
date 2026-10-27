@@ -24,7 +24,8 @@ import {
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { upload } from './upload.js';
-import { basename } from 'node:path';
+import { statSync } from 'node:fs';
+import { basename, extname } from 'node:path';
 
 /**
  * A signature is applied for with license images, which go up first as the
@@ -90,6 +91,29 @@ function licensesOf(input: CommandInput): string[] {
   return (input.options.license as string[] | undefined) ?? [];
 }
 
+const LICENSE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp'];
+const LICENSE_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Every image is checked before the first goes up: once one is uploaded, a
+ * failure on the next leaves it behind, and running the command again sends
+ * the license and ID card images a second time.
+ */
+function checkLicenseFiles(files: readonly string[]): void {
+  for (const file of files) {
+    if (!LICENSE_EXTENSIONS.includes(extname(file).toLowerCase())) {
+      throw new UsageError(`${file} is not a jpg, jpeg, png or bmp image`);
+    }
+    let size: number;
+    try {
+      size = statSync(file).size;
+    } catch (error) {
+      throw new UsageError(`could not read ${file}: ${(error as Error).message}`);
+    }
+    if (size > LICENSE_MAX_BYTES) throw new UsageError(`${file} is over 5 MB`);
+  }
+}
+
 async function uploadLicense(client: HttpClient, file: string): Promise<string> {
   const watching = progress();
   watching.step(`uploading ${basename(file)}…`);
@@ -111,6 +135,8 @@ async function signatureMaterials(input: CommandInput, client: HttpClient): Prom
     if (input.options[option] !== undefined) body[key] = input.options[option];
   }
   const licenses = licensesOf(input);
+  const idCards = SIGNATURE_FILES.map(({ option }) => input.options[option] as string | undefined);
+  checkLicenseFiles([...licenses, ...idCards.filter((file): file is string => Boolean(file))]);
   if (licenses.length > 0) {
     const ids: string[] = [];
     for (const license of licenses) ids.push(await uploadLicense(client, license));
@@ -228,7 +254,7 @@ export const SMS: readonly Command[] = [
     summary: 'List SMS signatures and templates with their review status and why a review failed',
     description:
       'Your own signatures and templates, not those of the rest of the account. ' +
-      'template_id is what `notification create --sms-template` takes.',
+      'To pick a template to send, use `sms template list`, which also has the ones the account shares.',
     request: () => call('listSmsAuditStatuses'),
     render: templatesForReading
   },
@@ -261,6 +287,8 @@ export const SMS: readonly Command[] = [
     description:
       'Uploads the license images and applies with them in one command. Review takes a while: follow it with ' +
       '`sms signature list`. A signature the account already has under review or approved is answered as it is. ' +
+      "The materials replace your ID card information, and the account's business license unless the account " +
+      'has passed license verification. ' +
       'For SMS notifications leave --type out. --type verification applies for a signature that only replaces ' +
       'the default 金数据 signature on the verification-code SMS of mobile fields: it cannot send notifications or ' +
       'have templates, and verification codes already work without one.',
@@ -438,7 +466,8 @@ export const SMS: readonly Command[] = [
       'mobile field --field names. --estimate answers how many entries and numbers it reaches, how many are missing ' +
       'a number, the SMS it bills and whether the quota covers them, and sends nothing; --yes sends. The entries are ' +
       'picked again when it sends, so a change in between changes what goes out. A template still under review is ' +
-      'taken, and the task waits for it.',
+      'taken, and the task waits for it. Sent SMS cannot be recalled: after a timeout or a dropped connection, ' +
+      'look for the task in `sms task list` before sending again, or it may go out twice.',
     options: [
       FORM_OPTION,
       MOBILE_FIELD_OPTION,

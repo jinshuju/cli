@@ -31,7 +31,12 @@ const RULE_OPTIONS: readonly OptionSpec[] = [
     placeholder: '<mobile|email|api-code,...>',
     description: 'SMS and EMAIL: mobiles or emails, or api_codes of the fields holding them'
   },
-  { name: '--sms-template', type: 'string', placeholder: '<id>', description: 'SMS template id (see `sms status`)' },
+  {
+    name: '--sms-template',
+    type: 'string',
+    placeholder: '<id>',
+    description: 'SMS template id, from `sms template list`'
+  },
   {
     name: '--placeholders',
     type: 'list',
@@ -82,6 +87,8 @@ export const NOTIFICATION: readonly Command[] = [
     summary: 'Create a notification rule',
     description:
       'The rule is on once created and sends for the entries that match it from then on; --disable saves it off. ' +
+      'An enabled schedule_time rule also schedules, each time it is saved, the entries already in the form ' +
+      'whose send time is still ahead. ' +
       'Each approach takes its own keys: SMS --recipients --sms-template --placeholders; ' +
       'EMAIL --recipients --subject --content; WEIXIN_ONETIME --subject --content; ' +
       'WXWORK and DING_TALK --url --content; WEBHOOK --url. ' +
@@ -110,7 +117,10 @@ export const NOTIFICATION: readonly Command[] = [
       'jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --sms-template 6650a1 --placeholders field_1',
       'jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --sms-template 6650a1 --placeholders field_1 ' +
         '--trigger schedule_time --json \'{"schedule_time_rule":{"date_key":"field_5","date_offset_action":"before",' +
-        '"date_offset_number":1,"date_offset_unit":"day","hour":9,"minute":0}}\''
+        '"date_offset_number":1,"date_offset_unit":"day","hour":9,"minute":0}}\'',
+      'jinshuju notification create --form Kp7mQ2 --approach EMAIL --recipients field_3 --subject 报名成功 ' +
+        "--content '$(field_1) 你好，报名已收到' --trigger matched_new " +
+        '--json \'{"scope_conditions":[{"trigger":"field_5","operator":"any_in","value":["choice_1"]}]}\''
     ]
   },
   {
@@ -156,7 +166,8 @@ export const NOTIFICATION: readonly Command[] = [
     summary: 'List what a notification rule sent, with how many succeeded or failed and why',
     description:
       'Covers the last 180 days, as the notification log page does; notifications scheduled for later are not listed. ' +
-      '--from and --to pick them by the day they were sent. The summary counts every match, not just the page.',
+      '--from and --to pick them by the day they were sent. The summary counts every match, not just the page; ' +
+      '--output jsonl carries the notifications alone, without it.',
     args: [RULE_ARG],
     options: [
       FORM_OPTION,
@@ -175,7 +186,7 @@ export const NOTIFICATION: readonly Command[] = [
         path: { form_token: requiredOption(input, 'form'), id: input.args.rule },
         query: { status: input.options.status as string | undefined, ...dayRange(input), ...paging(input) }
       }),
-    paginate: LISTING,
+    paginate: { ...LISTING, totals: ['triggered_count', 'summary'] },
     examples: [
       'jinshuju notification log 6650b2 --form Kp7mQ2',
       'jinshuju notification log 6650b2 --form Kp7mQ2 --status FAILED --from 2026-10-01 --to 2026-10-31'

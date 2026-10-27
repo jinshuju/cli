@@ -528,6 +528,9 @@ test('account paid-feature, account invoice, account payment and sms status read
   ]);
 });
 
+const LICENSE_IMAGE = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'license.bmp');
+writeFileSync(LICENSE_IMAGE, 'BM');
+
 function licenseUploadingClient() {
   let uploads = 0;
   const requests: HttpRequest[] = [];
@@ -553,15 +556,15 @@ test('sms signature create uploads each license image, then applies with their i
       'create',
       '小金培训',
       '--license',
-      'package.json',
+      LICENSE_IMAGE,
       '--company-name',
       '小金培训有限公司',
       '--company-id',
       '91110000MA00000000',
       '--id-card-front',
-      'package.json',
+      LICENSE_IMAGE,
       '--id-card-back',
-      'package.json',
+      LICENSE_IMAGE,
       '--id-card-name',
       '张三',
       '--id-card-number',
@@ -593,12 +596,53 @@ test('sms signature create uploads each license image, then applies with their i
     id_card_front_attachment_id: 'ul_2',
     id_card_back_attachment_id: 'ul_3'
   });
+  assert.equal(((mock.requests[0].form as FormData).get('file') as File).type, 'image/bmp');
+});
+
+test('sms signature create uploads nothing when any of its images cannot go up', async () => {
+  const signature = (back: string) => [
+    'sms',
+    'signature',
+    'create',
+    '小金培训',
+    '--license',
+    LICENSE_IMAGE,
+    '--company-name',
+    '小金培训有限公司',
+    '--company-id',
+    '91110000MA00000000',
+    '--id-card-front',
+    LICENSE_IMAGE,
+    '--id-card-back',
+    back,
+    '--id-card-name',
+    '张三',
+    '--id-card-number',
+    '110101199001011234',
+    '--mobile',
+    '13800000000'
+  ];
+  const tooLarge = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'back.jpg');
+  writeFileSync(tooLarge, Buffer.alloc(5 * 1024 * 1024 + 1));
+
+  for (const [back, reason] of [
+    ['./missing.jpg', /could not read \.\/missing\.jpg/],
+    ['package.json', /package\.json is not a jpg, jpeg, png or bmp image/],
+    [tooLarge, /back\.jpg is over 5 MB/]
+  ] as const) {
+    const mock = licenseUploadingClient();
+    const result = await cli(signature(back), { env: WRITE_ENV, client: mock.client });
+
+    assert.equal(result.exitCode, 2);
+    assert.match(result.stderr, reason);
+    assert.equal(mock.requests.length, 0);
+  }
 });
 
 test('sms signature create uploads nothing until every required flag is there', async () => {
   const mock = createMockClient();
 
-  const result = await cli(['sms', 'signature', 'create', '小金培训', '--license', 'package.json'], {
+  const result = await cli(['sms', 'signature', 'create', '小金培训', '--license', LICENSE_IMAGE], {
     env: WRITE_ENV,
     client: mock.client
   });
@@ -620,15 +664,15 @@ test('sms signature create sends the type it is given', async () => {
       '--type',
       'verification',
       '--license',
-      'package.json',
+      LICENSE_IMAGE,
       '--company-name',
       '小金培训有限公司',
       '--company-id',
       '91110000MA00000000',
       '--id-card-front',
-      'package.json',
+      LICENSE_IMAGE,
       '--id-card-back',
-      'package.json',
+      LICENSE_IMAGE,
       '--id-card-name',
       '张三',
       '--id-card-number',
@@ -646,7 +690,7 @@ test('sms signature update sends only what its flags give, uploading the files a
   const mock = licenseUploadingClient();
 
   const result = await cli(
-    ['sms', 'signature', 'update', '6512a1c2d3e4f5a6b7c8d9d3', '--signature', '小金课堂', '--license', 'package.json'],
+    ['sms', 'signature', 'update', '6512a1c2d3e4f5a6b7c8d9d3', '--signature', '小金课堂', '--license', LICENSE_IMAGE],
     { env: WRITE_ENV, client: mock.client }
   );
 
@@ -2551,6 +2595,31 @@ test('--all stops when the server answers the cursor it was just given, keeping 
 
   assert.equal(result.exitCode, 6);
   assert.match(result.stderr, /cursor it was asked for/);
+});
+
+test('notification log --all keeps the counts the first page gives for every match', async () => {
+  const summary = { total: 3, succeeded: 2, failed: 1, failed_reasons: [{ reason: '余额不足', count: 1 }] };
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      return (
+        request.query?.next
+          ? { triggered_count: 9, summary, count: 1, data: [{ id: 'n3' }], next: null }
+          : { triggered_count: 9, summary, count: 2, data: [{ id: 'n1' }, { id: 'n2' }], next: 'p2', statistics: {} }
+      ) as T;
+    }
+  };
+  const result = await cli(['notification', 'log', '6650b2', '--form', 'Kp7mQ2', '--all', '--output', 'json'], {
+    env: WRITE_ENV,
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    triggered_count: 9,
+    summary,
+    count: 3,
+    data: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }]
+  });
 });
 
 test('--all stops at 200 pages and names the cursor to carry on from', async () => {

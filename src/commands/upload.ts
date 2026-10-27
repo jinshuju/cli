@@ -18,6 +18,7 @@ const UPLOAD_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.bmp': 'image/bmp',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.pdf': 'application/pdf'

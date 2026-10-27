@@ -36,7 +36,8 @@ export const EMAIL: readonly Command[] = [
       'Picks the entries the way `entry count` narrows them, or the whole form with --select-all, and sends to the ' +
       'email field --field names. --estimate answers how many entries and addresses it reaches, how many are ' +
       'missing an address and whether the quota covers them, and sends nothing; --yes sends, and wants --subject and ' +
-      '--content. The entries are picked again when it sends.',
+      '--content. The entries are picked again when it sends. Sent email cannot be recalled: after a timeout or a ' +
+      'dropped connection, look for the task in `email task list` before sending again, or it may go out twice.',
     options: [
       FORM_OPTION,
       {
