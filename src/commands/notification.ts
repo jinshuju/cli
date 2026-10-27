@@ -32,16 +32,17 @@ const RULE_OPTIONS: readonly OptionSpec[] = [
     description: 'SMS and EMAIL: mobiles or emails, or api_codes of the fields holding them'
   },
   {
-    name: '--sms-template',
+    name: '--template-id',
     type: 'string',
     placeholder: '<id>',
-    description: 'SMS template id, from `sms template list`'
+    description: 'SMS: template to send, from `sms template list`'
   },
   {
-    name: '--placeholders',
-    type: 'list',
-    placeholder: '<api-code,...>',
-    description: "SMS: the field filling each of the template's $(...) placeholders, in order"
+    name: '--placeholder',
+    type: 'string',
+    repeatable: true,
+    placeholder: '<api_code>',
+    description: 'SMS: field filling the next template variable, repeatable in variable order'
   },
   { name: '--subject', type: 'string', placeholder: '<text>', description: 'EMAIL and WEIXIN_ONETIME subject' },
   { name: '--content', type: 'string', placeholder: '<text>', description: 'Message; $(api_code) inserts a field' },
@@ -59,8 +60,10 @@ function ruleBody(input: CommandInput): Record<string, unknown> {
   return overriding(rest, {
     trigger_scope: input.options.trigger,
     recipients: input.options.recipients,
-    sms_template_id: input.options.sms_template,
-    placeholder_keys: input.options.placeholders,
+    sms_template_id: input.options.template_id,
+    placeholder_keys: (input.options.placeholder as string[] | undefined)?.length
+      ? input.options.placeholder
+      : undefined,
     subject: input.options.subject,
     content: input.options.content,
     url: input.options.url
@@ -89,7 +92,7 @@ export const NOTIFICATION: readonly Command[] = [
       'The rule is on once created and sends for the entries that match it from then on; --disable saves it off. ' +
       'An enabled schedule_time rule also schedules, each time it is saved, the entries already in the form ' +
       'whose send time is still ahead. ' +
-      'Each approach takes its own keys: SMS --recipients --sms-template --placeholders; ' +
+      'Each approach takes its own keys: SMS --recipients --template-id --placeholder; ' +
       'EMAIL --recipients --subject --content; WEIXIN_ONETIME --subject --content; ' +
       'WXWORK and DING_TALK --url --content; WEBHOOK --url. ' +
       'scope_conditions, schedule_time_rule, smtp_account_id, weixin_onetime_url and mentioned_mobile_list go through --json.',
@@ -114,8 +117,8 @@ export const NOTIFICATION: readonly Command[] = [
         })
       }),
     examples: [
-      'jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --sms-template 6650a1 --placeholders field_1',
-      'jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --sms-template 6650a1 --placeholders field_1 ' +
+      'jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --template-id 6650a1 --placeholder field_1',
+      'jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --template-id 6650a1 --placeholder field_1 ' +
         '--trigger schedule_time --json \'{"schedule_time_rule":{"date_key":"field_5","date_offset_action":"before",' +
         '"date_offset_number":1,"date_offset_unit":"day","hour":9,"minute":0}}\'',
       'jinshuju notification create --form Kp7mQ2 --approach EMAIL --recipients field_3 --subject 报名成功 ' +

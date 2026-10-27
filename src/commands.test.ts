@@ -1549,10 +1549,12 @@ test('notification create sends the named keys for the approach, with --json for
       'SMS',
       '--recipients',
       'field_2',
-      '--sms-template',
+      '--template-id',
       '6650a1',
-      '--placeholders',
+      '--placeholder',
       'field_1',
+      '--placeholder',
+      'field_4',
       '--trigger',
       'schedule_time',
       '--disable',
@@ -1576,7 +1578,7 @@ test('notification create sends the named keys for the approach, with --json for
     trigger_scope: 'schedule_time',
     recipients: ['field_2'],
     sms_template_id: '6650a1',
-    placeholder_keys: ['field_1'],
+    placeholder_keys: ['field_1', 'field_4'],
     approach: 'SMS',
     enabled: false
   });
