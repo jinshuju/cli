@@ -1455,6 +1455,7 @@ paths:
       summary: Create a notification rule
       description: |
         Creates a notification rule; the body follows the schema of its `approach`. The rule sends for matching entries from then on, using the SMS / email balance, and shows on the form's notification settings page. SMS and WeChat messages are reviewed when they are sent.
+        - Saving an enabled `schedule_time` rule also schedules the entries already in the form whose send time is still ahead.
 
         OAuth scope: form_setting
       operationId: createNotificationRule
@@ -1562,6 +1563,7 @@ paths:
       summary: Update a notification rule
       description: |
         Changes the rule; the body takes only the keys of the rule's own `approach`, and `approach` itself cannot change.
+        - Saving an enabled `schedule_time` rule schedules the entries already in the form whose send time is still ahead.
 
         OAuth scope: form_setting
       operationId: updateNotificationRule
@@ -6049,7 +6051,7 @@ paths:
         Applies for an SMS signature and submits it for review; follow the result with `GET /sms/signatures`.
         - Upload the images with `POST /user/license_attachments` first.
         - A signature the account already has under review or approved is returned unchanged.
-        - The materials also become the account's license and the user's ID card information.
+        - The materials replace the user's ID card information, and the account's business license unless the account has passed license verification.
 
         OAuth scope: users
       requestBody:
@@ -6088,6 +6090,7 @@ paths:
       description: |
         Changes a rejected signature of the account and submits it for review again.
         - After a text change, its templates stay under the old text until each is updated with `PATCH /sms/templates/{id}`.
+        - The materials replace the user's ID card information, and the account's business license unless the account has passed license verification.
 
         OAuth scope: users
       parameters:
