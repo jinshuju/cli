@@ -5178,12 +5178,54 @@ paths:
                 $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/artifacts":
+    get:
+      tags:
+      - Artifacts
+      summary: List artifacts
+      operationId: listArtifacts
+      description: |
+        The files Jiri made for the current user in the current account, the most recently delivered first; one entry per artifact, however many versions it has.
+        OAuth scope: artifacts
+        - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
+        - An artifact belongs to a person: an account access token returns `400`.
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: Only artifacts whose title contains this text, case-insensitive
+        schema:
+          type: string
+      - $ref: '#/components/parameters/PageLimit'
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Artifact list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactListResponse'
+        '400':
+          description: An account access token has no user to list for, or the paging parameters are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/artifacts/{artifact_id}/published_artifact":
     parameters:
     - name: artifact_id
       in: path
       required: true
-      description: Artifact version id or token, or the URL-encoded artifact address from Jinshuju (`.../artifacts/{token}`)
+      description: Artifact id from the list (its latest version), artifact version id or token, or the URL-encoded artifact address from Jinshuju (`.../artifacts/{token}`)
       schema:
         type: string
     get:
@@ -12536,6 +12578,110 @@ components:
           type: string
           description: MIME type, defaults to the one in the data URI prefix, otherwise `application/octet-stream`
       additionalProperties: false
+    ArtifactListResponse:
+      type: object
+      required:
+      - total
+      - count
+      - data
+      - next
+      properties:
+        total:
+          type: integer
+          description: How many artifacts match
+        count:
+          type: integer
+          description: How many are on this page
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Artifact'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: The next page's row offset; null on the last page
+    Artifact:
+      type: object
+      required:
+      - id
+      - title
+      - versions_count
+      - latest_version
+      - conversation_url
+      - published_artifact
+      properties:
+        id:
+          type: string
+          description: The artifact's id; the share endpoints' path takes it to mean its latest version, `version_id` does not
+        title:
+          type: string
+          description: The latest version's file name
+        versions_count:
+          type: integer
+          description: How many versions it has
+        latest_version:
+          type: object
+          required:
+          - id
+          - version
+          - media_type
+          - url
+          - banned
+          - created_at
+          properties:
+            id:
+              type: string
+              description: Pass it to the share endpoints to share this version
+            version:
+              type: integer
+            media_type:
+              type: string
+              description: Its MIME type; only `text/html` can be shared
+            url:
+              type: string
+              description: The page that shows this version to its owner
+            banned:
+              type: boolean
+              description: The version was banned for its content and cannot be shared
+            created_at:
+              type: string
+              format: date-time
+              description: When this version was delivered; the list is sorted by it
+        conversation_url:
+          type: string
+          description: The Jiri conversation the artifact was made in
+        published_artifact:
+          type:
+          - object
+          - 'null'
+          description: Who can open its share link, or null when it was never shared; the link itself comes from the share endpoint
+          required:
+          - allowed_audience
+          - published_version
+          properties:
+            allowed_audience:
+              type: string
+              enum:
+              - private
+              - internal
+              - public
+            published_version:
+              type: object
+              description: The version visitors see
+              required:
+              - id
+              - version
+              - title
+              properties:
+                id:
+                  type: string
+                version:
+                  type:
+                  - integer
+                  - 'null'
+                title:
+                  type: string
     PublishedArtifactInput:
       title: PublishedArtifactInput
       type: object
@@ -12550,7 +12696,7 @@ components:
           description: "`private` only the owner, `internal` members of the account, `public` anyone with the link"
         version_id:
           type: string
-          description: Id or token of the version to publish, required unless `allowed_audience` is `private`
+          description: Id or token of the version to publish, required unless `allowed_audience` is `private`. The artifact id is not taken here, since its latest version can change before the share is made
     PublishedArtifactError:
       type: object
       required:

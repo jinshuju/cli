@@ -92,6 +92,7 @@ export type OperationId =
   | 'getTableEntry'
   | 'getTableView'
   | 'getTradeMerchant'
+  | 'listArtifacts'
   | 'listBillingAccountInvoices'
   | 'listBillingAccountPaidFeatures'
   | 'listBillingAccountPaymentHistories'
@@ -1003,6 +1004,16 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     ]
   },
   getTradeMerchant: { method: 'GET', path: '/trade/merchant', parameters: [] },
+  listArtifacts: {
+    method: 'GET',
+    path: '/artifacts',
+    parameters: [
+      { name: 'q', in: 'query', schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
   listBillingAccountInvoices: { method: 'GET', path: '/billing_account/invoices', parameters: [] },
   listBillingAccountPaidFeatures: { method: 'GET', path: '/billing_account/paid_features', parameters: [] },
   listBillingAccountPaymentHistories: {
