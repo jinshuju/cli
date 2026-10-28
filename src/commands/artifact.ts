@@ -40,8 +40,9 @@ function artifactVersion(value: string): string {
 
 /**
  * A row as a person scans it: what the file is, the version id the share
- * commands take, who its link is open to, and the conversation it came from.
- * The version's own page and the published version are in `--output json`.
+ * commands take, who its link is open to, and the conversation that changed it
+ * last. The version's own page, its download link, the conversation that made
+ * the artifact and the published version are in `--output json`.
  */
 function artifactsForReading(body: unknown): unknown {
   return rowsForReading(body, (row) => ({
@@ -50,7 +51,7 @@ function artifactsForReading(body: unknown): unknown {
     media_type: isRecord(row.latest_version) ? row.latest_version.media_type : undefined,
     versions: row.versions_count,
     audience: isRecord(row.published_artifact) ? row.published_artifact.allowed_audience : undefined,
-    conversation_url: row.conversation_url,
+    conversation_url: isRecord(row.latest_version) ? row.latest_version.conversation_url : undefined,
     updated_at: isRecord(row.latest_version) ? row.latest_version.created_at : undefined
   }));
 }
@@ -61,7 +62,9 @@ export const ARTIFACT: readonly Command[] = [
     summary: 'List the artifacts Jiri made for you, newest first, each with its conversation link and share state',
     description:
       'The artifacts Jiri made for you in the account you are in, newest first, one row per artifact however ' +
-      'many versions it has. conversation_url opens the Jiri conversation it was made in; published_artifact ' +
+      'many versions it has. created_conversation_url opens the Jiri conversation it was made in, ' +
+      'latest_version.conversation_url (conversation_url in text) the one that delivered its latest version, and ' +
+      'latest_version.download_url downloads that version for ten minutes; published_artifact ' +
       'says who can open its link (allowed_audience, audience in text) and which version the link shows ' +
       '(published_version), and is null when it was never shared; `artifact share get` gives the link. ' +
       '`artifact share get` and `artifact share set --audience private` take the id; sharing beyond private ' +

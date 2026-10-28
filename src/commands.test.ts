@@ -917,7 +917,7 @@ test('artifact list searches titles with --name and pages by row offset', async 
   assert.equal(mock.requests.length, 2);
 });
 
-test('artifact list reads as title, the version id to share, audience, conversation link and delivery time; json keeps every key', async () => {
+test('artifact list reads as title, the version id to share, audience, the conversation that changed it last and delivery time; json keeps every key', async () => {
   const shared = {
     id: '6512a1c2d3e4f5a6b7c8d9a1',
     title: '八月报告.html',
@@ -928,9 +928,11 @@ test('artifact list reads as title, the version id to share, audience, conversat
       media_type: 'text/html',
       url: 'https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W',
       banned: false,
-      created_at: '2026-10-20T10:00:00+08:00'
+      created_at: '2026-10-20T10:00:00+08:00',
+      conversation_url: 'https://next.jinshuju.net/jiri/c0ffee',
+      download_url: 'https://up.jinshuju.net/f/8a2c?attname=%E5%85%AB%E6%9C%88%E6%8A%A5%E5%91%8A.html'
     },
-    conversation_url: 'https://next.jinshuju.net/jiri/c0ffee',
+    created_conversation_url: 'https://next.jinshuju.net/jiri/0dd',
     published_artifact: {
       allowed_audience: 'public',
       published_version: { id: '6512a1c2d3e4f5a6b7c8d9d3', version: 2, title: '八月报告.html' }
@@ -946,9 +948,9 @@ test('artifact list reads as title, the version id to share, audience, conversat
       id: '6512a1c2d3e4f5a6b7c8d9d4',
       version: 1,
       media_type: 'text/csv',
-      created_at: '2026-10-19T09:00:00+08:00'
+      created_at: '2026-10-19T09:00:00+08:00',
+      conversation_url: 'https://next.jinshuju.net/jiri/beef'
     },
-    conversation_url: 'https://next.jinshuju.net/jiri/beef',
     published_artifact: null
   };
   const listing = { total: 2, count: 2, data: [shared, unshared], next: null };
