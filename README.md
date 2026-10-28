@@ -519,17 +519,30 @@ jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课�
 
 ## Artifacts
 
-An artifact is a file Jiri made in a conversation. An HTML version of one can
-be shared by a link, and `artifact share set` says who can open it: `private`
-(only you, the default), `internal` (members of your account) or `public`
-(anyone with the link). A plan without share links is refused with 402 by
-`artifact share get` and by sharing beyond `private`; `internal` needs a plan
-with members-only sharing, and `artifact share get` says whether the plan has
-it. The first `get` or `set` creates the link.
-`<artifact>` is a version id, a version token, or the address of the page that
-shows the version (`https://…/artifacts/<token>`). `--audience internal` and
-`public` bind the link to that version; to share another version of the same
-artifact, name that one.
+An artifact is a file Jiri made in a conversation. `artifact list` lists the
+ones Jiri made for you in the account you are in, newest first, one row per
+artifact however many versions it has. Each row carries `conversation_url`,
+the Jiri conversation it was made in, and `audience`, who its link is open to
+(empty when it was never shared); in `--output json` that is
+`published_artifact.allowed_audience`, beside the version the link shows
+(`published_version`). The link itself comes from `artifact share get`.
+`--name` keeps the artifacts whose title
+contains the keyword, case-insensitive; `--limit`, `--next` and `--all` page as
+other listings do.
+
+An HTML version can be shared by a link, and `artifact share set` says who can
+open it: `private` (only you, the default), `internal` (members of your
+account) or `public` (anyone with the link). A plan without share links is
+refused with 402 by `artifact share get` and by sharing beyond `private`;
+`internal` needs a plan with members-only sharing, and `artifact share get`
+says whether the plan has it. The first `get` or `set` creates the link.
+`artifact share get` and `--audience private` take the `id` of an
+`artifact list` row. `--audience internal` and `public`
+bind the link to a version, so `<artifact>` names one: the row's
+`latest_version.id` (`version_id` in text), a version token, or the address of
+the page that shows the version (`https://…/artifacts/<token>`). The artifact
+id is refused there, since its latest version can change before the share is
+made. To share another version of the same artifact, name that one.
 `--audience private` keeps the version the link shows, whichever version
 `<artifact>` names.
 
@@ -538,6 +551,7 @@ asks for; a session from an older CLI has to log in again. An account access
 token is refused with 400: an artifact belongs to a person.
 
 ```bash
+jinshuju artifact list --name 周报
 jinshuju artifact share get https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W
 jinshuju artifact share set Xy7Qm2PaLk9W --audience public
 jinshuju artifact share set Pq4nR8sT2vWx --audience internal   # now the link shows this version

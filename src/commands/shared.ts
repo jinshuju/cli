@@ -11,6 +11,7 @@ import {
   type SortRule
 } from '../options.js';
 import { call, type CallParts, type OperationId } from '../spec.js';
+import { isRecord } from '../values.js';
 import type { CommandInput, Pagination } from './types.js';
 
 /** What more than one resource's commands build their requests from. */
@@ -149,6 +150,15 @@ export function keywords(value: unknown): readonly string[] | undefined {
 }
 
 export const LISTING: Pagination = { items: 'data', cursor: 'next' };
+
+/** A listing's rows cut down to the given keys, each named as the row has it. */
+export function rowsForReading(
+  body: unknown,
+  row: (item: Record<string, unknown>) => Record<string, unknown>
+): unknown {
+  if (!isRecord(body) || !Array.isArray(body.data)) return body;
+  return { ...body, data: body.data.map((item: unknown) => (isRecord(item) ? row(item) : item)) };
+}
 
 export function payload(input: CommandInput): unknown {
   const value = input.options.json;

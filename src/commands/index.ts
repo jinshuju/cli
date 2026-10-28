@@ -101,7 +101,7 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'email', summary: 'Send email to entries' },
   {
     name: 'artifact',
-    summary: 'Files Jiri made in a conversation: who can open their share links',
+    summary: 'Files Jiri made in a conversation: find them, and who can open their share links',
     note:
       'OAuth sessions need the artifacts scope. `jinshuju auth login` asks for it; a session from ' +
       'an older CLI has to log in again. An account access token is refused: an artifact belongs to a person.'

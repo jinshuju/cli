@@ -899,11 +899,112 @@ test('form copy takes the notification rules along only when asked', async () =>
   assert.deepEqual(mock.requests[1].body, { name: '第二期', with_notification_rules: true });
 });
 
-test('artifact share get reads the published artifact of the version an id, a token or an address names', async () => {
+test('artifact list searches titles with --name and pages by row offset', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['artifact', 'list', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run([]);
+  await run(['--name', '周报', '--limit', '5', '--next', '50']);
+  const cursor = await run(['--next', 'abc']);
+
+  assert.deepEqual(mock.requests.map(url), [
+    '/api/v1/artifacts',
+    '/api/v1/artifacts?q=%E5%91%A8%E6%8A%A5&limit=5&next=50'
+  ]);
+  // The cursor is a row offset, which is what openapi.yaml says it is.
+  assert.equal(cursor.exitCode, 2);
+  assert.match(cursor.stderr, /next must be an integer/);
+  assert.equal(mock.requests.length, 2);
+});
+
+test('artifact list reads as title, the version id to share, audience, conversation link and delivery time; json keeps every key', async () => {
+  const shared = {
+    id: '6512a1c2d3e4f5a6b7c8d9a1',
+    title: '八月报告.html',
+    versions_count: 2,
+    latest_version: {
+      id: '6512a1c2d3e4f5a6b7c8d9d3',
+      version: 2,
+      media_type: 'text/html',
+      url: 'https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W',
+      banned: false,
+      created_at: '2026-10-20T10:00:00+08:00'
+    },
+    conversation_url: 'https://next.jinshuju.net/jiri/c0ffee',
+    published_artifact: {
+      allowed_audience: 'public',
+      published_version: { id: '6512a1c2d3e4f5a6b7c8d9d3', version: 2, title: '八月报告.html' }
+    }
+  };
+  const unshared = {
+    ...shared,
+    id: '6512a1c2d3e4f5a6b7c8d9a2',
+    title: '名单.csv',
+    versions_count: 1,
+    latest_version: {
+      ...shared.latest_version,
+      id: '6512a1c2d3e4f5a6b7c8d9d4',
+      version: 1,
+      media_type: 'text/csv',
+      created_at: '2026-10-19T09:00:00+08:00'
+    },
+    conversation_url: 'https://next.jinshuju.net/jiri/beef',
+    published_artifact: null
+  };
+  const listing = { total: 2, count: 2, data: [shared, unshared], next: null };
+  const client = {
+    async request<T>(): Promise<T> {
+      return listing as T;
+    }
+  };
+
+  const text = await cli(['artifact', 'list'], { env: WRITE_ENV, client, width: 240 });
+  const json = await cli(['artifact', 'list', '--output', 'json'], { env: WRITE_ENV, client });
+
+  assert.match(text.stdout, /title\s+version_id\s+media_type\s+versions\s+audience\s+conversation_url\s+updated_at/);
+  assert.match(
+    text.stdout,
+    /八月报告\.html\s+6512a1c2d3e4f5a6b7c8d9d3\s+text\/html\s+2\s+public\s+https:\/\/next\.jinshuju\.net\/jiri\/c0ffee\s+2026-10-20/
+  );
+  assert.match(
+    text.stdout,
+    /名单\.csv\s+6512a1c2d3e4f5a6b7c8d9d4\s+text\/csv\s+1\s+https:\/\/next\.jinshuju\.net\/jiri\/beef\s+2026-10-19/
+  );
+  assert.deepEqual(JSON.parse(json.stdout), listing);
+});
+
+test('artifact list --all follows the offset the API hands back', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      const page = requests.length;
+      return { total: 2, count: 1, data: [{ id: `a${page}` }], next: page < 2 ? page : null } as T;
+    }
+  };
+
+  const result = await cli(['artifact', 'list', '--name', '报告', '--all', '--output', 'json'], {
+    env: WRITE_ENV,
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    requests.map((request) => request.query),
+    [{ q: '报告' }, { q: '报告', next: '1' }]
+  );
+  assert.deepEqual(
+    JSON.parse(result.stdout).data.map((row: { id: string }) => row.id),
+    ['a1', 'a2']
+  );
+});
+
+test('artifact share get reads the published artifact of what an artifact id, a version id, a token or an address names', async () => {
   const mock = createMockClient();
   const run = (artifact: string) =>
     cli(['artifact', 'share', 'get', artifact], { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client });
 
+  await run('6512a1c2d3e4f5a6b7c8d9a1');
   await run('6512a1c2d3e4f5a6b7c8d9d3');
   await run('Xy7Qm2PaLk9W');
   await run('https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W?from=chat#top');
@@ -913,6 +1014,7 @@ test('artifact share get reads the published artifact of the version an id, a to
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${url(request)}`),
     [
+      'GET /api/v1/artifacts/6512a1c2d3e4f5a6b7c8d9a1/published_artifact',
       'GET /api/v1/artifacts/6512a1c2d3e4f5a6b7c8d9d3/published_artifact',
       'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
       'GET /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
@@ -952,13 +1054,15 @@ test('artifact share set shares the version <artifact> names, except private, wh
   await run(['https://next.jinshuju.net/artifacts/Xy7Qm2PaLk9W', '--audience', 'public']);
   await run(['Pq4nR8sT2vWx', '--audience', 'internal']);
   await run(['Xy7Qm2PaLk9W', '--audience', 'private']);
+  await run(['6512a1c2d3e4f5a6b7c8d9a1', '--audience', 'private']);
 
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${request.path}`),
     [
       'PATCH /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
       'PATCH /api/v1/artifacts/Pq4nR8sT2vWx/published_artifact',
-      'PATCH /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact'
+      'PATCH /api/v1/artifacts/Xy7Qm2PaLk9W/published_artifact',
+      'PATCH /api/v1/artifacts/6512a1c2d3e4f5a6b7c8d9a1/published_artifact'
     ]
   );
   assert.deepEqual(
@@ -966,6 +1070,7 @@ test('artifact share set shares the version <artifact> names, except private, wh
     [
       { allowed_audience: 'public', version_id: 'Xy7Qm2PaLk9W' },
       { allowed_audience: 'internal', version_id: 'Pq4nR8sT2vWx' },
+      { allowed_audience: 'private' },
       { allowed_audience: 'private' }
     ]
   );
