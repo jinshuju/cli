@@ -70,6 +70,29 @@ test('a server that states a reason has it repeated, and nothing added to it', a
   assert.equal(error.status, 404);
 });
 
+test('a refusal that names its error code keeps the code beside the reason, once', async () => {
+  const server = await serve({
+    '/api/v1/artifacts/a1/published_artifact': {
+      status: 402,
+      body: JSON.stringify({
+        error: 'paid_plan_required',
+        error_description: 'An online link for others needs a plan that includes it'
+      })
+    },
+    '/api/v1/artifacts': {
+      status: 402,
+      body: JSON.stringify({ error: 'paid_plan_required', error_description: 'paid_plan_required: upgrade first' })
+    }
+  });
+  const refused = await failure(server.url, '/api/v1/artifacts/a1/published_artifact');
+  const named = await failure(server.url, '/api/v1/artifacts');
+  await server.close();
+
+  assert.equal(refused.message, 'An online link for others needs a plan that includes it (paid_plan_required)');
+  assert.equal(refused.status, 402);
+  assert.equal(named.message, 'paid_plan_required: upgrade first');
+});
+
 test('a per-row rejection names the rows, rather than collapsing to the HTTP status text', async () => {
   const server = await serve({
     '/api/v1/forms/Kp7mQ2/entries/batch': {
