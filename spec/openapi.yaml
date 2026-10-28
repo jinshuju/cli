@@ -93,7 +93,7 @@ tags:
 - name: Folders
   description: Folders.
 - name: Artifacts
-  description: Pages Jiri generated, and who can open them on their share link.
+  description: Artifacts Jiri delivered in its conversations, and their versions. Each can be downloaded; only an HTML artifact also has a share link, and who can open it is set here.
 - name: Predefined Choices Sets
   description: Predefined choice sets.
 - name: Templates
@@ -5185,7 +5185,7 @@ paths:
       summary: List artifacts
       operationId: listArtifacts
       description: |
-        The files Jiri made for the current user in the current account, the most recently delivered first; one entry per artifact, however many versions it has.
+        The artifacts Jiri delivered for the current user in the current account, the most recently delivered first; one entry per artifact, however many versions it has.
         OAuth scope: artifacts
         - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
         - An artifact belongs to a person: an account access token returns `400`.
@@ -5234,7 +5234,7 @@ paths:
       summary: Show how an artifact is shared
       operationId: getPublishedArtifact
       description: |
-        Returns the artifact's share link and who can open it; the first call creates the link, open to its owner only.
+        Returns the artifact's share link and who can open it; the first call creates the link, open to its owner only. Only an HTML artifact has a share link; other files can only be downloaded (`download_url` in the list).
         OAuth scope: artifacts
       responses:
         '200':
@@ -5266,7 +5266,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublishedArtifactError'
         '422':
-          description: The artifact is not an HTML page, its file is gone, or the version is banned (`version_banned`)
+          description: The artifact is not HTML (`not_html`), its file is gone, or the version is banned (`version_banned`)
           content:
             application/json:
               schema:
@@ -5322,7 +5322,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublishedArtifactError'
         '422':
-          description: The version is not an HTML page, its file is gone, or it is banned (`version_banned`)
+          description: The version is not HTML (`not_html`), its file is gone, or it is banned (`version_banned`)
           content:
             application/json:
               schema:
@@ -7578,7 +7578,7 @@ components:
       description: |
         `Authorization: Bearer ACCESS_TOKEN`. Accepts personal access tokens, account access tokens (Enterprise plan) and OAuth 2.0 tokens.
         OAuth tokens can call only the endpoints their scopes allow: `forms` (forms / tables / views / folders / public queries / templates), `form_setting` (form settings, predefined choice sets),
-        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `artifacts` (Jiri's files, and who can open the pages it made), `public` (everything else).
+        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `artifacts` (Jiri's artifacts, and who can open an HTML artifact's share link), `public` (everything else).
   parameters:
     FormToken:
       name: form_token
@@ -12639,10 +12639,10 @@ components:
               type: integer
             media_type:
               type: string
-              description: Its MIME type; only `text/html` can be shared
+              description: Its MIME type; only `text/html` has a share link, other types can only be downloaded
             url:
               type: string
-              description: The page that shows this version to its owner
+              description: Opens this version in Jinshuju, for its owner only
             banned:
               type: boolean
               description: The version was banned for its content and cannot be shared

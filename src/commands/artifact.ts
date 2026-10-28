@@ -69,7 +69,8 @@ export const ARTIFACT: readonly Command[] = [
       '(published_version), and is null when it was never shared; `artifact share get` gives the link. ' +
       '`artifact share get` and `artifact share set --audience private` take the id; sharing beyond private ' +
       'takes latest_version.id (version_id in text), the version the link is bound to. ' +
-      'Only an HTML artifact (latest_version.media_type text/html) can be shared.',
+      'Only an HTML artifact (latest_version.media_type text/html) has a share link; other files can only be ' +
+      'downloaded.',
     options: [
       {
         name: '--name',
