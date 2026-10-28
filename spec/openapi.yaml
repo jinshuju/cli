@@ -19,7 +19,7 @@ info:
       - Personal access token: acts as that user, on the forms they created or that are shared with them;
       - Account access token (Enterprise plan): acts across the account, on all of its forms. Endpoints then have no "current user", and create operations are recorded under the account owner;
       - OAuth 2.0 token: the endpoints it can call are limited by the token's scope; insufficient scope returns `403`. Each endpoint's description states the scope it needs
-        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `read_contacts` / `users` / `routines` / `public`).
+        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `artifacts` / `read_contacts` / `users` / `routines` / `public`).
     - An invalid or revoked token returns `401`; a plan without API v1 returns `402`.
 
     ## Cooperator permissions
@@ -92,6 +92,8 @@ tags:
   description: Public queries.
 - name: Folders
   description: Folders.
+- name: Artifacts
+  description: Pages Jiri generated, and who can open them on their share link.
 - name: Predefined Choices Sets
   description: Predefined choice sets.
 - name: Templates
@@ -5176,6 +5178,115 @@ paths:
                 $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/artifacts/{artifact_id}/published_artifact":
+    parameters:
+    - name: artifact_id
+      in: path
+      required: true
+      description: Artifact version id or token, or the URL-encoded artifact address from Jinshuju (`.../artifacts/{token}`)
+      schema:
+        type: string
+    get:
+      tags:
+      - Artifacts
+      summary: Show how an artifact is shared
+      operationId: getPublishedArtifact
+      description: |
+        Returns the artifact's share link and who can open it; the first call creates the link, open to its owner only.
+        OAuth scope: artifacts
+      responses:
+        '200':
+          description: The share
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifact'
+        '400':
+          description: An account access token has no user to share for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The current plan does not include API v1, or has no online links for artifacts (`paid_plan_required`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The artifact does not exist or is not the current user's in the current account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '422':
+          description: The artifact is not an HTML page, its file is gone, or the version is banned (`version_banned`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+      - Artifacts
+      summary: Change who can open an artifact's share link
+      operationId: updatePublishedArtifact
+      description: |
+        Sets who can open the share link and which version it shows.
+        OAuth scope: artifacts
+        - `version_id` is required unless `allowed_audience` is `private`; without it the request is refused (`version_required`) and nothing is published
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishedArtifactInput'
+      responses:
+        '200':
+          description: The share after the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifact'
+        '400':
+          description: The body is invalid, `version_id` is missing while `allowed_audience` is not `private` (`version_required`), or an account access token has no user to share for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The current plan does not include API v1, has no online links for artifacts (`paid_plan_required`; only setting `allowed_audience` to `private` goes through), or `internal` needs a plan with members-only sharing (`internal_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '403':
+          description: Sharing beyond `private` is not open to this account, or the OAuth token lacks its scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '404':
+          description: The artifact or `version_id` does not exist, or is not the current user's in the current account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '422':
+          description: The version is not an HTML page, its file is gone, or it is banned (`version_banned`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishedArtifactError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/predefined_choices_sets":
     get:
       tags:
@@ -7425,7 +7536,7 @@ components:
       description: |
         `Authorization: Bearer ACCESS_TOKEN`. Accepts personal access tokens, account access tokens (Enterprise plan) and OAuth 2.0 tokens.
         OAuth tokens can call only the endpoints their scopes allow: `forms` (forms / tables / views / folders / public queries / templates), `form_setting` (form settings, predefined choice sets),
-        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `public` (everything else).
+        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `artifacts` (Jiri's files, and who can open the pages it made), `public` (everything else).
   parameters:
     FormToken:
       name: form_token
@@ -12425,6 +12536,91 @@ components:
           type: string
           description: MIME type, defaults to the one in the data URI prefix, otherwise `application/octet-stream`
       additionalProperties: false
+    PublishedArtifactInput:
+      title: PublishedArtifactInput
+      type: object
+      additionalProperties: false
+      properties:
+        allowed_audience:
+          type: string
+          enum:
+          - private
+          - internal
+          - public
+          description: "`private` only the owner, `internal` members of the account, `public` anyone with the link"
+        version_id:
+          type: string
+          description: Id or token of the version to publish, required unless `allowed_audience` is `private`
+    PublishedArtifactError:
+      type: object
+      required:
+      - error_description
+      properties:
+        error:
+          type: string
+          enum:
+          - not_found
+          - version_not_found
+          - not_html
+          - file_missing
+          - invalid_audience
+          - share_disabled
+          - paid_plan_required
+          - internal_unavailable
+          - version_banned
+          - version_required
+          description: Why the share was refused; absent when an account access token is refused
+        error_description:
+          type: string
+          description: Human-readable error description
+    PublishedArtifact:
+      type: object
+      required:
+      - allowed_audience
+      - url
+      - published_version
+      - banned
+      - can_use_internal
+      - account_name
+      - can_use_artifact_url
+      properties:
+        allowed_audience:
+          type: string
+          enum:
+          - private
+          - internal
+          - public
+        url:
+          type: string
+          description: The share link
+        published_version:
+          type: object
+          description: The version visitors see
+          required:
+          - id
+          - version
+          - title
+          properties:
+            id:
+              type: string
+            version:
+              type:
+              - integer
+              - 'null'
+            title:
+              type: string
+        banned:
+          type: boolean
+          description: The published version was banned for its content, so the link opens to no one until another version is published
+        can_use_internal:
+          type: boolean
+          description: The account's plan or trial includes members-only sharing (`artifact_sub_account_audience_only`); without it, `internal` cannot be set
+        account_name:
+          type: string
+          description: Name of the account the share belongs to, whose members `internal` lets in
+        can_use_artifact_url:
+          type: boolean
+          description: The account's plan or trial includes online links (`artifact_url`); without it, only `private` can be set and the link shows as expired
     Folder:
       type: object
       required:
