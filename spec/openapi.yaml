@@ -12607,7 +12607,7 @@ components:
       - title
       - versions_count
       - latest_version
-      - conversation_url
+      - created_conversation_url
       - published_artifact
       properties:
         id:
@@ -12628,6 +12628,8 @@ components:
           - url
           - banned
           - created_at
+          - conversation_url
+          - download_url
           properties:
             id:
               type: string
@@ -12647,9 +12649,17 @@ components:
               type: string
               format: date-time
               description: When this version was delivered; the list is sorted by it
-        conversation_url:
+            conversation_url:
+              type: string
+              description: The Jiri conversation this version was delivered in, the last one to change the artifact
+            download_url:
+              type:
+              - string
+              - 'null'
+              description: Downloads this version's file; signed, it expires ten minutes after the list was read. Null when the file is gone
+        created_conversation_url:
           type: string
-          description: The Jiri conversation the artifact was made in
+          description: The Jiri conversation the artifact was first delivered in
         published_artifact:
           type:
           - object

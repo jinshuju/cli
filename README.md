@@ -519,11 +519,14 @@ jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课�
 
 ## Artifacts
 
-An artifact is a file Jiri made in a conversation. `artifact list` lists the
-ones Jiri made for you in the account you are in, newest first, one row per
-artifact however many versions it has. Each row carries `conversation_url`,
-the Jiri conversation it was made in, and `audience`, who its link is open to
-(empty when it was never shared); in `--output json` that is
+An artifact is a file Jiri made for you; any of your conversations can revise
+it. `artifact list` lists the ones Jiri made for you in the account you are in,
+newest first, one row per artifact however many versions it has. Each row
+carries `conversation_url`, the Jiri conversation that delivered its latest
+version, and `audience`, who its link is open to (empty when it was never
+shared). In `--output json` the first is `latest_version.conversation_url`,
+beside `created_conversation_url` (where the artifact was made) and
+`latest_version.download_url`; the second is
 `published_artifact.allowed_audience`, beside the version the link shows
 (`published_version`). The link itself comes from `artifact share get`.
 `--name` keeps the artifacts whose title
