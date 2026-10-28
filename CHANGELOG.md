@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.18.0](https://github.com/jinshuju/cli/compare/v0.17.0...v0.18.0) (2026-10-28)
+
+
+### Features
+
+* find artifacts with `artifact list` ([5096cf1](https://github.com/jinshuju/cli/commit/5096cf199b3cb7c1a49dff674239345e4fadac45))
+* follow openapi.yaml changes to checkFormFieldData, checkTableFieldData, createTable fields[].type ([9879739](https://github.com/jinshuju/cli/commit/9879739b1cc80890194e8e23689ede7c9691611a))
+* keep the server's error code beside the reason in text output ([bb53777](https://github.com/jinshuju/cli/commit/bb537772586cdc1dd235bef56b5921843bb5a872))
+* show and change who can open an artifact's share link ([237bbf7](https://github.com/jinshuju/cli/commit/237bbf71bdfa658cdc3c0e204b1f5af8715ea5d3))
+* show the conversation that changed an artifact last in `artifact list` ([2530e36](https://github.com/jinshuju/cli/commit/2530e36524a21e32464d4cfbbcc5b2e1dcd48d6f))
+* **sms:** list official templates with sms template list --scope official ([282cc41](https://github.com/jinshuju/cli/commit/282cc410460f2a124d3f40fafb36e7d8b03d237d))
+
+
+### Fixes
+
+* call artifacts artifacts, and say only an HTML one has a share link ([cd02d53](https://github.com/jinshuju/cli/commit/cd02d53034f18aad0846882e2aedb3bdb10f0308))
+* keep notification log totals under --all and check signature images before uploading ([d580952](https://github.com/jinshuju/cli/commit/d5809529af97c2220ca88b0c0166c10cba7b1b2d))
+* **notification:** take the SMS template as --template-id and its variables as repeatable --placeholder ([9e2af00](https://github.com/jinshuju/cli/commit/9e2af00cde972e803a68e230f8dc46130cfa17b7))
+
 ## [0.17.0](https://github.com/jinshuju/cli/compare/v0.16.0...v0.17.0) (2026-10-23)
 
 
