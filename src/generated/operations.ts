@@ -85,6 +85,7 @@ export type OperationId =
   | 'getManuallyCloseRule'
   | 'getNotificationRule'
   | 'getOpensearchQuery'
+  | 'getPublishedArtifact'
   | 'getRoutine'
   | 'getSmsTask'
   | 'getTable'
@@ -169,6 +170,7 @@ export type OperationId =
   | 'updateNotificationRule'
   | 'updateOpensearchQuery'
   | 'updatePredefinedChoicesSet'
+  | 'updatePublishedArtifact'
   | 'updateRoutine'
   | 'updateSmsSignature'
   | 'updateSmsTask'
@@ -955,6 +957,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/opensearch/queries/{query_token}',
     parameters: [{ name: 'query_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getPublishedArtifact: {
+    method: 'GET',
+    path: '/artifacts/{artifact_id}/published_artifact',
+    parameters: [{ name: 'artifact_id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getRoutine: {
     method: 'GET',
@@ -1833,6 +1840,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         }
       }
     }
+  },
+  updatePublishedArtifact: {
+    method: 'PATCH',
+    path: '/artifacts/{artifact_id}/published_artifact',
+    parameters: [{ name: 'artifact_id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'PublishedArtifactInput' } } }
   },
   updateRoutine: {
     method: 'PATCH',
@@ -4308,6 +4321,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['label', 'choices'],
     properties: { label: { type: 'string' }, choices: { type: 'array', items: { type: 'string' } } },
     additionalProperties: false
+  },
+  PublishedArtifactInput: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      allowed_audience: { type: 'string', enum: ['private', 'internal', 'public'] },
+      version_id: { type: 'string' }
+    }
   },
   RadioButtonInput: {
     type: 'object',
