@@ -97,9 +97,11 @@ function snippet(text: string): string {
 /**
  * What to say about a request the server refused.
  *
- * A server that stated a reason has it repeated verbatim, which is the whole of
- * the message and reads as it always did. Everything else falls back through
- * what the body does carry rather than to the HTTP status text: answering
+ * A server that stated a reason has it repeated verbatim, followed by the error
+ * code the body names, if any: a caller reading text output, as Jiri does, acts
+ * on the code (`paid_plan_required`) and cannot act on the prose. Everything
+ * else falls back through what the body does carry rather than to the HTTP
+ * status text: answering
  * "Unprocessable Entity" to a batch whose response named the offending row and
  * field is throwing away the only useful part of the answer.
  */
@@ -112,9 +114,14 @@ function describeFailure(response: Response, text: string, parsed: ParsedBody): 
 
   const body = parsed.value as Record<string, unknown>;
   const stated = body.message ?? body.error_description;
-  if (typeof stated === 'string' && stated.trim()) return everyReason(body, stated) ?? stated;
+  if (typeof stated === 'string' && stated.trim()) return withCode(everyReason(body, stated) ?? stated, body.error);
 
   return rowErrors(body) ?? `${status}: ${snippet(JSON.stringify(parsed.value))}`;
+}
+
+function withCode(reason: string, code: unknown): string {
+  if (typeof code !== 'string' || !code.trim() || reason.includes(code)) return reason;
+  return `${reason} (${code})`;
 }
 
 /**
