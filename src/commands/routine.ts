@@ -47,8 +47,8 @@ const ROUTINE_PAYLOAD: readonly string[] = [
   '  { "source_kind": "form" | "table", "source_token": "Kp7mQ2",',
   '    "on": "created" | "updated" | "matched",',
   '    "field_codes": ["field_3"],',
-  '    "scope_conditions": [{ "trigger": "field_5", "operator": "eq",',
-  '                           "value": "code_vip", "group_index": 0 }],',
+  '    "scope_conditions": [{ "trigger": "field_5", "operator": "any_in",',
+  '                           "value": ["code_vip"], "group_index": 0 }],',
   '    "include_bulk": false }',
   '  on created   runs for each new entry',
   '  on updated   runs when one of field_codes changes: 1 to 10 api_codes;',
@@ -58,20 +58,23 @@ const ROUTINE_PAYLOAD: readonly string[] = [
   '  after the change. The source joins objects by itself.',
   '  include_bulk: imports and batch edits trigger as well, as one run.',
   '',
-  'A condition is the one a view filters by:',
-  '  trigger      the api_code; a subtable column is field_3.field_1',
-  '  operator     eq ne gt gte lt lte any_in none_in between not_between like',
-  '               not_like null not_null',
-  '  value        shaped as the field takes it in an entry, which',
-  '               `jinshuju field types <Type>` shows under value: a choice is',
-  '               its value code (see `jinshuju field list`), never its label;',
-  '               a list for any_in and none_in, two for between,',
-  '               none for null and not_null. A date also takes today,',
-  '               yesterday, tomorrow, this_week, last_week, this_month,',
-  '               last_month, next_month, last_1, last_3, last_7, last_30',
+  'A condition names a field and what to test it for. Its value is not shaped',
+  'as the field takes it in an entry: `jinshuju field filterable --form <token>',
+  '--for routine` lists the fields a routine can test, the operators each takes',
+  "and the value each operator takes, with examples in the field's own codes.",
+  '  trigger      the field as that list names it; a subtable column is',
+  '               field_3.field_1',
+  '  operator     one the field lists there',
+  "  value        shaped as that operator's examples: a choice is its code,",
+  '               never its label',
   '  group_index  conditions sharing an index must all hold; a negative index',
   '               makes its group any-of; separate groups are alternatives',
-  '  scope_attr   only for a ReservationField: date_time or api_code',
+  '  scope_attr   when the field lists one: date_time tests a reservation',
+  '               field by its date; its items are listed without one',
+  '',
+  "The answer's preview_condition_matches says which of the source's latest 20",
+  'entries meet each group as the conditions stand. When those are not the',
+  'entries the instruction means, the conditions are wrong: fix them with update.',
   '',
   'Keys the API does not read are ignored, so `routine get --output json` can be',
   'edited and sent back, once delete_authorized is taken out of it.',
@@ -277,6 +280,7 @@ export const ROUTINE: readonly Command[] = [
       "trigger_text says when it runs in the 自动任务 page's words; next_runs holds the next five times of an " +
       'active schedule, and is empty otherwise. A data trigger has its conditions in words under ' +
       'event.conditions, and as stored under event.scope_conditions, which is what update takes back. ' +
+      "preview_condition_matches says which of the source's latest 20 entries meet each condition group. " +
       'last_run is the latest run, and url opens the routine on the page.',
     args: [ROUTINE_ARG],
     request: (input) => call('getRoutine', { path: { id: input.args.routine } }),
@@ -287,7 +291,8 @@ export const ROUTINE: readonly Command[] = [
     summary: 'Create a routine; it is active at once',
     description:
       'The flags cover a scheduled routine in one command; an event trigger and its conditions go in --json, ' +
-      'and the flags still apply on top of it. The answer is the routine as `routine get` shows it, url included. ' +
+      'and the flags still apply on top of it. The answer is the routine as `routine get` shows it, url included; ' +
+      'for a data trigger with conditions, read its preview_condition_matches before saying the routine is right. ' +
       "A routine against the page's rules is refused with every reason the page gives.",
     options: ROUTINE_OPTIONS,
     payload: ROUTINE_PAYLOAD,

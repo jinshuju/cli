@@ -463,6 +463,23 @@ jinshuju field preview-convert --form Kp7mQ2 field_1 --to RadioButton
 it takes that data along, so it is worth asking first. `preview-convert` reports
 how much a type conversion would keep and how much it would clear.
 
+## Writing a condition
+
+```bash
+jinshuju field filterable --form Kp7mQ2
+jinshuju field filterable --form Kp7mQ2 --for routine field_5 --output json
+```
+
+A routine's or a notification rule's `scope_conditions` test fields, and a
+condition's value is not the value the field takes in an entry: a goods field
+is tested with `[{"api_code": …}]`, a choice by its code. `field filterable`
+lists the fields a condition can test, the operators each takes, and for each
+operator the value it takes, with examples written in the field's own codes;
+`--for routine` narrows it to the fields a routine's data trigger can test.
+Copy an example's shape. Creating or updating a routine with conditions
+answers with `preview_condition_matches`: which of the latest entries meet each
+group, the quickest way to see that a condition means what it was meant to.
+
 ## SMS signatures and templates
 
 An SMS notification needs a signature and a template, and both wait on a

@@ -1,5 +1,5 @@
 import { CONTAINER_OPTIONS, JSON_OPTION, UsageError, type OptionSpec } from '../options.js';
-import { call } from '../spec.js';
+import { call, choices } from '../spec.js';
 import { YES_OPTION, confirmed, onContainer, one, payload, requiredOption } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
@@ -90,6 +90,44 @@ function labelsOf(payload: unknown): Set<string> {
   );
 }
 
+/**
+ * A listing is for finding the field, so each row names its operators and no
+ * more. One field is for writing its condition, and a table of formats loses
+ * whatever a narrow terminal has no room for, so each operator becomes its own
+ * block: the format, its description, and every example as the JSON to send.
+ * A reservation field is listed once for its items and once for its date, so
+ * one field may be two rows, told apart by scope_attr (none, and date_time).
+ */
+function conditionFieldsForReading(body: unknown): unknown {
+  const rows = (body as { data?: Record<string, unknown>[] }).data ?? [];
+  const operatorsOf = (row: Record<string, unknown>): Record<string, unknown>[] =>
+    Array.isArray(row.operators) ? (row.operators as Record<string, unknown>[]) : [];
+  const oneField = rows.length > 0 && rows.every((row) => row.trigger === rows[0].trigger);
+  if (!oneField) {
+    return {
+      data: rows.map((row) => ({
+        ...row,
+        operators: operatorsOf(row)
+          .map((operator) => operator.operator)
+          .join(' ')
+      }))
+    };
+  }
+  return Object.fromEntries(
+    rows.map((row) => {
+      const { operators: _operators, ...rest } = row;
+      const heading = row.scope_attr ? `${row.trigger} scope_attr=${row.scope_attr}` : String(row.trigger);
+      const operators = Object.fromEntries(
+        operatorsOf(row).map(({ operator, examples, ...format }) => [
+          operator,
+          { ...format, examples: Array.isArray(examples) ? examples.map((example) => JSON.stringify(example)) : [] }
+        ])
+      );
+      return [heading, { ...rest, operators }];
+    })
+  );
+}
+
 const KIND_OPTION: OptionSpec = {
   name: '--kind',
   type: 'string',
@@ -150,6 +188,51 @@ export const FIELD: readonly Command[] = [
     options: [...CONTAINER_OPTIONS],
     request: (input) => onContainer(input, 'getForm', 'getTable'),
     select: (body) => ({ data: selectFields(body) })
+  },
+  {
+    path: ['field', 'filterable'],
+    summary: 'List the fields a condition can test, with the operators and values each takes',
+    description:
+      'The fields the scope_conditions of a routine or a notification rule can name, and for each the ' +
+      'operators it takes and the value each operator takes: value_format names the shape, ' +
+      "value_description says it, and examples are values written with the field's own codes. " +
+      'Write a condition {trigger, operator, value} as an example shows; an operator or a field not ' +
+      'listed is not one a condition can use. A row with a scope_attr needs it in the condition too: a ' +
+      'reservation field is listed once for its items, without one, and once for its date, with date_time. ' +
+      "A routine's data trigger tests fewer fields than a notification rule: ask with --for routine. " +
+      'Name a trigger to read one field in full; text clips long descriptions, --output json keeps them whole.',
+    args: [{ name: 'trigger', required: false, description: 'One field, as a condition names it, e.g. field_3' }],
+    options: [
+      ...CONTAINER_OPTIONS,
+      {
+        name: '--for',
+        type: 'string',
+        choices: choices('listFormConditionTriggerableFields', 'fields_context'),
+        placeholder: '<context>',
+        description: "Only the fields a condition there can test; routine is a routine's data trigger"
+      }
+    ],
+    request: (input) =>
+      onContainer(input, 'listFormConditionTriggerableFields', 'listTableConditionTriggerableFields', {
+        query: { fields_context: input.options.for as string | undefined }
+      }),
+    select: (body, input) => {
+      const rows =
+        (body as { condition_triggerable_fields?: Record<string, unknown>[] }).condition_triggerable_fields ?? [];
+      const trigger = input.args.trigger;
+      if (trigger === undefined) return { data: rows };
+      const picked = rows.filter((row) => row.trigger === trigger);
+      if (picked.length === 0) {
+        throw new UsageError(`${trigger} is not a field a condition can test here; run without it to list them`);
+      }
+      return { data: picked };
+    },
+    render: conditionFieldsForReading,
+    examples: [
+      'jinshuju field filterable --form Kp7mQ2',
+      'jinshuju field filterable --form Kp7mQ2 --for routine',
+      'jinshuju field filterable --table Vn4xR8'
+    ]
   },
   {
     path: ['field', 'add'],

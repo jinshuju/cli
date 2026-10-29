@@ -2829,6 +2829,127 @@ test('field types reads the catalogue, for a form by default and for a table whe
   );
 });
 
+/**
+ * A condition's value is not the value its field takes in an entry — a goods
+ * field is tested with [{api_code}] — and guessing it from the entry is how a
+ * routine came to never fire. The server says what each operator takes; this
+ * reads it out for one container, and for one field in full.
+ */
+const CONDITION_FIELDS = {
+  condition_triggerable_fields: [
+    {
+      trigger: 'field_1',
+      label: '商品',
+      type: 'GoodsField',
+      scope_attr: null,
+      operators: [
+        {
+          operator: 'any_in',
+          value_format: 'goods_items',
+          value_description: '对象数组，每个对象是 {"api_code": 商品项代码}',
+          examples: [[{ api_code: 'lH0S' }]]
+        },
+        { operator: 'null', value_format: 'blank', value_description: '不写 value', examples: [null] }
+      ]
+    },
+    {
+      trigger: 'field_2',
+      label: '课程预约',
+      type: 'ReservationField',
+      scope_attr: null,
+      operators: [
+        { operator: 'any_in', value_format: 'choices', value_description: '选项代码数组', examples: [['r1']] }
+      ]
+    },
+    {
+      trigger: 'field_2',
+      label: '课程预约的预约日期',
+      type: 'ReservationField',
+      scope_attr: 'date_time',
+      operators: [{ operator: 'gt', value_format: 'date_time', value_description: '日期字符串', examples: ['today'] }]
+    }
+  ]
+};
+
+function conditionFieldsClient() {
+  const { requests, client } = createMockClient();
+  return {
+    requests,
+    client: {
+      async request<T>(request: HttpRequest): Promise<T> {
+        await client.request(request);
+        return CONDITION_FIELDS as T;
+      }
+    }
+  };
+}
+
+test('field filterable asks the form or the table for the fields a condition can test, or a routine can', async () => {
+  const { requests, client } = conditionFieldsClient();
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+
+  await cli(['field', 'filterable', '--form', 'Kp7mQ2'], { client, env });
+  await cli(['field', 'filterable', '--table', 'Vn4xR8'], { client, env });
+  await cli(['field', 'filterable', '--form', 'Kp7mQ2', '--for', 'routine'], { client, env });
+
+  assert.deepEqual(
+    requests.map((request) => `${request.method} ${url(request)}`),
+    [
+      'GET /api/v1/forms/Kp7mQ2/condition_triggerable_fields',
+      'GET /api/v1/tables/Vn4xR8/condition_triggerable_fields',
+      'GET /api/v1/forms/Kp7mQ2/condition_triggerable_fields?fields_context=routine'
+    ]
+  );
+});
+
+test('field filterable lists operators per field, and shows one field with every example as the JSON to send', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+
+  const listing = await cli(['field', 'filterable', '--form', 'Kp7mQ2', '--output', 'text'], {
+    client: conditionFieldsClient().client,
+    env
+  });
+  assert.equal(listing.exitCode, 0);
+  assert.match(listing.stdout, /商品\s+GoodsField\s+field_1\s.*any_in null/);
+  assert.doesNotMatch(listing.stdout, /lH0S/);
+
+  const one = await cli(['field', 'filterable', '--form', 'Kp7mQ2', 'field_1', '--output', 'text'], {
+    client: conditionFieldsClient().client,
+    env
+  });
+  assert.equal(one.exitCode, 0);
+  assert.match(one.stdout, /any_in:\n\s+value_format: goods_items/);
+  assert.match(one.stdout, /\[\{"api_code":"lH0S"\}\]/);
+
+  const json = await cli(['field', 'filterable', '--form', 'Kp7mQ2', 'field_1', '--output', 'json'], {
+    client: conditionFieldsClient().client,
+    env
+  });
+  assert.deepEqual(JSON.parse(json.stdout), { data: [CONDITION_FIELDS.condition_triggerable_fields[0]] });
+});
+
+test('field filterable shows both sides of a reservation field, the date one with the scope_attr it needs', async () => {
+  const result = await cli(['field', 'filterable', '--form', 'Kp7mQ2', 'field_2', '--output', 'text'], {
+    client: conditionFieldsClient().client,
+    env: { JINSHUJU_ACCESS_TOKEN: 't' }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^field_2:\n/m);
+  assert.match(result.stdout, /^field_2 scope_attr=date_time:\n/m);
+  assert.match(result.stdout, /"today"/);
+});
+
+test('field filterable refuses a trigger the container cannot test, pointing at the listing', async () => {
+  const result = await cli(['field', 'filterable', '--form', 'Kp7mQ2', 'field_9'], {
+    client: conditionFieldsClient().client,
+    env: { JINSHUJU_ACCESS_TOKEN: 't' }
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /field_9 is not a field a condition can test here; run without it to list them/);
+});
+
 test('--wait gives up after its deadline, naming the job, rather than polling forever', async () => {
   const client = {
     async request<T>(): Promise<T> {

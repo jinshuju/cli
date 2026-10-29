@@ -95,7 +95,9 @@ export const NOTIFICATION: readonly Command[] = [
       'Each approach takes its own keys: SMS --recipients --template-id --placeholder; ' +
       'EMAIL --recipients --subject --content; WEIXIN_ONETIME --subject --content; ' +
       'WXWORK and DING_TALK --url --content; WEBHOOK --url. ' +
-      'scope_conditions, schedule_time_rule, smtp_account_id, weixin_onetime_url and mentioned_mobile_list go through --json.',
+      'scope_conditions, schedule_time_rule, smtp_account_id, weixin_onetime_url and mentioned_mobile_list go through --json. ' +
+      'Each condition in scope_conditions takes the operators and values `jinshuju field filterable --form <token>` ' +
+      'lists for its field, written as its examples are.',
     options: [
       FORM_OPTION,
       {
