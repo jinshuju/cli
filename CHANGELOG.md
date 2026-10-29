@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/jinshuju/cli/compare/v0.18.0...v0.19.0) (2026-10-29)
+
+
+### Features
+
+* declare SMS template variables with --variable ([885493e](https://github.com/jinshuju/cli/commit/885493e54b254db55b7a94e9aec7afba32e61d51))
+
 ## [0.18.0](https://github.com/jinshuju/cli/compare/v0.17.0...v0.18.0) (2026-10-28)
 
 
