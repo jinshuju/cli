@@ -144,14 +144,15 @@ test('package bin points to the executable wrapper, in the form npm publishes', 
 });
 
 // A flag named `<json>` says nothing about what goes in it. Every command that
-// declares a payload has to show it, and show the way to the field types — the
-// part of the shape no example can carry.
+// declares a payload has to show it, and show the way to what the fields take —
+// the part of the shape no example can carry: the field types, or for a
+// routine's conditions, the values a condition on each field takes.
 for (const command of COMMANDS.filter((entry) => entry.payload?.length)) {
   test(`${command.path.join(' ')} --help shows the payload it expects`, async () => {
     const result = await runCli([...command.path, '--help']);
 
     assert.match(result.stdout, /Payload:/);
-    assert.match(result.stdout, /jinshuju field types/);
+    assert.match(result.stdout, /jinshuju field (types|filterable)/);
   });
 }
 
