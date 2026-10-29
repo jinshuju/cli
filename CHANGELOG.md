@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/jinshuju/cli/compare/v0.19.0...v0.20.0) (2026-10-29)
+
+
+### Features
+
+* **field:** list what a condition on each field takes with field filterable ([a67c71e](https://github.com/jinshuju/cli/commit/a67c71e429ce96aa58687dad8027c9defe9f857a))
+
 ## [0.19.0](https://github.com/jinshuju/cli/compare/v0.18.0...v0.19.0) (2026-10-29)
 
 
