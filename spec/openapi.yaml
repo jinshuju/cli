@@ -94,8 +94,6 @@ tags:
   description: Folders.
 - name: Artifacts
   description: Artifacts Jiri delivered in its conversations, and their versions. Each can be downloaded; only an HTML artifact also has a share link, and who can open it is set here.
-- name: Predefined Choices Sets
-  description: Predefined choice sets.
 - name: Templates
   description: Using templates.
 - name: Contacts
@@ -157,7 +155,6 @@ paths:
       operationId: createForm
       description: |
         Creates a form from a list of field definitions and returns the full form structure.
-        - `scene` sets the form's scene; exam / evaluation question types (such as `SingleSelect`, `FillInBlank`) can only be used in the scenes that support them.
 
         OAuth scope: forms
       requestBody:
@@ -416,6 +413,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FieldTypeChangePreviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/condition_triggerable_fields":
+    get:
+      tags:
+      - Forms
+      summary: List the fields a filter condition can use
+      description: |
+        Read before writing filter conditions (the `scope_conditions` of a routine or a notification rule, a view's `filter`): lists the fields a condition can name and, for each operator a field takes, what its `value` holds. Write conditions as the examples show.
+        - A condition is `{ "trigger": <trigger>, "operator": <operator>, "value": <an example> }`, with `"scope_attr"` added when the field's is not null; leave `value` out when the example is `null`.
+        - Use only the fields and operators listed here.
+        - For a routine's `event.scope_conditions`, ask with `fields_context=routine`: a routine filters only on its source's own fields, and formula and linked fields are left out.
+        - A cooperator gets only the fields their role can read.
+
+        OAuth scope: forms
+      operationId: listFormConditionTriggerableFields
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      - name: fields_context
+        in: query
+        required: false
+        description: Where the conditions are for. `routine` lists only the fields a routine's data trigger (`event.scope_conditions`) can filter on; left out, every field a condition can name.
+        schema:
+          type: string
+          enum:
+          - routine
+      responses:
+        '200':
+          description: The fields a condition can name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConditionTriggerableFieldListResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1227,7 +1267,7 @@ paths:
       description: |
         Partially updates the form's settings, writing only the keys present in the request; PUT is accepted too.
         OAuth scope: form_setting
-        - `submission_region_limited` / `submission_regions` are a paid feature and read-only here; to write them, use `setting` on the "Edit a form" endpoint.
+        - `submission_region_limited` / `submission_regions` (a paid feature), `payment_expirable` and `payment_expiration_time` are read-only here; to write them, use `setting` on the "Edit a form" endpoint.
         - `manually_close_rule`, `by_time_range_close_rule`, `by_entries_close_rule` and `fill_frequency` are nested objects; the server creates or updates them as nested attributes.
         - Returns `{ "status": "ok" }` on success; returns 400 when model validation fails, with body `{ "errors": "...", "status": "failed" }` (not the common error shape).
       operationId: updateFormSetting
@@ -2225,6 +2265,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FormView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -3846,6 +3888,49 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/tables/{table_token}/condition_triggerable_fields":
+    get:
+      tags:
+      - Tables
+      summary: List the columns a filter condition can use
+      description: |
+        Same as GET /forms/{form_token}/condition_triggerable_fields, for a table. Write conditions as the examples show.
+
+        OAuth scope: forms
+      operationId: listTableConditionTriggerableFields
+      parameters:
+      - $ref: '#/components/parameters/TableToken'
+      - name: fields_context
+        in: query
+        required: false
+        description: Where the conditions are for. `routine` lists only the fields a routine's data trigger (`event.scope_conditions`) can filter on; left out, every field a condition can name.
+        schema:
+          type: string
+          enum:
+          - routine
+      responses:
+        '200':
+          description: The columns a condition can name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConditionTriggerableFieldListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The table does not exist or is not accessible, or `table_token` is not a table's (`table cannot be found`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/tables/{table_token}/entries":
     parameters:
     - $ref: '#/components/parameters/TableToken'
@@ -4516,6 +4601,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FormView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5329,178 +5416,6 @@ paths:
                 $ref: '#/components/schemas/PublishedArtifactError'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-  "/predefined_choices_sets":
-    get:
-      tags:
-      - Predefined Choices Sets
-      summary: List predefined choice sets
-      operationId: listPredefinedChoicesSets
-      description: |
-        Lists the current account's custom predefined choice sets (type custom), only those matching the locale of the current request (as the server implements it); the built-in global choice sets are not returned.
-        OAuth scope: form_setting
-      responses:
-        '200':
-          description: Array of choice sets
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PredefinedChoicesSet'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-    post:
-      tags:
-      - Predefined Choices Sets
-      summary: Create a predefined choice set
-      operationId: createPredefinedChoicesSet
-      description: |
-        Creates a custom predefined choice set in the current account. It looks up by `label`: when the account already has a set with the same label, that set's `choices` are overwritten (in effect an update); otherwise a new set is created.
-        OAuth scope: form_setting
-        The request body must be wrapped under the `predefined_choices_set` key; returns 400 when the key is missing. Empty strings in `choices` are dropped; neither `label` nor the remaining `choices` may be empty, otherwise returns 400 with the body `{ errors, status: "failed" }`.
-        Returns 200 on success (not 201).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - predefined_choices_set
-              properties:
-                predefined_choices_set:
-                  $ref: '#/components/schemas/PredefinedChoicesSetInput'
-              additionalProperties: false
-      responses:
-        '200':
-          description: Created (or overwritten by label)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PredefinedChoicesSet'
-        '400':
-          description: Validation failed (label or choices is empty)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PredefinedChoicesSetError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  "/predefined_choices_sets/{id}":
-    patch:
-      tags:
-      - Predefined Choices Sets
-      summary: Update a predefined choice set
-      operationId: updatePredefinedChoicesSet
-      description: |
-        Updates the `label` and / or `choices` of one of the current account's custom predefined choice sets. PUT is also accepted and behaves the same.
-        OAuth scope: form_setting
-        Only a set of type custom that belongs to the current account can be updated: a global set or another account's set returns 403 `{ errors: "forbidden", status: "failed" }`; an ID that does not exist returns 404 `{ errors: "not found", status: "failed" }`; a validation failure returns 400 `{ errors, status: "failed" }`.
-      parameters:
-      - name: id
-        in: path
-        required: true
-        description: Choice set ID (24 hexadecimal characters)
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - predefined_choices_set
-              properties:
-                predefined_choices_set:
-                  $ref: '#/components/schemas/PredefinedChoicesSetInput'
-              additionalProperties: false
-      responses:
-        '200':
-          description: Updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PredefinedChoicesSet'
-        '400':
-          description: Validation failed (label or choices is empty)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PredefinedChoicesSetError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '403':
-          description: No permission on this choice set (a global set or another account's set), or insufficient OAuth scope
-          content:
-            application/json:
-              schema:
-                oneOf:
-                - $ref: '#/components/schemas/PredefinedChoicesSetError'
-                - type: object
-                  required:
-                  - error_description
-                  properties:
-                    error_description:
-                      type: string
-        '404':
-          description: Choice set does not exist
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PredefinedChoicesSetError'
-    delete:
-      tags:
-      - Predefined Choices Sets
-      summary: Delete a predefined choice set
-      operationId: deletePredefinedChoicesSet
-      description: |
-        Deletes one of the current account's custom predefined choice sets; returns 200 with no response body on success.
-        OAuth scope: form_setting
-        Only a set of type custom that belongs to the current account can be deleted: a global set or another account's set returns 403 `{ errors: "forbidden", status: "failed" }`; an ID that does not exist returns 404 `{ errors: "not found", status: "failed" }`.
-      parameters:
-      - name: id
-        in: path
-        required: true
-        description: Choice set ID (24 hexadecimal characters)
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Deleted, no response body
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '403':
-          description: No permission on this choice set (a global set or another account's set), or insufficient OAuth scope
-          content:
-            application/json:
-              schema:
-                oneOf:
-                - $ref: '#/components/schemas/PredefinedChoicesSetError'
-                - type: object
-                  required:
-                  - error_description
-                  properties:
-                    error_description:
-                      type: string
-        '404':
-          description: Choice set does not exist
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PredefinedChoicesSetError'
   "/template_usages":
     post:
       tags:
@@ -7330,6 +7245,7 @@ paths:
         OAuth scope: routines
         - A routine against the rules returns `422`, and `errors` gives each reason with its `code` and the page's message.
         - Delete authorization (`delete_authorized`) cannot be set here: a body that names it, true or false, returns `422` `delete_authorization_page_only` and creates nothing.
+        - The response's `preview_condition_matches` shows which of your latest entries of the source meet each condition group; if they are not the ones the routine is meant for, fix the conditions.
         - Jiri running a routine cannot create routines (`403`).
       requestBody:
         required: true
@@ -7343,7 +7259,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Routine'
+                $ref: '#/components/schemas/RoutineDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -7369,7 +7287,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Routine'
+                $ref: '#/components/schemas/RoutineDetail'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -7386,7 +7304,7 @@ paths:
       description: |
         Changes the name, instruction, objects, trigger kind, schedule or data trigger. A key left out, or null, keeps what the routine has; `objects` given replaces them all.
         OAuth scope: routines
-        - The rules and messages are those of creating. A changed schedule cancels the runs queued for the old one; a changed instruction or objects stops a run in progress.
+        - The rules, messages and `preview_condition_matches` are those of creating. A changed schedule cancels the runs queued for the old one; a changed instruction or objects stops a run in progress.
         - A body that names `delete_authorized`, true or false, returns `422` `delete_authorization_page_only` and changes nothing.
         - Jiri running a routine cannot update routines (`403`).
       requestBody:
@@ -7401,7 +7319,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Routine'
+                $ref: '#/components/schemas/RoutineDetail'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -7464,7 +7382,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Routine'
+                $ref: '#/components/schemas/RoutineDetail'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -7492,7 +7410,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Routine'
+                $ref: '#/components/schemas/RoutineDetail'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -8428,6 +8346,7 @@ components:
       - last_entry_created_at
       - creator
       - folder_token
+      - billing_account_id
       properties:
         name:
           type: string
@@ -8462,6 +8381,9 @@ components:
           - string
           - 'null'
           description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
+        billing_account_id:
+          type: string
+          description: ID of the account the form belongs to, as `id` in `GET /billing_account`; a form shared from another account carries that account's
         transactions:
           $ref: '#/components/schemas/FormTransactions'
     FormListResponse:
@@ -8988,7 +8910,9 @@ components:
         color_mark:
           type: string
         info_filling_duration:
-          type: number
+          type:
+          - number
+          - 'null'
         info_platform:
           type: string
         info_os:
@@ -9153,11 +9077,24 @@ components:
                 - 'null'
               reason:
                 type: string
-                description: For example `invalid_serial_number`, `invalid_attributes`
+                enum:
+                - invalid_serial_number
+                - invalid_attributes
+                - not_found_or_forbidden
+                - version_conflict
+                - validation_failed
               errors:
-                type: array
-                items:
-                  type: string
+                description: '`validation_failed` gives `{ "<api_code>": ["error message"] }`; `not_found_or_forbidden` and `version_conflict` give null'
+                oneOf:
+                - type: array
+                  items:
+                    type: string
+                - type: object
+                  additionalProperties:
+                    type: array
+                    items:
+                      type: string
+                - type: 'null'
     TableSummary:
       type: object
       required:
@@ -9170,6 +9107,7 @@ components:
       - creator
       - entries_count
       - folder_token
+      - billing_account_id
       properties:
         name:
           type: string
@@ -9200,6 +9138,9 @@ components:
           - string
           - 'null'
           description: Token of the folder the current identity put this table in (for an account token, the account owner's); null when the table is not in a folder
+        billing_account_id:
+          type: string
+          description: ID of the account the table belongs to, as `id` in `GET /billing_account`; a table shared from another account carries that account's
     TableListResponse:
       type: object
       required:
@@ -9254,8 +9195,7 @@ components:
         fields:
           type: array
           minItems: 1
-          items:
-            $ref: '#/components/schemas/FieldInput'
+          description: 'Field definitions: FieldInput, or ExamFieldInput / EvaluationFieldInput when scene is exam / evaluation'
         setting:
           $ref: '#/components/schemas/FormSettingWriteInput'
         folder_token:
@@ -9374,19 +9314,6 @@ components:
           - WidgetContact
           - WidgetMap
           - WidgetMarquee
-          - SingleSelect
-          - MultiSelect
-          - ImageSingleSelect
-          - ImageMultiSelect
-          - TrueOrFalse
-          - DropDownSelect
-          - FillInBlank
-          - ShortAnswer
-          - FillInNumber
-          - Rating
-          - Nps
-          - Department
-          - Grade
         label:
           type: string
           description: Field label
@@ -9432,19 +9359,6 @@ components:
           WidgetContact: "#/components/schemas/WidgetContactInput"
           WidgetMap: "#/components/schemas/WidgetMapInput"
           WidgetMarquee: "#/components/schemas/WidgetMarqueeInput"
-          SingleSelect: "#/components/schemas/SingleSelectInput"
-          MultiSelect: "#/components/schemas/MultiSelectInput"
-          ImageSingleSelect: "#/components/schemas/ImageSingleSelectInput"
-          ImageMultiSelect: "#/components/schemas/ImageMultiSelectInput"
-          TrueOrFalse: "#/components/schemas/TrueOrFalseInput"
-          DropDownSelect: "#/components/schemas/DropDownSelectInput"
-          FillInBlank: "#/components/schemas/FillInBlankInput"
-          ShortAnswer: "#/components/schemas/ShortAnswerInput"
-          FillInNumber: "#/components/schemas/FillInNumberInput"
-          Rating: "#/components/schemas/RatingInput"
-          Nps: "#/components/schemas/NpsInput"
-          Department: "#/components/schemas/DepartmentInput"
-          Grade: "#/components/schemas/GradeInput"
       oneOf:
       - $ref: '#/components/schemas/TextFieldInput'
       - $ref: '#/components/schemas/TextAreaInput'
@@ -9485,19 +9399,6 @@ components:
       - $ref: '#/components/schemas/WidgetContactInput'
       - $ref: '#/components/schemas/WidgetMapInput'
       - $ref: '#/components/schemas/WidgetMarqueeInput'
-      - $ref: '#/components/schemas/SingleSelectInput'
-      - $ref: '#/components/schemas/MultiSelectInput'
-      - $ref: '#/components/schemas/ImageSingleSelectInput'
-      - $ref: '#/components/schemas/ImageMultiSelectInput'
-      - $ref: '#/components/schemas/TrueOrFalseInput'
-      - $ref: '#/components/schemas/DropDownSelectInput'
-      - $ref: '#/components/schemas/FillInBlankInput'
-      - $ref: '#/components/schemas/ShortAnswerInput'
-      - $ref: '#/components/schemas/FillInNumberInput'
-      - $ref: '#/components/schemas/RatingInput'
-      - $ref: '#/components/schemas/NpsInput'
-      - $ref: '#/components/schemas/DepartmentInput'
-      - $ref: '#/components/schemas/GradeInput'
       title: FieldInput
     ChoiceInput:
       type: object
@@ -9814,7 +9715,7 @@ components:
         The `setting` used when creating / editing a form. Only the keys below are accepted; other keys are ignored. A write describes the resulting state: omitted keys keep their current values, and `null` clears a key.
         - Passing only `success_message` automatically sets `success_message_style` to `text`; passing only `success_message_rich_text` sets it to `rich_text`.
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
-        - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically.
+        - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically and `payment_expirable` turns on unless passed or already `false`.
         - `notification_rules` replaces all notification rules created through the API as a whole (`[]` clears them); rules created in the desktop UI are not affected.
       properties:
         success_message:
@@ -9969,6 +9870,14 @@ components:
           type:
           - string
           - 'null'
+        payment_expirable:
+          type: boolean
+          description: Close an unpaid order and restore its stock after `payment_expiration_time` minutes
+        payment_expiration_time:
+          type: integer
+          minimum: 3
+          maximum: 30
+          description: Minutes an order may stay unpaid
         notification_rules:
           type: array
           items:
@@ -10391,8 +10300,10 @@ components:
               type: array
               description: Fields to add; each may carry `position` (0-based) to set where it is inserted, otherwise it is appended at the end
               items:
+                description: A FieldInput; on an exam / evaluation form an ExamFieldInput / EvaluationFieldInput, on a table a TableColumnInput
                 anyOf:
-                - $ref: '#/components/schemas/FieldInput'
+                - $ref: '#/components/schemas/ExamFieldInput'
+                - $ref: '#/components/schemas/EvaluationFieldInput'
                 - $ref: '#/components/schemas/TableColumnInput'
             remove:
               type: array
@@ -10478,7 +10389,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -10951,6 +10862,12 @@ components:
                 type: number
               selected:
                 type: boolean
+              quota:
+                type:
+                - integer
+                - 'null'
+                minimum: 0
+                description: Maximum number of places; 0 closes the choice. Changing an existing limit keeps the places already taken; null lifts the limit
             additionalProperties: false
       additionalProperties: false
     FieldRuleOperations:
@@ -10986,7 +10903,7 @@ components:
           enum:
           - show
           - abort
-          description: "`show` / `abort`, defaults to show"
+          description: 'show (default): the targets stay hidden, and anything written into them is dropped, until the conditions hold'
         operator:
           type: string
           enum:
@@ -11200,6 +11117,8 @@ components:
       - entry_post_url
       - post_new_entry
       - post_updated_entry
+      - payment_expirable
+      - payment_expiration_time
       - daily_repeat_close_rule
       properties:
         success_message:
@@ -11374,6 +11293,16 @@ components:
           - boolean
           - 'null'
           description: Whether entry updates are pushed
+        payment_expirable:
+          type:
+          - boolean
+          - 'null'
+          description: Whether an unpaid order closes and restores its stock after `payment_expiration_time` minutes; `null` (never set) acts as off and turns on when a payment account is bound
+        payment_expiration_time:
+          type:
+          - integer
+          - 'null'
+          description: Minutes an order may stay unpaid
         weixin:
           type: object
           description: The WeChat Official Account chosen for the form; returned only when one is configured
@@ -11803,8 +11732,10 @@ components:
           type: integer
           description: How many have checked in
         checkin_url:
-          type: string
-          description: Link registrants scan to check themselves in
+          type:
+          - string
+          - 'null'
+          description: Link registrants scan to check themselves in; null once the form is deleted
         verifier_invite_url:
           type: string
           description: Link that invites a verifier, who can then verify check-ins on site; the creator of the campaign is a verifier already
@@ -12173,13 +12104,20 @@ components:
       properties:
         primary_color:
           type: string
-          description: Primary color, e.g. "#FBBF24"
+          description: Theme color of the buttons and of selected choices, e.g. "#FBBF24"
         secondary_color:
           type: string
-          description: Secondary color
+          deprecated: true
+          description: Deprecated; not shown on the form.
+        dominant_color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+          description: |-
+            The color the form's text sits on, as a 6-digit hex color, e.g. "#1E3A8A". Only whether it is light (WCAG relative luminance above 0.179) or dark matters: a dark one puts the form in dark mode and turns the header, field label and choice text white, a light one turns them black.
+            Pass it whenever you change `wallpaper` or `form_container.background_color`; otherwise the form keeps its current light or dark look. Work it out from what shows behind the text: on a card layout, the page background color or the main color of the background image; on other layouts, the form container's color, mixed with the page background as far as the container is see-through. If you cannot see the background image, leave `dominant_color` out rather than guess.
         wallpaper:
           type: object
-          description: Page background
+          description: Page background, either a color or an image; setting only one of them removes the other, along with the preset background image that comes with the theme template
           properties:
             background_color:
               type: string
@@ -12243,7 +12181,7 @@ components:
           additionalProperties: false
         typography:
           type: object
-          description: Typography; keys use underscores and are merged into the existing style
+          description: Typography; keys use underscores and are merged into the existing style. A color given here wins over the one `dominant_color` sets
           properties:
             form_header:
               type: object
@@ -12272,9 +12210,12 @@ components:
           additionalProperties: false
         submit_button:
           type: object
+          description: Buttons; color and font size apply to every button on the form
           properties:
             background_color:
               type: string
+              deprecated: true
+              description: Deprecated alias of `primary_color`; use `primary_color`.
             color:
               type: string
             font_size:
@@ -12297,6 +12238,7 @@ components:
       - form_token
       - primary_color
       - secondary_color
+      - dominant_color
       - wallpaper
       - header
       - typography
@@ -12309,10 +12251,17 @@ components:
           type:
           - string
           - 'null'
+          description: Theme color of the buttons and of selected choices
         secondary_color:
           type:
           - string
           - 'null'
+          deprecated: true
+        dominant_color:
+          type:
+          - string
+          - 'null'
+          description: The color the form's text sits on; the form is in dark mode when it is dark
         wallpaper:
           type: object
           properties:
@@ -12772,7 +12721,9 @@ components:
           type: boolean
           description: The account's plan or trial includes members-only sharing (`artifact_sub_account_audience_only`); without it, `internal` cannot be set
         account_name:
-          type: string
+          type:
+          - string
+          - 'null'
           description: Name of the account the share belongs to, whose members `internal` lets in
         can_use_artifact_url:
           type: boolean
@@ -12825,65 +12776,6 @@ components:
           default: form
           description: Folder kind; a folder holds one kind of content only, and tables go only into `table` folders. Defaults to `form`
       additionalProperties: false
-    PredefinedChoicesSet:
-      type: object
-      required:
-      - id
-      - label
-      - type
-      - choices
-      properties:
-        id:
-          type: string
-          description: Choice set ID
-        label:
-          type: string
-          description: Choice set name
-        type:
-          type: string
-          enum:
-          - global
-          - custom
-          description: Choice set type; this endpoint returns only custom, the account's own sets
-        choices:
-          type: array
-          description: Choices
-          items:
-            type: object
-            required:
-            - label
-            properties:
-              label:
-                type: string
-                description: Choice text
-    PredefinedChoicesSetInput:
-      type: object
-      required:
-      - label
-      - choices
-      properties:
-        label:
-          type: string
-          description: Choice set name, cannot be empty
-        choices:
-          type: array
-          description: List of choice texts; empty strings are dropped, and the list cannot be empty after that
-          items:
-            type: string
-      additionalProperties: false
-    PredefinedChoicesSetError:
-      type: object
-      required:
-      - errors
-      - status
-      properties:
-        errors:
-          type: string
-          description: Error message; multiple validation messages are joined with `; `
-        status:
-          type: string
-          enum:
-          - failed
     TemplateUsageInput:
       type: object
       required:
@@ -14020,7 +13912,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14059,7 +13951,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14098,7 +13990,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14188,7 +14080,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14224,7 +14116,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14266,7 +14158,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14299,7 +14191,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14332,7 +14224,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14394,7 +14286,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14464,7 +14356,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14523,7 +14415,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14564,7 +14456,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14598,7 +14490,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14638,7 +14530,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14677,7 +14569,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14718,7 +14610,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14843,7 +14735,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14873,7 +14765,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14912,7 +14804,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14948,7 +14840,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -14991,7 +14883,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15030,7 +14922,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15060,7 +14952,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15095,7 +14987,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15144,7 +15036,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15235,7 +15127,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15283,7 +15175,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15326,7 +15218,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15373,7 +15265,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15464,7 +15356,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15514,7 +15406,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15574,7 +15466,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15633,7 +15525,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15700,7 +15592,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15717,7 +15609,7 @@ components:
     PageBreakInput:
       type: object
       title: PageBreakInput
-      description: PageBreak field
+      description: PageBreak field; it starts the page below it, so a form with any PageBreak must have one as its first field (private fields may come before it)
       additionalProperties: false
       required:
       - type
@@ -15736,7 +15628,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15779,7 +15671,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15822,7 +15714,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15872,7 +15764,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15917,7 +15809,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -15966,7 +15858,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16058,7 +15950,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16178,7 +16070,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16267,7 +16159,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16384,7 +16276,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16476,7 +16368,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16564,7 +16456,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16633,7 +16525,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16702,7 +16594,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16821,7 +16713,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16885,7 +16777,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16931,7 +16823,7 @@ components:
     DepartmentInput:
       type: object
       title: DepartmentInput
-      description: Department question, stored as RadioButton
+      description: Department question, stored as RadioButton; only when scene is exam
       additionalProperties: false
       required:
       - type
@@ -16950,7 +16842,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -16993,7 +16885,7 @@ components:
     GradeInput:
       type: object
       title: GradeInput
-      description: Grade question, stored as RadioButton
+      description: Grade question, stored as RadioButton; only when scene is exam
       additionalProperties: false
       required:
       - type
@@ -17012,7 +16904,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -17074,7 +16966,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -17237,11 +17129,13 @@ components:
       additionalProperties: false
       required:
       - type
+      - available_days_of_week
       properties:
         type:
           const: by_day_repeat_weekly
         available_days_of_week:
           type: array
+          minItems: 1
           items:
             type: string
             enum:
@@ -17330,11 +17224,13 @@ components:
       additionalProperties: false
       required:
       - type
+      - available_days_of_week
       properties:
         type:
           const: by_time_range_repeat_daily
         available_days_of_week:
           type: array
+          minItems: 1
           items:
             type: string
             enum:
@@ -17508,25 +17404,32 @@ components:
                       - WidgetContact
                       - WidgetVideo
                       - WidgetButton
-      - description: SingleSelect / MultiSelect / ImageSingleSelect / ImageMultiSelect / DropDownSelect can only be used when scene is exam / evaluation
+      - description: scene=exam takes ExamFieldInput
         if:
           properties:
-            fields:
-              type: array
-              contains:
-                properties:
-                  type:
-                    enum:
-                    - SingleSelect
-                    - MultiSelect
-                    - ImageSingleSelect
-                    - ImageMultiSelect
-                    - DropDownSelect
-                required:
-                - type
+            scene:
+              const: exam
           required:
-          - fields
+          - scene
         then:
+          properties:
+            fields:
+              items:
+                $ref: '#/components/schemas/ExamFieldInput'
+      - description: scene=evaluation takes EvaluationFieldInput
+        if:
+          properties:
+            scene:
+              const: evaluation
+          required:
+          - scene
+        then:
+          properties:
+            fields:
+              items:
+                $ref: '#/components/schemas/EvaluationFieldInput'
+      - description: Any other scene takes FieldInput
+        if:
           properties:
             scene:
               enum:
@@ -17534,52 +17437,11 @@ components:
               - evaluation
           required:
           - scene
-      - description: TrueOrFalse / FillInBlank / ShortAnswer / FillInNumber can only be used when scene is exam
-        if:
+        else:
           properties:
             fields:
-              type: array
-              contains:
-                properties:
-                  type:
-                    enum:
-                    - TrueOrFalse
-                    - FillInBlank
-                    - ShortAnswer
-                    - FillInNumber
-                required:
-                - type
-          required:
-          - fields
-        then:
-          properties:
-            scene:
-              enum:
-              - exam
-          required:
-          - scene
-      - description: Rating / Nps can only be used when scene is evaluation
-        if:
-          properties:
-            fields:
-              type: array
-              contains:
-                properties:
-                  type:
-                    enum:
-                    - Rating
-                    - Nps
-                required:
-                - type
-          required:
-          - fields
-        then:
-          properties:
-            scene:
-              enum:
-              - evaluation
-          required:
-          - scene
+              items:
+                $ref: '#/components/schemas/FieldInput'
     WidgetButtonItemInput:
       type: object
       title: WidgetButtonItemInput
@@ -17716,6 +17578,71 @@ components:
         choice_limit_exceeded:
           type: boolean
           description: For a multi-line text to choice field conversion, whether the number of generated choices exceeds the limit (the conversion is rejected when it does); not returned for other conversions
+    ConditionTriggerableFieldListResponse:
+      type: object
+      required:
+      - condition_triggerable_fields
+      properties:
+        condition_triggerable_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionTriggerableField'
+    ConditionTriggerableField:
+      type: object
+      description: A field a filter condition can name, and the operators it takes
+      required:
+      - trigger
+      - label
+      - type
+      - scope_attr
+      - operators
+      properties:
+        trigger:
+          type: string
+          description: The condition's `trigger`; a table column is `<table api_code>.<column api_code>`
+          examples:
+          - field_1
+          - field_7.field_2
+        label:
+          type: string
+          description: Field label; a table column's is `<table label> - <column label>`
+        type:
+          type: string
+          description: Field type, named as `GET /field_types` names it
+          examples:
+          - GoodsField
+        scope_attr:
+          type:
+          - string
+          - 'null'
+          description: The condition's `scope_attr`, left out when null. A reservation field is listed twice with the same `trigger`, for its items (null) and for its date (`date_time`)
+        operators:
+          type: array
+          items:
+            type: object
+            required:
+            - operator
+            - value_format
+            - value_description
+            - examples
+            properties:
+              operator:
+                type: string
+                description: The condition's `operator`
+              value_format:
+                type: string
+                description: Name of the shape `value` takes; operators with the same name take the same shape
+                examples:
+                - choices
+                - goods_items
+                - blank
+              value_description:
+                type: string
+                description: What `value` holds
+              examples:
+                type: array
+                description: Values to write as `value`, made of the field's own codes; `null` means leave `value` out, and an empty array means the field has nothing to build one from yet, such as no choices
+                items: {}
     FieldTypeListResponse:
       type: object
       required:
@@ -18626,12 +18553,16 @@ components:
       - type: object
         required:
         - folder_token
+        - billing_account_id
         properties:
           folder_token:
             type:
             - string
             - 'null'
             description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
+          billing_account_id:
+            type: string
+            description: ID of the account the form belongs to, as `id` in `GET /billing_account`; a form shared from another account carries that account's
           theme:
             type: object
             description: Form theme (present when `include_theme=true`); same shape as `FormTheme`, but without `form_token`. An empty object when the form has no theme
@@ -21301,7 +21232,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -21520,7 +21451,7 @@ components:
           description: Field notes
         private:
           type: boolean
-          description: Hidden field; a hidden field is not checked for required
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
           description: Required
@@ -21936,6 +21867,64 @@ components:
         updated_at:
           type: string
           format: date-time
+    RoutineDetail:
+      allOf:
+      - $ref: '#/components/schemas/Routine'
+      - type: object
+        required:
+        - preview_condition_matches
+        properties:
+          preview_condition_matches:
+            oneOf:
+            - $ref: '#/components/schemas/RoutinePreviewConditionMatches'
+            - type: 'null'
+            description: How the data trigger's conditions meet your latest entries of its source; null for a schedule, a data trigger without conditions, or one whose fields no longer work
+    RoutinePreviewConditionMatches:
+      type: object
+      description: Which entries meet the conditions as they are now, to check the conditions mean what the routine is for. Meeting them is not firing; `created` fires for new entries only, `updated` also needs a watched field changed, and `matched` only when an entry comes to meet them.
+      required:
+      - checked_serial_numbers
+      - matched_count
+      - groups
+      properties:
+        checked_serial_numbers:
+          type: array
+          items:
+            type: integer
+          description: The entries checked, the latest 20 of the source you can see, newest first; empty when there are none
+        matched_count:
+          type:
+          - integer
+          - 'null'
+          description: How many entries meet any group, as a run decides; null when a group cannot be compared
+        groups:
+          type: array
+          description: One per condition group, in the order of `event.conditions`
+          items:
+            type: object
+            required:
+            - group_index
+            - matched_count
+            - matched_serial_numbers
+            - error
+            properties:
+              group_index:
+                type: integer
+              matched_count:
+                type:
+                - integer
+                - 'null'
+              matched_serial_numbers:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: integer
+              error:
+                type:
+                - string
+                - 'null'
+                description: Why the group's values cannot be compared with the data, such as `条件的值格式不对，无法和数据比较`; its counts are then null
     RoutineRun:
       type: object
       required:
@@ -22068,3 +22057,327 @@ components:
           - integer
           - 'null'
           description: The next page's row offset; null on the last page
+    ExamFieldInput:
+      type: object
+      description: 'A field definition for scene=exam, branched on type: the FieldInput types plus the ones only this scene takes'
+      required:
+      - type
+      - label
+      properties:
+        type:
+          type: string
+          enum:
+          - TextField
+          - TextArea
+          - NumberField
+          - EmailField
+          - MobileField
+          - IdCardField
+          - NameField
+          - RadioButton
+          - CheckBox
+          - DropDown
+          - DateTimeField
+          - RatingField
+          - TableField
+          - TelephoneField
+          - AddressField
+          - AttachmentField
+          - GeoField
+          - LinkField
+          - NpsField
+          - TimeField
+          - SortField
+          - ESignatureField
+          - AudioField
+          - CascadeDropDown
+          - LikertField
+          - MatrixField
+          - MatrixScaleField
+          - GoodsField
+          - FormulaField
+          - ReservationField
+          - FormAssociation
+          - ImageRadioButton
+          - ImageCheckBox
+          - SectionBreak
+          - PageBreak
+          - WidgetButton
+          - WidgetContact
+          - WidgetMap
+          - WidgetMarquee
+          - SingleSelect
+          - MultiSelect
+          - ImageSingleSelect
+          - ImageMultiSelect
+          - TrueOrFalse
+          - DropDownSelect
+          - FillInBlank
+          - ShortAnswer
+          - FillInNumber
+          - Department
+          - Grade
+        label:
+          type: string
+          description: Field label
+      discriminator:
+        propertyName: type
+        mapping:
+          TextField: "#/components/schemas/TextFieldInput"
+          TextArea: "#/components/schemas/TextAreaInput"
+          NumberField: "#/components/schemas/NumberFieldInput"
+          EmailField: "#/components/schemas/EmailFieldInput"
+          MobileField: "#/components/schemas/MobileFieldInput"
+          IdCardField: "#/components/schemas/IdCardFieldInput"
+          NameField: "#/components/schemas/NameFieldInput"
+          RadioButton: "#/components/schemas/RadioButtonInput"
+          CheckBox: "#/components/schemas/CheckBoxInput"
+          DropDown: "#/components/schemas/DropDownInput"
+          DateTimeField: "#/components/schemas/DateTimeFieldInput"
+          RatingField: "#/components/schemas/RatingFieldInput"
+          TableField: "#/components/schemas/TableFieldInput"
+          TelephoneField: "#/components/schemas/TelephoneFieldInput"
+          AddressField: "#/components/schemas/AddressFieldInput"
+          AttachmentField: "#/components/schemas/AttachmentFieldInput"
+          GeoField: "#/components/schemas/GeoFieldInput"
+          LinkField: "#/components/schemas/LinkFieldInput"
+          NpsField: "#/components/schemas/NpsFieldInput"
+          TimeField: "#/components/schemas/TimeFieldInput"
+          SortField: "#/components/schemas/SortFieldInput"
+          ESignatureField: "#/components/schemas/ESignatureFieldInput"
+          AudioField: "#/components/schemas/AudioFieldInput"
+          CascadeDropDown: "#/components/schemas/CascadeDropDownInput"
+          LikertField: "#/components/schemas/LikertFieldInput"
+          MatrixField: "#/components/schemas/MatrixFieldInput"
+          MatrixScaleField: "#/components/schemas/MatrixScaleFieldInput"
+          GoodsField: "#/components/schemas/GoodsFieldInput"
+          FormulaField: "#/components/schemas/FormulaFieldInput"
+          ReservationField: "#/components/schemas/ReservationFieldInput"
+          FormAssociation: "#/components/schemas/FormAssociationInput"
+          ImageRadioButton: "#/components/schemas/ImageRadioButtonInput"
+          ImageCheckBox: "#/components/schemas/ImageCheckBoxInput"
+          SectionBreak: "#/components/schemas/SectionBreakInput"
+          PageBreak: "#/components/schemas/PageBreakInput"
+          WidgetButton: "#/components/schemas/WidgetButtonInput"
+          WidgetContact: "#/components/schemas/WidgetContactInput"
+          WidgetMap: "#/components/schemas/WidgetMapInput"
+          WidgetMarquee: "#/components/schemas/WidgetMarqueeInput"
+          SingleSelect: "#/components/schemas/SingleSelectInput"
+          MultiSelect: "#/components/schemas/MultiSelectInput"
+          ImageSingleSelect: "#/components/schemas/ImageSingleSelectInput"
+          ImageMultiSelect: "#/components/schemas/ImageMultiSelectInput"
+          TrueOrFalse: "#/components/schemas/TrueOrFalseInput"
+          DropDownSelect: "#/components/schemas/DropDownSelectInput"
+          FillInBlank: "#/components/schemas/FillInBlankInput"
+          ShortAnswer: "#/components/schemas/ShortAnswerInput"
+          FillInNumber: "#/components/schemas/FillInNumberInput"
+          Department: "#/components/schemas/DepartmentInput"
+          Grade: "#/components/schemas/GradeInput"
+      oneOf:
+      - $ref: '#/components/schemas/TextFieldInput'
+      - $ref: '#/components/schemas/TextAreaInput'
+      - $ref: '#/components/schemas/NumberFieldInput'
+      - $ref: '#/components/schemas/EmailFieldInput'
+      - $ref: '#/components/schemas/MobileFieldInput'
+      - $ref: '#/components/schemas/IdCardFieldInput'
+      - $ref: '#/components/schemas/NameFieldInput'
+      - $ref: '#/components/schemas/RadioButtonInput'
+      - $ref: '#/components/schemas/CheckBoxInput'
+      - $ref: '#/components/schemas/DropDownInput'
+      - $ref: '#/components/schemas/DateTimeFieldInput'
+      - $ref: '#/components/schemas/RatingFieldInput'
+      - $ref: '#/components/schemas/TableFieldInput'
+      - $ref: '#/components/schemas/TelephoneFieldInput'
+      - $ref: '#/components/schemas/AddressFieldInput'
+      - $ref: '#/components/schemas/AttachmentFieldInput'
+      - $ref: '#/components/schemas/GeoFieldInput'
+      - $ref: '#/components/schemas/LinkFieldInput'
+      - $ref: '#/components/schemas/NpsFieldInput'
+      - $ref: '#/components/schemas/TimeFieldInput'
+      - $ref: '#/components/schemas/SortFieldInput'
+      - $ref: '#/components/schemas/ESignatureFieldInput'
+      - $ref: '#/components/schemas/AudioFieldInput'
+      - $ref: '#/components/schemas/CascadeDropDownInput'
+      - $ref: '#/components/schemas/LikertFieldInput'
+      - $ref: '#/components/schemas/MatrixFieldInput'
+      - $ref: '#/components/schemas/MatrixScaleFieldInput'
+      - $ref: '#/components/schemas/GoodsFieldInput'
+      - $ref: '#/components/schemas/FormulaFieldInput'
+      - $ref: '#/components/schemas/ReservationFieldInput'
+      - $ref: '#/components/schemas/FormAssociationInput'
+      - $ref: '#/components/schemas/ImageRadioButtonInput'
+      - $ref: '#/components/schemas/ImageCheckBoxInput'
+      - $ref: '#/components/schemas/SectionBreakInput'
+      - $ref: '#/components/schemas/PageBreakInput'
+      - $ref: '#/components/schemas/WidgetButtonInput'
+      - $ref: '#/components/schemas/WidgetContactInput'
+      - $ref: '#/components/schemas/WidgetMapInput'
+      - $ref: '#/components/schemas/WidgetMarqueeInput'
+      - $ref: '#/components/schemas/SingleSelectInput'
+      - $ref: '#/components/schemas/MultiSelectInput'
+      - $ref: '#/components/schemas/ImageSingleSelectInput'
+      - $ref: '#/components/schemas/ImageMultiSelectInput'
+      - $ref: '#/components/schemas/TrueOrFalseInput'
+      - $ref: '#/components/schemas/DropDownSelectInput'
+      - $ref: '#/components/schemas/FillInBlankInput'
+      - $ref: '#/components/schemas/ShortAnswerInput'
+      - $ref: '#/components/schemas/FillInNumberInput'
+      - $ref: '#/components/schemas/DepartmentInput'
+      - $ref: '#/components/schemas/GradeInput'
+      title: ExamFieldInput
+    EvaluationFieldInput:
+      type: object
+      description: 'A field definition for scene=evaluation, branched on type: the FieldInput types plus the ones only this scene takes'
+      required:
+      - type
+      - label
+      properties:
+        type:
+          type: string
+          enum:
+          - TextField
+          - TextArea
+          - NumberField
+          - EmailField
+          - MobileField
+          - IdCardField
+          - NameField
+          - RadioButton
+          - CheckBox
+          - DropDown
+          - DateTimeField
+          - RatingField
+          - TableField
+          - TelephoneField
+          - AddressField
+          - AttachmentField
+          - GeoField
+          - LinkField
+          - NpsField
+          - TimeField
+          - SortField
+          - ESignatureField
+          - AudioField
+          - CascadeDropDown
+          - LikertField
+          - MatrixField
+          - MatrixScaleField
+          - GoodsField
+          - FormulaField
+          - ReservationField
+          - FormAssociation
+          - ImageRadioButton
+          - ImageCheckBox
+          - SectionBreak
+          - PageBreak
+          - WidgetButton
+          - WidgetContact
+          - WidgetMap
+          - WidgetMarquee
+          - SingleSelect
+          - MultiSelect
+          - ImageSingleSelect
+          - ImageMultiSelect
+          - DropDownSelect
+          - Rating
+          - Nps
+        label:
+          type: string
+          description: Field label
+      discriminator:
+        propertyName: type
+        mapping:
+          TextField: "#/components/schemas/TextFieldInput"
+          TextArea: "#/components/schemas/TextAreaInput"
+          NumberField: "#/components/schemas/NumberFieldInput"
+          EmailField: "#/components/schemas/EmailFieldInput"
+          MobileField: "#/components/schemas/MobileFieldInput"
+          IdCardField: "#/components/schemas/IdCardFieldInput"
+          NameField: "#/components/schemas/NameFieldInput"
+          RadioButton: "#/components/schemas/RadioButtonInput"
+          CheckBox: "#/components/schemas/CheckBoxInput"
+          DropDown: "#/components/schemas/DropDownInput"
+          DateTimeField: "#/components/schemas/DateTimeFieldInput"
+          RatingField: "#/components/schemas/RatingFieldInput"
+          TableField: "#/components/schemas/TableFieldInput"
+          TelephoneField: "#/components/schemas/TelephoneFieldInput"
+          AddressField: "#/components/schemas/AddressFieldInput"
+          AttachmentField: "#/components/schemas/AttachmentFieldInput"
+          GeoField: "#/components/schemas/GeoFieldInput"
+          LinkField: "#/components/schemas/LinkFieldInput"
+          NpsField: "#/components/schemas/NpsFieldInput"
+          TimeField: "#/components/schemas/TimeFieldInput"
+          SortField: "#/components/schemas/SortFieldInput"
+          ESignatureField: "#/components/schemas/ESignatureFieldInput"
+          AudioField: "#/components/schemas/AudioFieldInput"
+          CascadeDropDown: "#/components/schemas/CascadeDropDownInput"
+          LikertField: "#/components/schemas/LikertFieldInput"
+          MatrixField: "#/components/schemas/MatrixFieldInput"
+          MatrixScaleField: "#/components/schemas/MatrixScaleFieldInput"
+          GoodsField: "#/components/schemas/GoodsFieldInput"
+          FormulaField: "#/components/schemas/FormulaFieldInput"
+          ReservationField: "#/components/schemas/ReservationFieldInput"
+          FormAssociation: "#/components/schemas/FormAssociationInput"
+          ImageRadioButton: "#/components/schemas/ImageRadioButtonInput"
+          ImageCheckBox: "#/components/schemas/ImageCheckBoxInput"
+          SectionBreak: "#/components/schemas/SectionBreakInput"
+          PageBreak: "#/components/schemas/PageBreakInput"
+          WidgetButton: "#/components/schemas/WidgetButtonInput"
+          WidgetContact: "#/components/schemas/WidgetContactInput"
+          WidgetMap: "#/components/schemas/WidgetMapInput"
+          WidgetMarquee: "#/components/schemas/WidgetMarqueeInput"
+          SingleSelect: "#/components/schemas/SingleSelectInput"
+          MultiSelect: "#/components/schemas/MultiSelectInput"
+          ImageSingleSelect: "#/components/schemas/ImageSingleSelectInput"
+          ImageMultiSelect: "#/components/schemas/ImageMultiSelectInput"
+          DropDownSelect: "#/components/schemas/DropDownSelectInput"
+          Rating: "#/components/schemas/RatingInput"
+          Nps: "#/components/schemas/NpsInput"
+      oneOf:
+      - $ref: '#/components/schemas/TextFieldInput'
+      - $ref: '#/components/schemas/TextAreaInput'
+      - $ref: '#/components/schemas/NumberFieldInput'
+      - $ref: '#/components/schemas/EmailFieldInput'
+      - $ref: '#/components/schemas/MobileFieldInput'
+      - $ref: '#/components/schemas/IdCardFieldInput'
+      - $ref: '#/components/schemas/NameFieldInput'
+      - $ref: '#/components/schemas/RadioButtonInput'
+      - $ref: '#/components/schemas/CheckBoxInput'
+      - $ref: '#/components/schemas/DropDownInput'
+      - $ref: '#/components/schemas/DateTimeFieldInput'
+      - $ref: '#/components/schemas/RatingFieldInput'
+      - $ref: '#/components/schemas/TableFieldInput'
+      - $ref: '#/components/schemas/TelephoneFieldInput'
+      - $ref: '#/components/schemas/AddressFieldInput'
+      - $ref: '#/components/schemas/AttachmentFieldInput'
+      - $ref: '#/components/schemas/GeoFieldInput'
+      - $ref: '#/components/schemas/LinkFieldInput'
+      - $ref: '#/components/schemas/NpsFieldInput'
+      - $ref: '#/components/schemas/TimeFieldInput'
+      - $ref: '#/components/schemas/SortFieldInput'
+      - $ref: '#/components/schemas/ESignatureFieldInput'
+      - $ref: '#/components/schemas/AudioFieldInput'
+      - $ref: '#/components/schemas/CascadeDropDownInput'
+      - $ref: '#/components/schemas/LikertFieldInput'
+      - $ref: '#/components/schemas/MatrixFieldInput'
+      - $ref: '#/components/schemas/MatrixScaleFieldInput'
+      - $ref: '#/components/schemas/GoodsFieldInput'
+      - $ref: '#/components/schemas/FormulaFieldInput'
+      - $ref: '#/components/schemas/ReservationFieldInput'
+      - $ref: '#/components/schemas/FormAssociationInput'
+      - $ref: '#/components/schemas/ImageRadioButtonInput'
+      - $ref: '#/components/schemas/ImageCheckBoxInput'
+      - $ref: '#/components/schemas/SectionBreakInput'
+      - $ref: '#/components/schemas/PageBreakInput'
+      - $ref: '#/components/schemas/WidgetButtonInput'
+      - $ref: '#/components/schemas/WidgetContactInput'
+      - $ref: '#/components/schemas/WidgetMapInput'
+      - $ref: '#/components/schemas/WidgetMarqueeInput'
+      - $ref: '#/components/schemas/SingleSelectInput'
+      - $ref: '#/components/schemas/MultiSelectInput'
+      - $ref: '#/components/schemas/ImageSingleSelectInput'
+      - $ref: '#/components/schemas/ImageMultiSelectInput'
+      - $ref: '#/components/schemas/DropDownSelectInput'
+      - $ref: '#/components/schemas/RatingInput'
+      - $ref: '#/components/schemas/NpsInput'
+      title: EvaluationFieldInput

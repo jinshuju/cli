@@ -35,7 +35,6 @@ export type OperationId =
   | 'createFormWebhook'
   | 'createNotificationRule'
   | 'createOpensearchQuery'
-  | 'createPredefinedChoicesSet'
   | 'createRoutine'
   | 'createSmsSignature'
   | 'createSmsTask'
@@ -53,7 +52,6 @@ export type OperationId =
   | 'deleteFormView'
   | 'deleteFormWebhook'
   | 'deleteNotificationRule'
-  | 'deletePredefinedChoicesSet'
   | 'deleteRoutine'
   | 'deleteSmsSignature'
   | 'deleteSmsTemplate'
@@ -107,6 +105,7 @@ export type OperationId =
   | 'listFieldRules'
   | 'listFieldTypes'
   | 'listFolders'
+  | 'listFormConditionTriggerableFields'
   | 'listFormCooperators'
   | 'listFormViewEntries'
   | 'listFormViews'
@@ -117,7 +116,6 @@ export type OperationId =
   | 'listNotificationRules'
   | 'listOpensearchQueries'
   | 'listOpensearchQuerySuggestions'
-  | 'listPredefinedChoicesSets'
   | 'listRoutineRuns'
   | 'listRoutines'
   | 'listSmsAuditStatuses'
@@ -126,6 +124,7 @@ export type OperationId =
   | 'listSmsTasks'
   | 'listSmsTemplates'
   | 'listSmtpAccounts'
+  | 'listTableConditionTriggerableFields'
   | 'listTableEntries'
   | 'listTableEntryComments'
   | 'listTableViewEntries'
@@ -170,7 +169,6 @@ export type OperationId =
   | 'updateManuallyCloseRule'
   | 'updateNotificationRule'
   | 'updateOpensearchQuery'
-  | 'updatePredefinedChoicesSet'
   | 'updatePublishedArtifact'
   | 'updateRoutine'
   | 'updateSmsSignature'
@@ -572,22 +570,6 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       }
     }
   },
-  createPredefinedChoicesSet: {
-    method: 'POST',
-    path: '/predefined_choices_sets',
-    parameters: [],
-    body: {
-      required: true,
-      content: {
-        'application/json': {
-          type: 'object',
-          required: ['predefined_choices_set'],
-          properties: { predefined_choices_set: { $ref: 'PredefinedChoicesSetInput' } },
-          additionalProperties: false
-        }
-      }
-    }
-  },
   createRoutine: {
     method: 'POST',
     path: '/routines',
@@ -706,11 +688,6 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
     ]
-  },
-  deletePredefinedChoicesSet: {
-    method: 'DELETE',
-    path: '/predefined_choices_sets/{id}',
-    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   deleteRoutine: {
     method: 'DELETE',
@@ -1129,6 +1106,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/folders',
     parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }]
   },
+  listFormConditionTriggerableFields: {
+    method: 'GET',
+    path: '/forms/{form_token}/condition_triggerable_fields',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'fields_context', in: 'query', schema: { type: 'string', enum: ['routine'] } }
+    ]
+  },
   listFormCooperators: {
     method: 'GET',
     path: '/forms/{form_token}/cooperators',
@@ -1236,7 +1221,6 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/opensearch/query_suggestions',
     parameters: [{ name: 'form_token', in: 'query', required: true, schema: { type: 'string' } }]
   },
-  listPredefinedChoicesSets: { method: 'GET', path: '/predefined_choices_sets', parameters: [] },
   listRoutineRuns: {
     method: 'GET',
     path: '/routines/{routine_id}/runs',
@@ -1328,6 +1312,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     ]
   },
   listSmtpAccounts: { method: 'GET', path: '/smtp_accounts', parameters: [] },
+  listTableConditionTriggerableFields: {
+    method: 'GET',
+    path: '/tables/{table_token}/condition_triggerable_fields',
+    parameters: [
+      { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'fields_context', in: 'query', schema: { type: 'string', enum: ['routine'] } }
+    ]
+  },
   listTableEntries: {
     method: 'GET',
     path: '/tables/{table_token}/entries',
@@ -1836,22 +1828,6 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'query_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'OpensearchQueryInput' } } }
   },
-  updatePredefinedChoicesSet: {
-    method: 'PATCH',
-    path: '/predefined_choices_sets/{id}',
-    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-    body: {
-      required: true,
-      content: {
-        'application/json': {
-          type: 'object',
-          required: ['predefined_choices_set'],
-          properties: { predefined_choices_set: { $ref: 'PredefinedChoicesSetInput' } },
-          additionalProperties: false
-        }
-      }
-    }
-  },
   updatePublishedArtifact: {
     method: 'PATCH',
     path: '/artifacts/{artifact_id}/published_artifact',
@@ -2312,7 +2288,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             api_code: { type: 'string' },
             value: { type: 'string' },
             operand_value: { type: 'number' },
-            selected: { type: 'boolean' }
+            selected: { type: 'boolean' },
+            quota: { type: ['integer', 'null'], minimum: 0 }
           },
           additionalProperties: false
         }
@@ -2597,6 +2574,112 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  EvaluationFieldInput: {
+    type: 'object',
+    required: ['type', 'label'],
+    properties: {
+      type: {
+        type: 'string',
+        enum: [
+          'TextField',
+          'TextArea',
+          'NumberField',
+          'EmailField',
+          'MobileField',
+          'IdCardField',
+          'NameField',
+          'RadioButton',
+          'CheckBox',
+          'DropDown',
+          'DateTimeField',
+          'RatingField',
+          'TableField',
+          'TelephoneField',
+          'AddressField',
+          'AttachmentField',
+          'GeoField',
+          'LinkField',
+          'NpsField',
+          'TimeField',
+          'SortField',
+          'ESignatureField',
+          'AudioField',
+          'CascadeDropDown',
+          'LikertField',
+          'MatrixField',
+          'MatrixScaleField',
+          'GoodsField',
+          'FormulaField',
+          'ReservationField',
+          'FormAssociation',
+          'ImageRadioButton',
+          'ImageCheckBox',
+          'SectionBreak',
+          'PageBreak',
+          'WidgetButton',
+          'WidgetContact',
+          'WidgetMap',
+          'WidgetMarquee',
+          'SingleSelect',
+          'MultiSelect',
+          'ImageSingleSelect',
+          'ImageMultiSelect',
+          'DropDownSelect',
+          'Rating',
+          'Nps'
+        ]
+      },
+      label: { type: 'string' }
+    },
+    oneOf: [
+      { $ref: 'TextFieldInput' },
+      { $ref: 'TextAreaInput' },
+      { $ref: 'NumberFieldInput' },
+      { $ref: 'EmailFieldInput' },
+      { $ref: 'MobileFieldInput' },
+      { $ref: 'IdCardFieldInput' },
+      { $ref: 'NameFieldInput' },
+      { $ref: 'RadioButtonInput' },
+      { $ref: 'CheckBoxInput' },
+      { $ref: 'DropDownInput' },
+      { $ref: 'DateTimeFieldInput' },
+      { $ref: 'RatingFieldInput' },
+      { $ref: 'TableFieldInput' },
+      { $ref: 'TelephoneFieldInput' },
+      { $ref: 'AddressFieldInput' },
+      { $ref: 'AttachmentFieldInput' },
+      { $ref: 'GeoFieldInput' },
+      { $ref: 'LinkFieldInput' },
+      { $ref: 'NpsFieldInput' },
+      { $ref: 'TimeFieldInput' },
+      { $ref: 'SortFieldInput' },
+      { $ref: 'ESignatureFieldInput' },
+      { $ref: 'AudioFieldInput' },
+      { $ref: 'CascadeDropDownInput' },
+      { $ref: 'LikertFieldInput' },
+      { $ref: 'MatrixFieldInput' },
+      { $ref: 'MatrixScaleFieldInput' },
+      { $ref: 'GoodsFieldInput' },
+      { $ref: 'FormulaFieldInput' },
+      { $ref: 'ReservationFieldInput' },
+      { $ref: 'FormAssociationInput' },
+      { $ref: 'ImageRadioButtonInput' },
+      { $ref: 'ImageCheckBoxInput' },
+      { $ref: 'SectionBreakInput' },
+      { $ref: 'PageBreakInput' },
+      { $ref: 'WidgetButtonInput' },
+      { $ref: 'WidgetContactInput' },
+      { $ref: 'WidgetMapInput' },
+      { $ref: 'WidgetMarqueeInput' },
+      { $ref: 'SingleSelectInput' },
+      { $ref: 'MultiSelectInput' },
+      { $ref: 'ImageSingleSelectInput' },
+      { $ref: 'ImageMultiSelectInput' },
+      { $ref: 'DropDownSelectInput' },
+      { $ref: 'RatingInput' },
+      { $ref: 'NpsInput' }
+    ]
+  },
   EvaluationSettingInput: {
     type: 'object',
     properties: {
@@ -2647,6 +2730,120 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     },
     additionalProperties: false
+  },
+  ExamFieldInput: {
+    type: 'object',
+    required: ['type', 'label'],
+    properties: {
+      type: {
+        type: 'string',
+        enum: [
+          'TextField',
+          'TextArea',
+          'NumberField',
+          'EmailField',
+          'MobileField',
+          'IdCardField',
+          'NameField',
+          'RadioButton',
+          'CheckBox',
+          'DropDown',
+          'DateTimeField',
+          'RatingField',
+          'TableField',
+          'TelephoneField',
+          'AddressField',
+          'AttachmentField',
+          'GeoField',
+          'LinkField',
+          'NpsField',
+          'TimeField',
+          'SortField',
+          'ESignatureField',
+          'AudioField',
+          'CascadeDropDown',
+          'LikertField',
+          'MatrixField',
+          'MatrixScaleField',
+          'GoodsField',
+          'FormulaField',
+          'ReservationField',
+          'FormAssociation',
+          'ImageRadioButton',
+          'ImageCheckBox',
+          'SectionBreak',
+          'PageBreak',
+          'WidgetButton',
+          'WidgetContact',
+          'WidgetMap',
+          'WidgetMarquee',
+          'SingleSelect',
+          'MultiSelect',
+          'ImageSingleSelect',
+          'ImageMultiSelect',
+          'TrueOrFalse',
+          'DropDownSelect',
+          'FillInBlank',
+          'ShortAnswer',
+          'FillInNumber',
+          'Department',
+          'Grade'
+        ]
+      },
+      label: { type: 'string' }
+    },
+    oneOf: [
+      { $ref: 'TextFieldInput' },
+      { $ref: 'TextAreaInput' },
+      { $ref: 'NumberFieldInput' },
+      { $ref: 'EmailFieldInput' },
+      { $ref: 'MobileFieldInput' },
+      { $ref: 'IdCardFieldInput' },
+      { $ref: 'NameFieldInput' },
+      { $ref: 'RadioButtonInput' },
+      { $ref: 'CheckBoxInput' },
+      { $ref: 'DropDownInput' },
+      { $ref: 'DateTimeFieldInput' },
+      { $ref: 'RatingFieldInput' },
+      { $ref: 'TableFieldInput' },
+      { $ref: 'TelephoneFieldInput' },
+      { $ref: 'AddressFieldInput' },
+      { $ref: 'AttachmentFieldInput' },
+      { $ref: 'GeoFieldInput' },
+      { $ref: 'LinkFieldInput' },
+      { $ref: 'NpsFieldInput' },
+      { $ref: 'TimeFieldInput' },
+      { $ref: 'SortFieldInput' },
+      { $ref: 'ESignatureFieldInput' },
+      { $ref: 'AudioFieldInput' },
+      { $ref: 'CascadeDropDownInput' },
+      { $ref: 'LikertFieldInput' },
+      { $ref: 'MatrixFieldInput' },
+      { $ref: 'MatrixScaleFieldInput' },
+      { $ref: 'GoodsFieldInput' },
+      { $ref: 'FormulaFieldInput' },
+      { $ref: 'ReservationFieldInput' },
+      { $ref: 'FormAssociationInput' },
+      { $ref: 'ImageRadioButtonInput' },
+      { $ref: 'ImageCheckBoxInput' },
+      { $ref: 'SectionBreakInput' },
+      { $ref: 'PageBreakInput' },
+      { $ref: 'WidgetButtonInput' },
+      { $ref: 'WidgetContactInput' },
+      { $ref: 'WidgetMapInput' },
+      { $ref: 'WidgetMarqueeInput' },
+      { $ref: 'SingleSelectInput' },
+      { $ref: 'MultiSelectInput' },
+      { $ref: 'ImageSingleSelectInput' },
+      { $ref: 'ImageMultiSelectInput' },
+      { $ref: 'TrueOrFalseInput' },
+      { $ref: 'DropDownSelectInput' },
+      { $ref: 'FillInBlankInput' },
+      { $ref: 'ShortAnswerInput' },
+      { $ref: 'FillInNumberInput' },
+      { $ref: 'DepartmentInput' },
+      { $ref: 'GradeInput' }
+    ]
   },
   ExamSettingInput: {
     type: 'object',
@@ -2720,20 +2917,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'WidgetButton',
           'WidgetContact',
           'WidgetMap',
-          'WidgetMarquee',
-          'SingleSelect',
-          'MultiSelect',
-          'ImageSingleSelect',
-          'ImageMultiSelect',
-          'TrueOrFalse',
-          'DropDownSelect',
-          'FillInBlank',
-          'ShortAnswer',
-          'FillInNumber',
-          'Rating',
-          'Nps',
-          'Department',
-          'Grade'
+          'WidgetMarquee'
         ]
       },
       label: { type: 'string' }
@@ -2777,20 +2961,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       { $ref: 'WidgetButtonInput' },
       { $ref: 'WidgetContactInput' },
       { $ref: 'WidgetMapInput' },
-      { $ref: 'WidgetMarqueeInput' },
-      { $ref: 'SingleSelectInput' },
-      { $ref: 'MultiSelectInput' },
-      { $ref: 'ImageSingleSelectInput' },
-      { $ref: 'ImageMultiSelectInput' },
-      { $ref: 'TrueOrFalseInput' },
-      { $ref: 'DropDownSelectInput' },
-      { $ref: 'FillInBlankInput' },
-      { $ref: 'ShortAnswerInput' },
-      { $ref: 'FillInNumberInput' },
-      { $ref: 'RatingInput' },
-      { $ref: 'NpsInput' },
-      { $ref: 'DepartmentInput' },
-      { $ref: 'GradeInput' }
+      { $ref: 'WidgetMarqueeInput' }
     ]
   },
   FieldRuleOperations: {
@@ -3137,50 +3308,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         }
       },
       {
-        if: {
-          properties: {
-            fields: {
-              type: 'array',
-              contains: {
-                properties: {
-                  type: {
-                    enum: ['SingleSelect', 'MultiSelect', 'ImageSingleSelect', 'ImageMultiSelect', 'DropDownSelect']
-                  }
-                },
-                required: ['type']
-              }
-            }
-          },
-          required: ['fields']
-        },
-        then: { properties: { scene: { enum: ['exam', 'evaluation'] } }, required: ['scene'] }
+        if: { properties: { scene: { const: 'exam' } }, required: ['scene'] },
+        then: { properties: { fields: { items: { $ref: 'ExamFieldInput' } } } }
       },
       {
-        if: {
-          properties: {
-            fields: {
-              type: 'array',
-              contains: {
-                properties: { type: { enum: ['TrueOrFalse', 'FillInBlank', 'ShortAnswer', 'FillInNumber'] } },
-                required: ['type']
-              }
-            }
-          },
-          required: ['fields']
-        },
-        then: { properties: { scene: { enum: ['exam'] } }, required: ['scene'] }
+        if: { properties: { scene: { const: 'evaluation' } }, required: ['scene'] },
+        then: { properties: { fields: { items: { $ref: 'EvaluationFieldInput' } } } }
       },
       {
-        if: {
-          properties: {
-            fields: {
-              type: 'array',
-              contains: { properties: { type: { enum: ['Rating', 'Nps'] } }, required: ['type'] }
-            }
-          },
-          required: ['fields']
-        },
-        then: { properties: { scene: { enum: ['evaluation'] } }, required: ['scene'] }
+        if: { properties: { scene: { enum: ['exam', 'evaluation'] } }, required: ['scene'] },
+        else: { properties: { fields: { items: { $ref: 'FieldInput' } } } }
       }
     ]
   },
@@ -3191,7 +3328,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     properties: {
       name: { type: 'string' },
       description: { type: 'string' },
-      fields: { type: 'array', minItems: 1, items: { $ref: 'FieldInput' } },
+      fields: { type: 'array', minItems: 1 },
       setting: { $ref: 'FormSettingWriteInput' },
       folder_token: { type: 'string' },
       scene: {
@@ -3390,6 +3527,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       merchant_account_id: { type: ['string', 'null'] },
       wxpay_account_id: { type: ['string', 'null'] },
       alipay_account_id: { type: ['string', 'null'] },
+      payment_expirable: { type: 'boolean' },
+      payment_expiration_time: { type: 'integer', minimum: 3, maximum: 30 },
       notification_rules: { type: 'array', items: { $ref: 'NotificationRuleInput' } },
       daily_repeat_close_rule: { $ref: 'DailyRepeatCloseRuleInput' }
     },
@@ -3412,7 +3551,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       fields: {
         type: 'object',
         properties: {
-          add: { type: 'array', items: { anyOf: [{ $ref: 'FieldInput' }, { $ref: 'TableColumnInput' }] } },
+          add: {
+            type: 'array',
+            items: {
+              anyOf: [{ $ref: 'ExamFieldInput' }, { $ref: 'EvaluationFieldInput' }, { $ref: 'TableColumnInput' }]
+            }
+          },
           remove: { type: 'array', items: { type: 'string' } },
           update: { type: 'array', items: { $ref: 'FieldUpdateInput' } },
           update_choices: { type: 'array', items: { $ref: 'ChoiceUpdateInput' } }
@@ -4327,12 +4471,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       count_down: { type: 'integer', minimum: 0 }
     }
   },
-  PredefinedChoicesSetInput: {
-    type: 'object',
-    required: ['label', 'choices'],
-    properties: { label: { type: 'string' }, choices: { type: 'array', items: { type: 'string' } } },
-    additionalProperties: false
-  },
   PublishedArtifactInput: {
     type: 'object',
     additionalProperties: false,
@@ -4430,11 +4568,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   ReservationByDayQuotaInput: {
     type: 'object',
     additionalProperties: false,
-    required: ['type'],
+    required: ['type', 'available_days_of_week'],
     properties: {
       type: { const: 'by_day_repeat_weekly' },
       available_days_of_week: {
         type: 'array',
+        minItems: 1,
         items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] }
       },
       show_left_quota: { type: 'boolean' },
@@ -4478,11 +4617,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   ReservationByTimeRangeQuotaInput: {
     type: 'object',
     additionalProperties: false,
-    required: ['type'],
+    required: ['type', 'available_days_of_week'],
     properties: {
       type: { const: 'by_time_range_repeat_daily' },
       available_days_of_week: {
         type: 'array',
+        minItems: 1,
         items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] }
       },
       show_left_quota: { type: 'boolean' },
@@ -5088,6 +5228,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     properties: {
       primary_color: { type: 'string' },
       secondary_color: { type: 'string' },
+      dominant_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
       wallpaper: {
         type: 'object',
         properties: {
