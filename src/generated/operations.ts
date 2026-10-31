@@ -988,6 +988,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'q', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1007,20 +1008,30 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   listBillingAccountUsers: {
     method: 'GET',
     path: '/billing_account/users',
-    parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }]
+    parameters: [
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
+    ]
   },
   listCheckinCampaigns: {
     method: 'GET',
     path: '/plugins/checkin/campaigns',
     parameters: [
       { name: 'form_token', in: 'query', schema: { type: 'string' } },
-      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   listContacts: {
     method: 'GET',
     path: '/contacts',
-    parameters: [{ name: 'next', in: 'query', schema: { type: 'string' } }]
+    parameters: [
+      { name: 'next', in: 'query', schema: { type: 'string' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } }
+    ]
   },
   listEmailTaskActivities: {
     method: 'GET',
@@ -1032,6 +1043,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'email', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1049,6 +1061,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'end_date', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1073,6 +1086,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       },
       { name: 'created_at', in: 'query', schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: ['integer', 'string'] } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
@@ -1104,7 +1118,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   listFolders: {
     method: 'GET',
     path: '/folders',
-    parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }]
+    parameters: [
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
+    ]
   },
   listFormConditionTriggerableFields: {
     method: 'GET',
@@ -1126,6 +1144,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -1152,6 +1172,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         schema: { type: 'array', items: { $ref: 'FormSortRule' } }
       },
       { name: 'next', in: 'query', schema: { type: 'string' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'include_transactions', in: 'query', schema: { type: 'boolean' } }
@@ -1163,6 +1184,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1182,6 +1204,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1203,6 +1226,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       },
       { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 1000 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1228,6 +1252,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1238,6 +1263,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'state', in: 'query', schema: { type: 'string', enum: ['active', 'paused'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1249,6 +1275,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1262,6 +1289,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'mobile', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1295,6 +1323,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'end_date', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1308,6 +1337,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1341,6 +1371,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       },
       { name: 'created_at', in: 'query', schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: ['integer', 'string'] } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
@@ -1361,6 +1392,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -1387,6 +1420,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         schema: { type: 'array', items: { $ref: 'FormSortRule' } }
       },
       { name: 'next', in: 'query', schema: { type: 'string' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
     ]
@@ -1400,7 +1434,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['processing', 'success', 'error'] } },
       { name: 'include', in: 'query', schema: { type: 'string', enum: ['both', 'stats', 'records'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'next', in: 'query', schema: { type: 'integer' } }
+      { name: 'next', in: 'query', schema: { type: 'integer' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   listTradeRefunds: {
@@ -1413,7 +1448,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'refund_no', in: 'query', schema: { type: 'string' } },
       { name: 'include', in: 'query', schema: { type: 'string', enum: ['both', 'stats', 'records'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'next', in: 'query', schema: { type: 'integer' } }
+      { name: 'next', in: 'query', schema: { type: 'integer' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   listTradeTransactions: {
@@ -1435,7 +1471,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'query', schema: { type: 'string' } },
       { name: 'order_no', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'next', in: 'query', schema: { type: 'integer' } }
+      { name: 'next', in: 'query', schema: { type: 'integer' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   moveFormToFolder: {
@@ -2289,7 +2326,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             value: { type: 'string' },
             operand_value: { type: 'number' },
             selected: { type: 'boolean' },
-            quota: { type: ['integer', 'null'], minimum: 0 }
+            quota: { type: ['integer', 'null'], minimum: 0 },
+            recover_quota: { type: 'integer', minimum: 1 }
           },
           additionalProperties: false
         }
@@ -3121,8 +3159,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unit: { type: 'string', maxLength: 2 },
       collapse_on_mobile: { type: 'boolean' },
       columns_on_mobile: { type: 'integer', minimum: 1 },
+      formula: { type: 'string' },
       formula_display: { type: 'string' },
-      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime'] },
+      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime', 'boolean'] },
       result_display_as_date: { type: 'boolean' },
       allow_multiple_items: { type: 'boolean' },
       item_allow_multiple_reservations: { type: 'boolean' },
@@ -3384,7 +3423,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       cycles_per_period: { type: 'integer', minimum: 1, maximum: 1000 },
       limited_time: { type: 'integer', minimum: 1 },
       limited_field_api_codes: { type: 'array', items: { type: 'string' } }
-    }
+    },
+    additionalProperties: false
   },
   FormFolderMoveInput: {
     type: 'object',
@@ -3638,8 +3678,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
+      formula: { type: 'string' },
       formula_display: { type: 'string' },
-      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime'] },
+      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime', 'boolean'] },
       result_display_as_date: { type: 'boolean' },
       precision: { type: 'integer', minimum: 0, maximum: 14 },
       display_precision: { type: 'integer', minimum: 0 },

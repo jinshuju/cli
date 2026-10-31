@@ -20,7 +20,7 @@ info:
       - Account access token (Enterprise plan): acts across the account, on all of its forms. Endpoints then have no "current user", and create operations are recorded under the account owner;
       - OAuth 2.0 token: the endpoints it can call are limited by the token's scope; insufficient scope returns `403`. Each endpoint's description states the scope it needs
         (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `artifacts` / `read_contacts` / `users` / `routines` / `public`).
-    - An invalid or revoked token returns `401`; a plan without API v1 returns `402`.
+    - An invalid or revoked token returns `401`; a plan without API v1 returns `402`; a user disabled in the account, or a frozen account (the owner's, for an account token), returns `403`.
 
     ## Cooperator permissions
     With a personal access token or an OAuth token, what an endpoint does on a form shared with the caller follows the caller's role on it; an account access token is not narrowed by any role.
@@ -53,10 +53,12 @@ info:
     `404` resource does not exist or is not accessible, `422` every item of a batch operation failed, `429` rate limit exceeded.
 
     ## Pagination
-    List endpoints return `{ total, count, data, next }`. `next` being `null` means this is the last page; pass it back unchanged to get the next page.
-    `skip` sets the starting row (from 0, at most 10000), for reading in parallel slices; `skip` and `next` cannot be passed together.
-    Form, table and entry lists, and the "my submissions" lists, take `limit` for the page size (default 50, max 1000); view entry lists are fixed at 50 per page.
-    The 小金商户 order / refund / payout lists are paged by page number: they return `page_info` (total, page, per_page, total_pages) and an array of records; `limit` defaults to and is capped at 50. `next` (the next page number) is present only when there is a next page; pass it back unchanged.
+    List endpoints return `{ total, count, data, next }` and take the same three paging parameters:
+    - `limit` sets the page size: 50 by default, at most 1000 (at most 100 for folders, account members and check-in campaigns).
+    - `next` continues a listing: pass back the previous page's `next` unchanged, with the same query, until it is `null`. The response also carries `Link: <url>; rel="next"`, the full URL of the next page.
+    - `page` (from 1) jumps to a page, e.g. to read pages in parallel; `(page - 1) × limit` can be at most 10000, and the returned `next` continues from there. `skip` (a row offset) still works but is deprecated in favor of `page`.
+    - Pass only one of `next`, `page` and `skip`.
+    The 小金商户 order / refund / payout lists name the array after the records and add `page_info` (total, page, per_page, total_pages); their `limit` is at most 50, and `page` / `next` is the page number, not capped at 10000.
 
     ## Time and time zone
     System times such as `created_at` / `updated_at` are returned in UTC ISO 8601 (e.g. `2021-09-28T02:59:42.539Z`);
@@ -128,6 +130,7 @@ paths:
       - $ref: '#/components/parameters/FormsFilters'
       - $ref: '#/components/parameters/FormsSort'
       - $ref: '#/components/parameters/FormsNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/FormsSkip'
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/IncludeTransactions'
@@ -491,6 +494,7 @@ paths:
       - $ref: '#/components/parameters/EntriesSort'
       - $ref: '#/components/parameters/EntriesCreatedAt'
       - $ref: '#/components/parameters/EntriesNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       - $ref: '#/components/parameters/PageLimit'
@@ -1268,8 +1272,6 @@ paths:
         Partially updates the form's settings, writing only the keys present in the request; PUT is accepted too.
         OAuth scope: form_setting
         - `submission_region_limited` / `submission_regions` (a paid feature), `payment_expirable` and `payment_expiration_time` are read-only here; to write them, use `setting` on the "Edit a form" endpoint.
-        - `manually_close_rule`, `by_time_range_close_rule`, `by_entries_close_rule` and `fill_frequency` are nested objects; the server creates or updates them as nested attributes.
-        - Returns `{ "status": "ok" }` on success; returns 400 when model validation fails, with body `{ "errors": "...", "status": "failed" }` (not the common error shape).
       operationId: updateFormSetting
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -1287,7 +1289,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FormSettingSaveOk'
         '400':
-          $ref: '#/components/responses/FormSettingBadRequest'
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -1366,7 +1368,6 @@ paths:
         Updates the form's fill frequency limit (fill_frequency); PUT is accepted too.
         This endpoint takes only the `fill_frequency` key; for the other access policy keys, use PATCH /forms/{form_token}/setting.
         OAuth scope: form_setting
-        Returns `{ "status": "ok" }` on success; returns 400 when validation fails, with body `{ "errors": "...", "status": "failed" }` (not the common error shape).
       operationId: updateAccessPolicy
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -1384,7 +1385,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FormSettingSaveOk'
         '400':
-          $ref: '#/components/responses/FormSettingBadRequest'
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -1759,6 +1760,7 @@ paths:
           maximum: 1000
           default: 50
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -2382,7 +2384,7 @@ paths:
       tags:
       - Views
       summary: List a view's entries
-      description: 'Returns the form''s entries under the view''s filters and sort rules, at most 50 per page. The returned fields are limited to those in the view''s prefer_columns (serial_number always included); when prefer_columns is empty, all pushable fields are returned. Sorting follows the view''s sort rules, with serial_number ascending appended when they do not include serial_number. Paginate with the next parameter (a row offset); next is null on the last page. Returns 400 when the view''s filters use an operator the query engine does not support. Only views visible to the caller are accessible, otherwise 404 (View cannot be found). OAuth scope: read_entries'
+      description: 'Returns the form''s entries under the view''s filters and sort rules. The returned fields are limited to those in the view''s prefer_columns (serial_number always included); when prefer_columns is empty, all pushable fields are returned. Sorting follows the view''s sort rules, with serial_number ascending appended when they do not include serial_number. Returns 400 when the view''s filters use an operator the query engine does not support. Only views visible to the caller are accessible, otherwise 404 (View cannot be found). OAuth scope: read_entries'
       operationId: listFormViewEntries
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -2392,13 +2394,9 @@ paths:
         description: View token
         schema:
           type: string
-      - name: next
-        in: query
-        required: false
-        description: The next value from the previous page's response (a row offset, starting at 0); a negative value is treated as 0
-        schema:
-          type: integer
-          minimum: 0
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       responses:
         '200':
@@ -2793,6 +2791,7 @@ paths:
       - $ref: '#/components/parameters/EntryTaskEndDate'
       - $ref: '#/components/parameters/EntryTaskListLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -2957,6 +2956,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/EntryTaskLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -3253,6 +3253,7 @@ paths:
       - $ref: '#/components/parameters/EntryTaskEndDate'
       - $ref: '#/components/parameters/EntryTaskListLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -3372,6 +3373,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/EntryTaskLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -3649,7 +3651,7 @@ paths:
       summary: List tables
       operationId: listTables
       description: |
-        Returns the tables (`kind=table`) visible to the current caller. Pagination, `q`, `filters`, `sort`, `next`, `skip` and `limit` mean the same as in the form list; 50 per page by default, up to 1000.
+        Returns the tables (`kind=table`) visible to the current caller. Pagination, `q`, `filters`, `sort`, `next`, `page`, `skip` and `limit` mean the same as in the form list; 50 per page by default, up to 1000.
 
         OAuth scope: forms
       parameters:
@@ -3657,6 +3659,7 @@ paths:
       - $ref: '#/components/parameters/FormsFilters'
       - $ref: '#/components/parameters/FormsSort'
       - $ref: '#/components/parameters/FormsNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/FormsSkip'
       - $ref: '#/components/parameters/PageLimit'
       responses:
@@ -3950,6 +3953,7 @@ paths:
       - $ref: '#/components/parameters/EntriesSort'
       - $ref: '#/components/parameters/EntriesCreatedAt'
       - $ref: '#/components/parameters/EntriesNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       - $ref: '#/components/parameters/PageLimit'
@@ -4718,7 +4722,7 @@ paths:
       tags:
       - Views
       summary: List a table view's entries
-      description: 'Returns entries using the table view''s filters and sort, at most 50 per page; pagination and the rules for which fields are returned are the same as for form view entries. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
+      description: 'Returns entries using the table view''s filters and sort; pagination and the rules for which fields are returned are the same as for form view entries. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
       operationId: listTableViewEntries
       parameters:
       - $ref: '#/components/parameters/TableToken'
@@ -4728,13 +4732,9 @@ paths:
         description: View token
         schema:
           type: string
-      - name: next
-        in: query
-        required: false
-        description: The next value from the previous page's response (a row offset, starting at 0); a negative value is treated as 0
-        schema:
-          type: integer
-          minimum: 0
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       responses:
         '200':
@@ -4772,12 +4772,14 @@ paths:
       - name: limit
         in: query
         required: false
-        description: How many to return, 50 by default and 100 at most. There is no paging; `total` is the full count and `count` the number returned
+        description: Page size
         schema:
           type: integer
           minimum: 1
           maximum: 100
           default: 50
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       responses:
         '200':
           description: Check-in campaigns
@@ -4794,6 +4796,16 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/CheckinCampaign'
+                  next:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Pass back as `next` to get the next page; null on the last page
+                required:
+                - total
+                - count
+                - data
+                - next
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -5155,7 +5167,6 @@ paths:
       operationId: listFolders
       description: |
         Lists the folders the current user has manage permission on (form folders and table folders alike, told apart by `kind`), newest first. With an account-level credential, returns the account owner's folders.
-        `limit` defaults to 50 and is clamped to 1 to 100; there is no paging: `total` is the full count, `count` the number returned this time.
 
         OAuth scope: forms
       parameters:
@@ -5168,6 +5179,8 @@ paths:
           minimum: 1
           maximum: 100
           default: 50
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       responses:
         '200':
           description: Folder list
@@ -5179,6 +5192,7 @@ paths:
                 - total
                 - count
                 - data
+                - next
                 properties:
                   total:
                     type: integer
@@ -5190,6 +5204,13 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Folder'
+                  next:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Pass back as `next` to get the next page; null on the last page
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5274,7 +5295,7 @@ paths:
       description: |
         The artifacts Jiri delivered for the current user in the current account, the most recently delivered first; one entry per artifact, however many versions it has.
         OAuth scope: artifacts
-        - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
+        - Paging: `next` is a row offset; pass it back unchanged for the next page. Only one of `next`, `page` and `skip` can be passed. 50 per page by default, `limit` changes it (at most 1000).
         - An artifact belongs to a person: an account access token returns `400`.
       parameters:
       - name: q
@@ -5285,6 +5306,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -5557,16 +5579,17 @@ paths:
       summary: List contacts
       operationId: listContacts
       description: |
-        Lists the current user's contacts page by page, by ID descending, a fixed 50 per page. With an account-level credential, returns the account owner's contacts.
+        Lists the current user's contacts page by page, by ID descending. With an account-level credential, returns the account owner's contacts.
         OAuth scope: read_contacts
-        Cursor paging: `next` in the response is the ID of the first contact on the next page; pass it as the query parameter `next` to get that page. `next` is null when there is no more data.
       parameters:
       - name: next
         in: query
         required: false
-        description: The `next` cursor from the previous page's response (a contact ID)
+        description: The `next` cursor from the previous page's response (a contact ID). Cannot be combined with `page`.
         schema:
           type: string
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageLimit'
       responses:
         '200':
           description: Contact list
@@ -5595,6 +5618,8 @@ paths:
                     - string
                     - 'null'
                     description: Cursor for the next page; null when there is no more data
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5655,7 +5680,6 @@ paths:
       description: |
         Lists the members of the current account (deactivated members included), by status ascending (active first), then by creation time, newest first.
         OAuth scope: users
-        `limit` defaults to 50 and is clamped to 1 to 100; there is no paging: `total` is the total number of members, `count` the number returned this time.
       parameters:
       - name: limit
         in: query
@@ -5666,6 +5690,8 @@ paths:
           minimum: 1
           maximum: 100
           default: 50
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       responses:
         '200':
           description: Member list
@@ -5677,6 +5703,7 @@ paths:
                 - total
                 - count
                 - data
+                - next
                 properties:
                   total:
                     type: integer
@@ -5688,6 +5715,13 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/BillingAccountUser'
+                  next:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Pass back as `next` to get the next page; null on the last page
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5875,6 +5909,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/TradePageLimit'
       - $ref: '#/components/parameters/TradePageNext'
+      - $ref: '#/components/parameters/TradePage'
       responses:
         '200':
           description: Payment orders
@@ -5977,6 +6012,7 @@ paths:
       - $ref: '#/components/parameters/TradeInclude'
       - $ref: '#/components/parameters/TradePageLimit'
       - $ref: '#/components/parameters/TradePageNext'
+      - $ref: '#/components/parameters/TradePage'
       responses:
         '200':
           description: Refunds and statistics
@@ -6024,6 +6060,7 @@ paths:
       - $ref: '#/components/parameters/TradeInclude'
       - $ref: '#/components/parameters/TradePageLimit'
       - $ref: '#/components/parameters/TradePageNext'
+      - $ref: '#/components/parameters/TradePage'
       responses:
         '200':
           description: Payouts and statistics
@@ -6092,6 +6129,7 @@ paths:
           - FAIL
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -6287,6 +6325,7 @@ paths:
           - FAIL
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -6800,13 +6839,14 @@ paths:
       description: |
         Returns the forms the current user has submitted entries to as a submitter (quick payment forms excluded), most recent submission first. These forms need not be created by or shared with the current user;
         each row gives the current user's own submission count and latest submission time, not the form's total entry count. Deleted forms do not appear in `data` (`total` still counts them).
-        - Pagination: `next` is a row offset, passed back as is for the next page; `skip` and `next` cannot be combined. 50 rows per page by default, adjustable with `limit` (at most 1000).
+        - Pagination: `next` is a row offset, passed back as is for the next page; only one of `next`, `page` and `skip` can be passed. 50 rows per page by default, adjustable with `limit` (at most 1000).
         - An account access token has no "current user"; calling with one returns 400.
 
         OAuth scope: forms
       parameters:
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -6863,6 +6903,7 @@ paths:
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -7205,7 +7246,7 @@ paths:
       description: |
         The current user's own routines, newest first.
         OAuth scope: routines
-        - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
+        - Paging: `next` is a row offset; pass it back unchanged for the next page. Only one of `next`, `page` and `skip` can be passed. 50 per page by default, `limit` changes it (at most 1000).
         - Routines belong to a person: a credential with no current user (an account access token and the like) returns `403`, and so does an account that cannot use routines yet.
       parameters:
       - name: state
@@ -7219,6 +7260,7 @@ paths:
           - paused
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -7470,6 +7512,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -7562,18 +7605,19 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response, passed back as is to get the next page. Cannot be combined with `skip`."
+      description: "`next` from the previous page's response, passed back as is to get the next page. Cannot be combined with `page` or `skip`."
       schema:
         type: string
     FormsSkip:
       name: skip
       in: query
       required: false
-      description: Starting row offset (from 0, at most 10000), for reading in parallel slices; the returned `next` still pages onward. Cannot be combined with `next`.
+      description: Deprecated, use `page`. Starting row offset (from 0, at most 10000); the returned `next` still pages onward. Cannot be combined with `next` or `page`.
       schema:
         type: integer
         minimum: 0
         maximum: 10000
+      deprecated: true
     EntriesFields:
       name: fields
       in: query
@@ -7639,7 +7683,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response. Under the default sort it is a serial-number cursor (returns entries with serial number ≥ this value); with filters / creation-time ordering / an explicit sort it is a row offset. Cannot be combined with `skip`. Also accepts a string: one starting with an integer is read as that integer, anything else as 0, i.e. starting from the first page."
+      description: "`next` from the previous page's response. Under the default sort it is a serial-number cursor (returns entries with serial number ≥ this value); with filters / creation-time ordering / an explicit sort it is a row offset. Cannot be combined with `page` or `skip`. Also accepts a string: one starting with an integer is read as that integer, anything else as 0, i.e. starting from the first page."
       schema:
         type:
         - integer
@@ -7648,11 +7692,12 @@ components:
       name: skip
       in: query
       required: false
-      description: Starting row offset (from 0, max 10000), for reading in parallel slices. Cannot be combined with `next`.
+      description: Deprecated, use `page`. Starting row offset (from 0, max 10000). Cannot be combined with `next` or `page`.
       schema:
         type: integer
         minimum: 0
         maximum: 10000
+      deprecated: true
     FieldDataChecks:
       name: checks
       in: query
@@ -7776,7 +7821,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page. Cannot be combined with `skip`."
+      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page. Cannot be combined with `page` or `skip`."
       schema:
         type: integer
         minimum: 0
@@ -7853,7 +7898,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page."
+      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page. Cannot be combined with `page` or `skip`."
       schema:
         type: integer
         minimum: 0
@@ -7989,7 +8034,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response (a page number, starting at 1); pass it back unchanged to get the next page. Defaults to page 1."
+      description: "`next` from the previous page's response (a page number, starting at 1); pass it back unchanged to get the next page. Defaults to page 1. Cannot be combined with `page`."
       schema:
         type: integer
     RoutineId:
@@ -8006,6 +8051,22 @@ components:
       description: The routine's ID (`id` from `GET /routines`)
       schema:
         type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Page number from 1, for jumping to a page or reading pages in parallel; `(page - 1) × limit` can be at most 10000, and the returned `next` continues from there. Cannot be combined with `next` or `skip`.
+      schema:
+        type: integer
+        minimum: 1
+    TradePage:
+      name: page
+      in: query
+      required: false
+      description: Page number from 1, for jumping straight to a page; the same as passing it as `next`. Cannot be combined with `next`.
+      schema:
+        type: integer
+        minimum: 1
   responses:
     BadRequest:
       description: Invalid request parameters or data
@@ -8740,7 +8801,12 @@ components:
           type:
           - integer
           - 'null'
-          description: Choice quota (absent when unset or when the quota is hidden)
+          description: 'Places left on the choice: an entry takes one when it picks the choice after the limit is set, and gives it back by switching away or, when the field recovers places, by being deleted; `recover_quota` gives places back by hand. Absent when the choice has no limit, and on a fill page also while the field hides places and some are left'
+        quota_setting:
+          type:
+          - integer
+          - 'null'
+          description: 'Limit on the choice''s places, the value a write sends as `quota`, so the places used in the current cycle are `quota_setting - quota`. Only on form and table reads, and not on matrix choices'
         operand_value:
           type: number
           description: Value assigned to the choice
@@ -8993,7 +9059,7 @@ components:
           type:
           - integer
           - 'null'
-          description: Cursor for the next page (the serial number under the default sort, a row offset otherwise); null on the last page
+          description: Pass back as `next` to get the next page; null on the last page
     EntryInput:
       type: object
       description: |
@@ -9816,6 +9882,7 @@ components:
               - by_ip
               - by_device
               - by_fields
+              description: With by_weixin only submissions made in WeChat are accepted, and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account; changing condition later does not stop that
             cycle_period:
               type: string
               enum:
@@ -10672,15 +10739,21 @@ components:
           type: integer
           minimum: 1
           description: Goods per row on mobile
+        formula:
+          type: string
+          description: The formula, calling only the functions in x-functions; an existing field is named by api_code and a field created in the same request as $(cid), e.g. IF(FIND("overdue", field_3) > 0, $(price) * $(qty), 0); used instead of formula_display when both are given
+          x-functions:
+            $ref: '#/components/schemas/FormulaFunction'
         formula_display:
           type: string
-          description: The formula as HTML; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
+          description: Older HTML form of formula; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
         result_display_type:
           type: string
           enum:
           - string
           - numeric
           - datetime
+          - boolean
           description: How the result is shown
         result_display_as_date:
           type: boolean
@@ -10867,7 +10940,11 @@ components:
                 - integer
                 - 'null'
                 minimum: 0
-                description: Maximum number of places; 0 closes the choice. Changing an existing limit keeps the places already taken; null lifts the limit
+                description: Maximum number of places, read back as `quota_setting`; 0 closes the choice. Changing a limit keeps the places already taken; null lifts the limit
+              recover_quota:
+                type: integer
+                minimum: 1
+                description: Places to give back to a single choice, multiple choice or drop-down choice with a limit, keeping the limit, as deleting an entry does; the places left stop at the limit
             additionalProperties: false
       additionalProperties: false
     FieldRuleOperations:
@@ -11062,7 +11139,7 @@ components:
           - by_ip
           - by_device
           - by_fields
-          description: What identifies the same submitter; by_fields is a paid feature. Cleared when fill_type is unlimited
+          description: What identifies the same submitter; by_fields is a paid feature. Cleared when fill_type is unlimited. With by_weixin only submissions made in WeChat are accepted, and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account; changing condition later does not stop that
         cycle_period:
           type: string
           enum:
@@ -11085,6 +11162,7 @@ components:
           description: Required and cannot be empty when condition is by_fields
           items:
             type: string
+      additionalProperties: false
     FormSetting:
       type: object
       description: Form settings (the response of GET /forms/{form_token}/setting)
@@ -15273,15 +15351,21 @@ components:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
+        formula:
+          type: string
+          description: The formula, calling only the functions in x-functions; an existing field is named by api_code and a field created in the same request as $(cid), e.g. IF(FIND("overdue", field_3) > 0, $(price) * $(qty), 0); used instead of formula_display when both are given
+          x-functions:
+            $ref: '#/components/schemas/FormulaFunction'
         formula_display:
           type: string
-          description: The formula as HTML; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
+          description: Older HTML form of formula; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
         result_display_type:
           type: string
           enum:
           - string
           - numeric
           - datetime
+          - boolean
           description: How the result is shown
         result_display_as_date:
           type: boolean
@@ -19615,6 +19699,7 @@ components:
       - page_info
       - queried_range
       - transactions
+      - next
       properties:
         page_info:
           $ref: '#/components/schemas/TradePageInfo'
@@ -19628,8 +19713,10 @@ components:
           items:
             $ref: '#/components/schemas/TradeTransaction'
         next:
-          type: string
-          description: Number of the next page; pass it back unchanged as the `next` parameter. Omitted when there is no next page
+          type:
+          - string
+          - 'null'
+          description: Number of the next page; pass it back unchanged as the `next` parameter. null on the last page
         detail_limit:
           type: string
           description: Why the detail limit was exceeded; omitted when it was not
@@ -19901,6 +19988,7 @@ components:
       - page_info
       - queried_range
       - refunds
+      - next
       properties:
         page_info:
           $ref: '#/components/schemas/TradePageInfo'
@@ -19917,8 +20005,10 @@ components:
           $ref: '#/components/schemas/TradeRefundStats'
           description: Statistics over all matching refunds; omitted with `include=records` when the detail limit is not exceeded
         next:
-          type: string
-          description: Number of the next page; pass it back unchanged as the `next` parameter. Omitted when there is no next page
+          type:
+          - string
+          - 'null'
+          description: Number of the next page; pass it back unchanged as the `next` parameter. null on the last page
         detail_limit:
           type: string
           description: Why the detail limit was exceeded; omitted when it was not
@@ -20058,6 +20148,7 @@ components:
       - page_info
       - queried_range
       - payouts
+      - next
       properties:
         page_info:
           $ref: '#/components/schemas/TradePageInfo'
@@ -20074,8 +20165,10 @@ components:
           $ref: '#/components/schemas/TradeAmountStats'
           description: Statistics over all matching payouts; omitted with `include=records` when the detail limit is not exceeded
         next:
-          type: string
-          description: Number of the next page; pass it back unchanged as the `next` parameter. Omitted when there is no next page
+          type:
+          - string
+          - 'null'
+          description: Number of the next page; pass it back unchanged as the `next` parameter. null on the last page
         detail_limit:
           type: string
           description: Why the detail limit was exceeded; omitted when it was not
@@ -22057,6 +22150,93 @@ components:
           - integer
           - 'null'
           description: The next page's row offset; null on the last page
+    FormulaFunction:
+      title: FormulaFunction
+      type: string
+      description: A function a formula can call, case-insensitive
+      oneOf:
+      - const: ABS
+        description: 'ABS(number): Absolute value'
+      - const: AND
+        description: 'AND(condition, condition, ...): TRUE when every condition holds'
+      - const: AVG
+        description: 'AVG(number, number, ...): Average of the values, skipping blanks; also takes a table column'
+      - const: CONCAT
+        description: 'CONCAT(text, text, ...): Joins the values into one text, same as text & text'
+      - const: COUNT
+        description: 'COUNT(value, value, ...): Number of values; also takes a table column'
+      - const: DATE
+        description: 'DATE(text): The date written as YYYY-MM-DD, or "today", "yesterday" or "tomorrow"'
+      - const: DATEADD
+        description: 'DATEADD(date, amount, unit): The date moved by amount units; unit is "y", "M", "w", "d", "h", "m" or "s"'
+      - const: DATEDIF
+        description: 'DATEDIF(start_date, end_date, unit): Whole calendar years ("y"), months ("m") or days ("d") from start_date to end_date; blank when start_date is later'
+      - const: DATETIME_DIFF
+        description: 'DATETIME_DIFF(end_time, start_time, unit): Time from start_time to end_time in the unit, "y", "M", "w", "d", "h", "m" or "s", with decimals'
+      - const: DAY
+        description: 'DAY(date): Day of the month, 1 to 31'
+      - const: DAYS
+        description: 'DAYS(end_date, start_date): Whole days from start_date to end_date'
+      - const: FIND
+        description: 'FIND(text_to_find, within_text): Position of text_to_find in within_text counting from 1, case-sensitive; 0 when not found'
+      - const: ID
+        description: 'ID(id_card_number, part): From an 18-digit ID card number: the age when part is 0, the gender text when 1, the birth date when 2'
+      - const: IF
+        description: 'IF(condition, value_if_true, value_if_false): value_if_true when the condition holds, otherwise value_if_false'
+      - const: IFS
+        description: 'IFS(condition, value, condition, value, ...): The value paired with the first condition that holds; blank when none holds. Use TRUE as the last condition for a default'
+      - const: INT
+        description: 'INT(number): Rounds down to an integer, so INT(-1.5) is -2'
+      - const: ISBLANK
+        description: 'ISBLANK(value): TRUE when the value is blank; a blank number field reads as 0, so it is never blank'
+      - const: LEFT
+        description: 'LEFT(text, count): The first count characters'
+      - const: LEN
+        description: 'LEN(text): Number of characters'
+      - const: LOG
+        description: 'LOG(number, base): Logarithm of the number in the base; natural logarithm when base is left out'
+      - const: LOWER
+        description: 'LOWER(text): The text in lower case'
+      - const: MAX
+        description: 'MAX(value, value, ...): Largest number or latest date; also takes a table column'
+      - const: MID
+        description: 'MID(text, start, count): count characters starting at position start, counting from 1'
+      - const: MIN
+        description: 'MIN(value, value, ...): Smallest number or earliest date; also takes a table column'
+      - const: MOD
+        description: 'MOD(number, divisor): Remainder of the division, with the sign of the divisor; blank when divisor is 0'
+      - const: MONTH
+        description: 'MONTH(date): Month, 1 to 12'
+      - const: NOT
+        description: 'NOT(condition): TRUE when the condition does not hold'
+      - const: NOW
+        description: 'NOW(): The current time; formulas using it refresh at most every 15 minutes while the form is read'
+      - const: OR
+        description: 'OR(condition, condition, ...): TRUE when any condition holds'
+      - const: RIGHT
+        description: 'RIGHT(text, count): The last count characters'
+      - const: ROUND
+        description: 'ROUND(number, digits): Rounds to the given decimal places, 0 by default'
+      - const: ROUNDDOWN
+        description: 'ROUNDDOWN(number, digits): Rounds toward zero to the given decimal places, 0 by default'
+      - const: ROUNDUP
+        description: 'ROUNDUP(number, digits): Rounds away from zero to the given decimal places, 0 by default'
+      - const: SEARCH
+        description: 'SEARCH(text_to_find, within_text): Like FIND but ignoring case'
+      - const: SUM
+        description: 'SUM(number, number, ...): Sum of the values, skipping blanks; also takes a table column'
+      - const: SWITCH
+        description: 'SWITCH(value, match, result, match, result, ..., default): The result paired with the first match equal to value; the optional last argument is the default'
+      - const: TODAY
+        description: 'TODAY(): Today''s date; formulas using it refresh once a day when the form is read'
+      - const: TRIM
+        description: 'TRIM(text): The text without leading and trailing spaces, full-width spaces included'
+      - const: UPPER
+        description: 'UPPER(text): The text in upper case'
+      - const: WEEKDAY
+        description: 'WEEKDAY(date): Day of the week, 1 for Sunday to 7 for Saturday'
+      - const: YEAR
+        description: 'YEAR(date): Four-digit year'
     ExamFieldInput:
       type: object
       description: 'A field definition for scene=exam, branched on type: the FieldInput types plus the ones only this scene takes'
