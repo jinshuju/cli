@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           npm run check 2>&1 | tee "${RUNNER_TEMP}/check.log"
-          npm test 2>&1 | tail -n 60 | tee -a "${RUNNER_TEMP}/check.log"
+          npm test 2>&1 | tee "${RUNNER_TEMP}/test.log"
 
       - name: Describe the change
         id: describe
@@ -97,7 +97,17 @@ jobs:
               echo '**The CLI does not pass against the new spec.** Fix it on this branch before merging:'
               echo
               echo '```'
-              grep -E 'error|✖|not ok|AssertionError|expected|actual' "${RUNNER_TEMP}/check.log" | head -n 40 || true
+              # The step stops at the first command that fails, so no test.log
+              # means npm run check failed, and its last lines say why. The spec
+              # reporter lists the failing tests last; a test.log without that
+              # list is the build before the tests failing.
+              if [ ! -f "${RUNNER_TEMP}/test.log" ]; then
+                tail -n 40 "${RUNNER_TEMP}/check.log"
+              elif grep -q 'failing tests:' "${RUNNER_TEMP}/test.log"; then
+                sed -n '/failing tests:/,$p' "${RUNNER_TEMP}/test.log" | head -n 80
+              else
+                tail -n 40 "${RUNNER_TEMP}/test.log"
+              fi
               echo '```'
             else
               echo '`npm run check` and `npm test` pass against the new spec.'
