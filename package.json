@@ -30,7 +30,7 @@
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json && chmod +x dist/cli-bin.js",
     "prepare": "npm run build",
-    "test": "npm run build && node --test dist/*.test.js",
+    "test": "npm run build && node --test --test-reporter=spec dist/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint",
     "fmt": "oxfmt",
