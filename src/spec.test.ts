@@ -20,8 +20,9 @@ test('a request is the operation openapi.yaml names, under the base path, its pa
 });
 
 test('a parameter the operation does not have is refused by name, before anything is sent', () => {
+  // One form is never paged, so this holds whatever a later spec does to the lists.
   assert.throws(
-    () => call('listFormViewEntries', { path: { form_token: 'Kp7mQ2', view_token: 'aB3dE9' }, query: { limit: 10 } }),
+    () => call('getForm', { path: { form_token: 'Kp7mQ2' }, query: { limit: 10 } }),
     (error: unknown) => error instanceof UsageError && /takes no limit parameter/.test(error.message)
   );
   // A path parameter that is not there is this code's mistake, not the caller's.
