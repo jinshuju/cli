@@ -114,7 +114,11 @@ function describeFailure(response: Response, text: string, parsed: ParsedBody): 
 
   const body = parsed.value as Record<string, unknown>;
   const stated = body.message ?? body.error_description;
-  if (typeof stated === 'string' && stated.trim()) return withCode(everyReason(body, stated) ?? stated, body.error);
+  if (typeof stated === 'string' && stated.trim()) {
+    const reasons = everyReason(body, stated);
+    if (!reasons) return withCode(stated, body.error);
+    return [withCode(reasons.head, body.error), ...reasons.rest.map((line) => `  ${line}`)].join('\n');
+  }
 
   return rowErrors(body) ?? `${status}: ${snippet(JSON.stringify(parsed.value))}`;
 }
@@ -124,19 +128,51 @@ function withCode(reason: string, code: unknown): string {
   return `${reason} (${code})`;
 }
 
+/** The most reasons worth putting in front of a reader; `--output json` carries them all. */
+const MAX_REASONS = 20;
+
 /**
- * A refusal with several reasons that states only the first: a routine against
- * two of the page's rules answers `{error_description, errors: [{code, message}]}`
- * with error_description the first message. Repeating that alone would send the
- * caller round again to learn the second. A body whose error_description says
- * something of its own, as a 400 does, is left to say it.
+ * A refusal with several reasons, each of them said.
+ *
+ * The server states a reason in error_description and lists every reason in
+ * errors[]. The description repeats only the first: a routine against two of
+ * the page's rules states one of them, and a request body validation states
+ * three of what may be a hundred and counts the rest. A caller shown the
+ * description alone corrects what it was told, sends again, and learns the
+ * next. So every reason is a line of its own, under whatever the description
+ * said ahead of the first ("Request body invalid:"). One line per pointer: a
+ * field that may be one of several shapes is told about the same pointer once
+ * per shape, and the first telling is the shape it comes closest to. A list
+ * too long to read is cut, and says how many it kept back.
  */
-function everyReason(body: Record<string, unknown>, stated: string): string | undefined {
+function everyReason(body: Record<string, unknown>, stated: string): { head: string; rest: string[] } | undefined {
   const errors = body.errors;
-  if (!Array.isArray(errors) || errors.length < 2) return undefined;
-  const messages = errors.map((item) => (item as { message?: unknown } | null)?.message);
-  if (messages[0] !== stated || !messages.every((message) => typeof message === 'string')) return undefined;
-  return messages.join('; ');
+  if (!Array.isArray(errors) || errors.length === 0) return undefined;
+
+  const lines: string[] = [];
+  const said = new Set<string>();
+  let first: string | undefined;
+  for (const item of errors) {
+    if (item === null || typeof item !== 'object') continue;
+    const { pointer, message } = item as { pointer?: unknown; message?: unknown };
+    if (typeof message !== 'string' || !message.trim()) continue;
+    const at = typeof pointer === 'string' && pointer ? pointer : undefined;
+    if (said.has(at ?? message)) continue;
+    said.add(at ?? message);
+    first ??= message;
+    lines.push(at && !message.includes(at) ? `${at}: ${message}` : message);
+  }
+  if (first === undefined) return undefined;
+  if (lines.length === 1 && stated.includes(first)) return undefined;
+
+  const kept = lines.slice(0, MAX_REASONS);
+  if (lines.length > kept.length) kept.push(`… and ${lines.length - kept.length} more; --output json carries them all`);
+  const index = stated.indexOf(first);
+  // The description's own words introduce the list; a description that does not
+  // repeat the first reason is one more thing said, so it stays whole.
+  const heading = index < 0 ? stated : stated.slice(0, index).trim();
+  if (heading) return { head: heading, rest: kept };
+  return { head: kept[0] as string, rest: kept.slice(1) };
 }
 
 /**

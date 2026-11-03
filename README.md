@@ -430,6 +430,11 @@ parsing anything:
 | 7    | transport: the connection failed or timed out                            |
 | 8    | rate limited: wait and retry; the message and `retry_after` say how long |
 
+A refusal with several reasons lists every one of them, one line each, even
+when the server's own description repeats only the first three: a request body
+that is wrong in five places is corrected in one go rather than in five. A list
+longer than twenty is cut, and says how many it kept back.
+
 With `--output json`, stderr carries the same as JSON, plus the status and body
 the server answered with:
 
