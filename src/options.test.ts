@@ -38,21 +38,34 @@ test('--filter names the operator meant, and refuses two conditions in one', () 
     }
     throw new Error(`${input} was expected to be refused`);
   };
-  // What three days of 400s said callers write: =, in, not_empty.
+  // What callers write: =, in, not_empty.
   assert.match(refused('field_1 = 1'), /operator '=' is written 'eq'\. Operators: eq ne any_in/);
   assert.match(refused('field_1 in a,b'), /operator 'in' is written 'any_in'/);
   assert.match(refused('field_9 not_empty'), /operator 'not_empty' is written 'not_null'/);
   assert.match(refused('field_1 EQ 1'), /operator 'EQ' is written 'eq'/);
-  assert.match(refused('field_1 near 1'), /operator 'near' is not one\. Operators: /);
+  // An operator this copy of the spec does not list, and no alias names, is the API's to refuse.
+  assert.deepEqual(parseFilter('field_1 near 1'), { field: 'field_1', operator: 'near', value: '1' });
+  assert.deepEqual(parseFilter('field_1 near'), { field: 'field_1', operator: 'near' });
 
   // Two conditions in one flag went as one, the whole tail being the first field's value.
   assert.match(
     refused('field_15 eq S5mp and field_4 equal 通过 and field_2 = 1'),
     /one condition; write the next as its own flag: --filter 'field_15 eq S5mp' --filter 'field_4 equal …'/
   );
-  // A value containing "and" is a value, unless a field and an operator follow it.
+  assert.match(
+    refused('field_1 eq a && field_2 in b,c'),
+    /--filter 'field_1 eq a' --filter 'field_2 any_in …'\. If that is the value, quote it: --filter 'field_1 eq "a && field_2 in b,c"'/
+  );
+  // A value containing "and" is a value: in quotes whatever follows, and bare
+  // unless a field and an operator spelled as the API spells it follow.
   assert.equal(parseFilter('field_1 like rock and roll').value, 'rock and roll');
+  assert.equal(parseFilter('field_1 like rock and roll is not dead').value, 'rock and roll is not dead');
   assert.equal(parseFilter('field_1 eq and').value, 'and');
+  assert.equal(
+    parseFilter('field_1 eq "research and development eq growth"').value,
+    'research and development eq growth'
+  );
+  assert.deepEqual(parseFilter('field_1 any_in "a and b eq c",d').value, ['a and b eq c', 'd']);
 });
 
 test('--filter takes the quotes off a value written in them', () => {

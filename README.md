@@ -165,10 +165,11 @@ cursor; pass it to `--next` (with `--all` again) to read on.
 
 `--filter` is repeatable, one condition per flag, and the conditions are
 AND-combined. An operator written otherwise (`=`, `in`, `not_empty`) is refused
-with the one meant, two conditions in one flag are refused with the way to
-write them, and a value in quotes is taken without them. For conditions it
-cannot express, use `--filters <json|@file>`. Cursors are opaque strings — pass
-the `next` value from the previous response back verbatim.
+with the one meant, one the CLI's copy of the spec does not list goes through
+for the API to judge, two conditions in one flag are refused with the way to
+write them, and a value in quotes is taken whole, without them. For conditions
+it cannot express, use `--filters <json|@file>`. Cursors are opaque strings —
+pass the `next` value from the previous response back verbatim.
 
 ## Analysis
 

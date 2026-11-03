@@ -127,9 +127,9 @@ export const CONTAINER_LIST_OPTIONS: readonly OptionSpec[] = [
 const FILTER_OPERATORS = choices('listEntries', 'filters[].operator');
 
 /**
- * What a caller writes for an operator the API spells otherwise. Sixteen
- * users in three days wrote `=`, `in` or `not_empty`, and the server answered
- * each with the whole list; the one they meant is named instead.
+ * What a caller writes for an operator the API spells otherwise — `=`, `in`,
+ * `not_empty` — and the server answers with the whole list; the one meant is
+ * named instead.
  */
 const OPERATOR_ALIASES: Readonly<Record<string, string>> = {
   '=': 'eq',
@@ -269,6 +269,13 @@ export function parseFilter(input: string): FilterCondition {
   checkOperator(operator);
   checkOneCondition(field, operator, raw);
 
+  // An operator this copy of the spec does not list goes as written, its
+  // value as the one string it was: the API that learned it says what shape
+  // the value takes, and whether it is one at all.
+  if (FILTER_OPERATORS && !FILTER_OPERATORS.includes(operator)) {
+    return raw ? { field, operator, value: unquoted(raw) } : { field, operator };
+  }
+
   if (NO_VALUE_OPERATORS.has(operator)) {
     if (raw) throw new UsageError(`--filter operator '${operator}' takes no value, got ${JSON.stringify(raw)}`);
     return { field, operator };
@@ -291,35 +298,45 @@ export function parseFilter(input: string): FilterCondition {
 }
 
 /**
- * An operator the spec does not list is refused here, with the one meant
- * when it can be told. The list is the spec's, read as every flag's list
- * is, so an operator the API learns reaches the CLI with the next sync.
+ * An operator spelled as the API does not spell it — `=`, `in`, `not_empty`,
+ * `EQ` — is refused here with the one meant. One the spec's list does not
+ * hold and no alias names goes through: the list is this copy's, and the API
+ * may have learned the operator since, so the API is the one to refuse it.
  */
 function checkOperator(operator: string): void {
   if (!FILTER_OPERATORS || FILTER_OPERATORS.includes(operator)) return;
   const lowered = operator.toLowerCase();
   const meant = FILTER_OPERATORS.includes(lowered) ? lowered : OPERATOR_ALIASES[lowered];
-  const instead = meant === undefined ? 'is not one' : `is written '${meant}'`;
-  throw new UsageError(`--filter operator '${operator}' ${instead}. Operators: ${FILTER_OPERATORS.join(' ')}`);
+  if (meant === undefined) return;
+  throw new UsageError(
+    `--filter operator '${operator}' is written '${meant}'. Operators: ${FILTER_OPERATORS.join(' ')}`
+  );
 }
 
 /**
  * Two conditions in one --filter — `field_15 eq S5mp and field_4 equal 通过`
  * — would go as one, the whole tail being field_15's value, and the server
  * would say the value is not one of its choices. A value may well contain
- * "and"; only an "and" followed by a field and an operator is read as a
- * second condition.
+ * "and": one written in quotes is the whole value, and an "and" is read as
+ * a second condition only when a field and an operator as the API spells it
+ * (or a symbol, `=`) follow, never on a word like "is" or "in" that may be
+ * the value's own. `&&` is nobody's text, so an alias counts after it. The
+ * refusal says how to send the value whole, for the case it was one.
  */
 function checkOneCondition(field: string, operator: string, raw: string): void {
-  const next = /\s+(?:and|&&)\s+(\S+)\s+(\S+)/i.exec(raw);
+  if (raw.startsWith('"') || raw.startsWith("'")) return;
+  const next = /\s+(and|&&)\s+(\S+)\s+(\S+)/i.exec(raw);
   if (!next) return;
-  const [, nextField, nextOperator] = next as unknown as [string, string, string];
-  const known = FILTER_OPERATORS?.includes(nextOperator) || nextOperator.toLowerCase() in OPERATOR_ALIASES;
-  if (!known) return;
+  const [, joiner, nextField, nextOperator] = next as unknown as [string, string, string, string];
+  const alias = OPERATOR_ALIASES[nextOperator.toLowerCase()];
+  const spelled = FILTER_OPERATORS?.includes(nextOperator) || /^[=!<>]+$/.test(nextOperator);
+  if (!spelled && !(joiner === '&&' && alias !== undefined)) return;
   const first = raw.slice(0, next.index).trim();
+  const quote = raw.includes('"') ? "'" : '"';
   throw new UsageError(
     `--filter takes one condition; write the next as its own flag: ` +
-      `--filter '${field} ${operator} ${first}' --filter '${nextField} ${nextOperator} …'`
+      `--filter '${field} ${operator} ${first}' --filter '${nextField} ${alias ?? nextOperator} …'. ` +
+      `If that is the value, quote it: --filter '${field} ${operator} ${quote}${raw}${quote}'`
   );
 }
 
@@ -343,7 +360,7 @@ function splitList(raw: string): string[] {
 }
 
 /**
- * A value written in quotes — `between "2026-10-31 00:00:00","2026-10-31
+ * A value written in quotes — `between "2026-10-01 00:00:00","2026-10-07
  * 23:59:59"`, as a shell user quotes out of habit — went up with the quotes
  * on, and the server said it was not a date range. A pair of matching quotes
  * around the whole value is taken off; a quote inside one is text.
