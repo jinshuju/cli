@@ -126,13 +126,60 @@ export const CONTAINER_LIST_OPTIONS: readonly OptionSpec[] = [
  */
 const FILTER_OPERATORS = choices('listEntries', 'filters[].operator');
 
+/**
+ * What a caller writes for an operator the API spells otherwise. Sixteen
+ * users in three days wrote `=`, `in` or `not_empty`, and the server answered
+ * each with the whole list; the one they meant is named instead.
+ */
+const OPERATOR_ALIASES: Readonly<Record<string, string>> = {
+  '=': 'eq',
+  '==': 'eq',
+  '===': 'eq',
+  is: 'eq',
+  equals: 'eq',
+  '!=': 'ne',
+  '!==': 'ne',
+  '<>': 'ne',
+  neq: 'ne',
+  not: 'ne',
+  '>': 'gt',
+  '>=': 'gte',
+  '<': 'lt',
+  '<=': 'lte',
+  in: 'any_in',
+  not_in: 'none_in',
+  nin: 'none_in',
+  not_empty: 'not_null',
+  not_blank: 'not_null',
+  present: 'not_null',
+  exists: 'not_null',
+  is_not_null: 'not_null',
+  empty: 'null',
+  blank: 'null',
+  is_null: 'null',
+  missing: 'null',
+  contains: 'like',
+  includes: 'like',
+  match: 'like',
+  matches: 'like',
+  not_contains: 'not_like',
+  excludes: 'not_like',
+  starts_with: 'start',
+  startswith: 'start',
+  begins_with: 'start',
+  ends_with: 'end',
+  endswith: 'end',
+  last: 'within_last',
+  within: 'within_last'
+};
+
 export const FILTER_OPTION: OptionSpec = {
   name: '--filter',
   type: 'string',
   repeatable: true,
   placeholder: "'<field> <op> [value]'",
   description:
-    'Filter condition, repeatable, AND-combined. ' +
+    'Filter condition, one per flag, repeatable, AND-combined. ' +
     (FILTER_OPERATORS ? `Operators: ${FILTER_OPERATORS.join(' ')}. ` : '') +
     "e.g. 'field_3 gte 80', 'created_at within_last 30d', 'field_4 between 1,10'"
 };
@@ -219,6 +266,8 @@ export function parseFilter(input: string): FilterCondition {
   }
   const [, field, operator, rest] = match as unknown as [string, string, string, string];
   const raw = rest.trim();
+  checkOperator(operator);
+  checkOneCondition(field, operator, raw);
 
   if (NO_VALUE_OPERATORS.has(operator)) {
     if (raw) throw new UsageError(`--filter operator '${operator}' takes no value, got ${JSON.stringify(raw)}`);
@@ -238,7 +287,40 @@ export function parseFilter(input: string): FilterCondition {
   if (LIST_OPERATORS.has(operator)) return { field, operator, value: splitList(raw) };
   if (operator === 'within_last') return { field, operator, value: parseRelativeWindow(raw) };
 
-  return { field, operator, value: raw };
+  return { field, operator, value: unquoted(raw) };
+}
+
+/**
+ * An operator the spec does not list is refused here, with the one meant
+ * when it can be told. The list is the spec's, read as every flag's list
+ * is, so an operator the API learns reaches the CLI with the next sync.
+ */
+function checkOperator(operator: string): void {
+  if (!FILTER_OPERATORS || FILTER_OPERATORS.includes(operator)) return;
+  const lowered = operator.toLowerCase();
+  const meant = FILTER_OPERATORS.includes(lowered) ? lowered : OPERATOR_ALIASES[lowered];
+  const instead = meant === undefined ? 'is not one' : `is written '${meant}'`;
+  throw new UsageError(`--filter operator '${operator}' ${instead}. Operators: ${FILTER_OPERATORS.join(' ')}`);
+}
+
+/**
+ * Two conditions in one --filter — `field_15 eq S5mp and field_4 equal 通过`
+ * — would go as one, the whole tail being field_15's value, and the server
+ * would say the value is not one of its choices. A value may well contain
+ * "and"; only an "and" followed by a field and an operator is read as a
+ * second condition.
+ */
+function checkOneCondition(field: string, operator: string, raw: string): void {
+  const next = /\s+(?:and|&&)\s+(\S+)\s+(\S+)/i.exec(raw);
+  if (!next) return;
+  const [, nextField, nextOperator] = next as unknown as [string, string, string];
+  const known = FILTER_OPERATORS?.includes(nextOperator) || nextOperator.toLowerCase() in OPERATOR_ALIASES;
+  if (!known) return;
+  const first = raw.slice(0, next.index).trim();
+  throw new UsageError(
+    `--filter takes one condition; write the next as its own flag: ` +
+      `--filter '${field} ${operator} ${first}' --filter '${nextField} ${nextOperator} …'`
+  );
 }
 
 /** `30d` into `{unit: 'day', n: 30}`. */
@@ -252,12 +334,24 @@ function parseRelativeWindow(raw: string): { unit: string; n: number } {
   return { unit: RELATIVE_UNITS[(match[2] as string).toLowerCase()] as string, n };
 }
 
-/** A comma-separated list, with backslash-escaped commas kept as text. */
+/** A comma-separated list, with backslash-escaped commas kept as text, and each value out of its quotes. */
 function splitList(raw: string): string[] {
   return raw
     .split(/(?<!\\),/)
-    .map((part) => part.replace(/\\,/g, ',').trim())
+    .map((part) => unquoted(part.replace(/\\,/g, ',').trim()))
     .filter((part) => part.length > 0);
+}
+
+/**
+ * A value written in quotes — `between "2026-10-31 00:00:00","2026-10-31
+ * 23:59:59"`, as a shell user quotes out of habit — went up with the quotes
+ * on, and the server said it was not a date range. A pair of matching quotes
+ * around the whole value is taken off; a quote inside one is text.
+ */
+function unquoted(text: string): string {
+  const quote = text[0];
+  const paired = text.length >= 2 && (quote === '"' || quote === "'") && text.endsWith(quote);
+  return paired ? text.slice(1, -1) : text;
 }
 
 // --- sort ------------------------------------------------------------------

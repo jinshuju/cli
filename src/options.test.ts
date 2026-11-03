@@ -28,6 +28,45 @@ test('--filter builds the shapes the operators need', () => {
   assert.deepEqual(parseFilter('created_at within_last 4w').value, { unit: 'week', n: 4 });
 });
 
+test('--filter names the operator meant, and refuses two conditions in one', () => {
+  const refused = (input: string) => {
+    try {
+      parseFilter(input);
+    } catch (error) {
+      if (error instanceof UsageError) return error.message;
+      throw error;
+    }
+    throw new Error(`${input} was expected to be refused`);
+  };
+  // What three days of 400s said callers write: =, in, not_empty.
+  assert.match(refused('field_1 = 1'), /operator '=' is written 'eq'\. Operators: eq ne any_in/);
+  assert.match(refused('field_1 in a,b'), /operator 'in' is written 'any_in'/);
+  assert.match(refused('field_9 not_empty'), /operator 'not_empty' is written 'not_null'/);
+  assert.match(refused('field_1 EQ 1'), /operator 'EQ' is written 'eq'/);
+  assert.match(refused('field_1 near 1'), /operator 'near' is not one\. Operators: /);
+
+  // Two conditions in one flag went as one, the whole tail being the first field's value.
+  assert.match(
+    refused('field_15 eq S5mp and field_4 equal 通过 and field_2 = 1'),
+    /one condition; write the next as its own flag: --filter 'field_15 eq S5mp' --filter 'field_4 equal …'/
+  );
+  // A value containing "and" is a value, unless a field and an operator follow it.
+  assert.equal(parseFilter('field_1 like rock and roll').value, 'rock and roll');
+  assert.equal(parseFilter('field_1 eq and').value, 'and');
+});
+
+test('--filter takes the quotes off a value written in them', () => {
+  assert.deepEqual(parseFilter('created_at between "2026-10-31 00:00:00","2026-10-31 23:59:59"').value, [
+    '2026-10-31 00:00:00',
+    '2026-10-31 23:59:59'
+  ]);
+  assert.equal(parseFilter("field_1 eq 'foo bar'").value, 'foo bar');
+  assert.deepEqual(parseFilter('field_1 any_in "北京","上海"').value, ['北京', '上海']);
+  // A quote inside a value, or on one end only, is text.
+  assert.equal(parseFilter('field_1 eq 5\'10"').value, '5\'10"');
+  assert.equal(parseFilter('field_1 eq "x').value, '"x');
+});
+
 test('--filter refuses what it cannot express rather than guessing', () => {
   assert.throws(() => parseFilter('field_3'), UsageError);
   assert.throws(() => parseFilter('field_3 gte'), UsageError);

@@ -163,7 +163,10 @@ maximum (50 in most cases), and anything larger is capped.
 `--all` reads at most 200 pages. Past that it stops with an error naming the
 cursor; pass it to `--next` (with `--all` again) to read on.
 
-`--filter` is repeatable and the conditions are AND-combined. For conditions it
+`--filter` is repeatable, one condition per flag, and the conditions are
+AND-combined. An operator written otherwise (`=`, `in`, `not_empty`) is refused
+with the one meant, two conditions in one flag are refused with the way to
+write them, and a value in quotes is taken without them. For conditions it
 cannot express, use `--filters <json|@file>`. Cursors are opaque strings — pass
 the `next` value from the previous response back verbatim.
 

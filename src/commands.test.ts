@@ -4025,3 +4025,26 @@ function shellWords(line: string): string[] {
   if (word !== undefined) words.push(word);
   return words;
 }
+
+test('a --filter the API would refuse is refused here, before anything is sent', async () => {
+  const mock = createMockClient();
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--filter', 'field_1 = 1'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /operator '=' is written 'eq'/);
+  assert.equal(mock.requests.length, 0);
+
+  const quoted = await cli(
+    ['entry', 'list', '--form', 'Kp7mQ2', '--filter', 'created_at between "2026-10-31 00:00:00","2026-10-31 23:59:59"'],
+    { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client }
+  );
+  assert.equal(quoted.exitCode, 0, quoted.stderr);
+  assert.equal(
+    mock.requests[0]?.query?.filters,
+    JSON.stringify([
+      { field: 'created_at', operator: 'between', value: ['2026-10-31 00:00:00', '2026-10-31 23:59:59'] }
+    ])
+  );
+});
