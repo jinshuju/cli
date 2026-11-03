@@ -2,13 +2,15 @@
  * What changed between two copies of openapi.yaml, for the spec-sync pull
  * request, and whether the change reaches what the CLI does.
  *
- * The CLI follows the spec in two places at run time: the method, path and
- * parameters of each operation it calls, which `call` checks and spells, and
- * the lists of values its flags read with `choices` and `bodyChoices`. A
- * change to either is a feat, and releases. A request body goes as given, so a
- * change to one moves only what the tests hold the CLI's own bodies to: a
- * chore, like a change to an operation the CLI does not call, or to prose.
- * Responses never count.
+ * The CLI follows the spec in three places at run time: the method, path and
+ * parameters of each operation it calls, which `call` checks and spells; the
+ * lists of values its flags read with `choices` and `bodyChoices`; and the
+ * request bodies of the operations it calls, which src/preflight.ts holds to
+ * their required keys, types and discriminators before sending. A change to
+ * any of them is a feat, and releases — a body change most of all, since a
+ * CLI left on the old copy would refuse what the API now takes. A change to
+ * an operation the CLI does not call, or to prose, is a chore. Responses
+ * never count.
  *
  * Usage:
  *   node scripts/spec-diff.mjs <old openapi.yaml> <new openapi.yaml>          markdown
@@ -228,15 +230,19 @@ const movedLookups = lookups.flatMap((lookup) => {
   return [{ name: `${lookup.id} ${lookup.path}`, gained, lost }];
 });
 
+const bodiesOnly = bodyChanged.filter((id) => used.has(id) && !parametersChanged.includes(id));
 const reachesCli = [
   ...removed.filter((id) => used.has(id)).map((id) => ({ name: id, why: 'removed' })),
   ...parametersChanged.filter((id) => used.has(id)).map((id) => ({ name: id, why: 'method, path or parameters' })),
   ...movedLookups.map(({ name, gained, lost }) => ({
     name,
     why: [...gained.map((value) => `+${value}`), ...lost.map((value) => `−${value}`)].join(' ') || 'values'
-  }))
+  })),
+  // A body whose change a flag's list already names is named once, by the list.
+  ...bodiesOnly
+    .filter((id) => !movedLookups.some(({ name }) => name.startsWith(`${id} `)))
+    .map((id) => ({ name: id, why: 'request body' }))
 ];
-const bodiesOnly = bodyChanged.filter((id) => used.has(id) && !parametersChanged.includes(id));
 const elsewhere = {
   added: added.filter((id) => !used.has(id)),
   removed: removed.filter((id) => !used.has(id)),
@@ -267,7 +273,7 @@ if (titleOnly) {
   }
   if (bodiesOnly.length > 0) {
     lines.push(
-      `- Request bodies the CLI sends as given changed, for the API to judge; the tests hold the CLI's own bodies to them: ${bodiesOnly.map(code).join(', ')}`
+      `- Request bodies the CLI holds a payload to before sending changed; a CLI on the old copy may refuse what the API now takes: ${bodiesOnly.map(code).join(', ')}`
     );
   }
   const others = [

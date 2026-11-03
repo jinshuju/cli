@@ -28,6 +28,7 @@ says what the CLI does; this says how, for whoever changes it next.
 
 ```
 spec/openapi.yaml   the published API v1 spec, verbatim; spec-sync keeps it current
+spec/fetched-on     the day it was fetched, which a refusal made against it names
 scripts/
   fetch-spec.mjs    downloads it
   generate.mjs      spec/openapi.yaml -> src/generated/operations.ts; the one place that reads OpenAPI
@@ -50,6 +51,8 @@ src/
   options.ts        the shared option grammar, and the parsers for --filter, --sort, --metric
   spec.ts           call(): an operation as a request, path and query checked against the spec;
                     the values a flag takes
+  schema.ts         a value held to a schema of the generated table: what is wrong, and how surely
+  preflight.ts      the one look at a body before it is sent; refuses what no newer spec could take
   testing/
     conformance.ts  the tests' check of a request against the spec; not shipped
   generated/
@@ -68,9 +71,10 @@ src/
 ```
 
 Dependencies point downward: `cli.ts` knows everything, `commands/` knows
-`options`, `spec`, `http` and `render` types, `spec.ts` knows the generated
-table and `errors`, `http.ts` knows `config`, `auth` and `errors`, and
-`errors.ts`, `values.ts`, `version.ts` know nothing.
+`options`, `spec`, `http` and `render` types, `preflight.ts` knows `schema`,
+`spec` and `errors`, `spec.ts` and `schema.ts` know the generated table and
+`errors`, `http.ts` knows `config`, `auth` and `errors`, and `errors.ts`,
+`values.ts`, `version.ts` know nothing.
 
 ## A request, end to end
 
@@ -88,7 +92,9 @@ table and `errors`, `http.ts` knows `config`, `auth` and `errors`, and
 4. `auth` and `config` go to `local.ts`. Everything else goes to `runRemote`,
    which builds the `HttpClient` from config and either calls the command's
    `run` or sends its `request`. Either way the request was made by
-   `spec.call`, which refuses a parameter or a value the spec would.
+   `spec.call`, which refuses a parameter or a value the spec would, and
+   leaves through `preflight.checked`, which looks once at a body on its way
+   to the client and refuses the few things no newer spec could take.
 5. `JinshujuHttpClient.request` adds the credential, a `User-Agent` and a
    deadline, serializes the query, and sends. A 401 on a stored OAuth session
    refreshes the token and tries once more. A retryable status is tried again
@@ -161,15 +167,26 @@ the same reason. The lists inside such a document are the spec's too:
 `choices('listEntries', 'filters[].operator')` walks into it the way
 `bodyChoices` walks a body, and is what the `--filter` help lists.
 
-A body goes as given. API v1 validates every request against the openapi.yaml
-it runs — the only copy never out of date — and its 400 already says, by
-pointer, what is wrong. A check here would save that round trip, but an
-installed CLI keeps the spec it shipped with until someone upgrades it, and
-from then on it would refuse each field type, key and value the API learns: an
-old client is always stricter than the API it talks to. Path and query are
-different. They come from the CLI's own flags, a new parameter needs a new
-release anyway, and they are held only to their type, never to a range or a
-list that may grow.
+A body goes as given, after one look. API v1 validates every request against
+the openapi.yaml it runs — the only copy never out of date — and its 400
+already says, by pointer, what is wrong. A full check here would save that
+round trip, but an installed CLI keeps the spec it shipped with until someone
+upgrades it, and from then on it would refuse each field type, key and value
+the API learns: an old client is always stricter than the API it talks to. So
+`preflight.ts` refuses only what no newer spec could have made right — a
+required key missing, a value of the wrong type, `null` where nothing may be
+null, a field's `validation` written back as `form get` returned it — and
+sends the rest, a key or a value this copy does not list included, for the API
+to judge. `schema.ts` says of each issue how surely its rule applied: a value
+that may be one of several shapes is told about the closest, and that is a
+guess, never refused on; a discriminator's branch is the value's own choice,
+and is held to. Three days of the CLI's 400s were mostly of the refused kind,
+and a field of a right type was being told about the wrong shapes besides.
+`--as-is` sends a body anyway, and a refusal names the day `spec/fetched-on`
+records, so a copy that has fallen behind can be told from a payload that is
+wrong. Path and query are different. They come from the CLI's own flags, a
+new parameter needs a new release anyway, and they are held only to their
+type, never to a range or a list that may grow.
 
 The tests hold every request the command tests send, and every example in the
 help, to the spec — the body and the documents the query carries included —
@@ -187,9 +204,10 @@ request on `chore/sync-openapi` listing the operations and schemas that moved
 and which of them the CLI calls. Its title comes from the same comparison, and
 follows what the CLI does with the spec at run time: a change to the method,
 path or parameters of an operation it calls, or to a list of values a flag
-reads, is a `feat` naming it, and releases. A request body changing is a
-`chore`, since the CLI sends bodies as given and only its tests read their
-schemas; so is an operation it does not call, and so is prose. `spec-diff`
+reads, is a `feat` naming it, and releases. So is a request body of an
+operation it calls, since `preflight.ts` holds a payload to it: a CLI left on
+the old copy would refuse what the API now takes, and releasing is what
+shortens that. An operation it does not call is a `chore`, and so is prose. `spec-diff`
 reads the lookups off the source, which is why each names its operation and
 field in literals. The pull request is opened even when the CLI no
 longer passes, and says so: that is the case that needs a person.

@@ -3,6 +3,28 @@ export class UsageError extends Error {
   override name = 'UsageError';
 }
 
+/** One thing a body was refused for before it was sent, at the value a JSON Pointer names. */
+export interface Refusal {
+  readonly pointer: string;
+  readonly message: string;
+}
+
+/**
+ * A body refused here, before it was sent, by the openapi.yaml this CLI
+ * shipped with (src/preflight.ts). Usage, like any input the CLI could not
+ * take, and the reasons are kept apart from the words so `--output json`
+ * can carry them the way a server's 400 carries its errors[].
+ */
+export class PreflightError extends UsageError {
+  constructor(
+    message: string,
+    readonly errors: readonly Refusal[]
+  ) {
+    super(message);
+    this.name = 'PreflightError';
+  }
+}
+
 /** No credential, or one the server would not take. */
 export class AuthError extends Error {
   override name = 'AuthError';
@@ -86,6 +108,8 @@ export type ClassifiedError = {
   body?: unknown;
   /** Seconds the server asked for before trying again, when it said. */
   retry_after?: number;
+  /** What a body was refused for before it was sent, each at its pointer. */
+  errors?: readonly Refusal[];
 };
 
 function kindOfStatus(status: number): ErrorKind {
@@ -111,6 +135,9 @@ function retryAfterIn(body: unknown): number | undefined {
  */
 export function classify(error: unknown): ClassifiedError {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof PreflightError) {
+    return { kind: 'usage', exitCode: EXIT_CODES.usage, message, errors: error.errors };
+  }
   if (error instanceof UsageError) return { kind: 'usage', exitCode: EXIT_CODES.usage, message };
   if (error instanceof AuthError) return { kind: 'auth', exitCode: EXIT_CODES.auth, message };
   if (error instanceof RefusedError) return { kind: 'refused', exitCode: EXIT_CODES.refused, message };

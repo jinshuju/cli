@@ -6,6 +6,9 @@ import type { Operation, Schema } from '../spec.js';
 /** The path every operation's path is relative to, from `servers`. */
 export const BASE_PATH = '/api/v1';
 
+/** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
+export const SPEC_DATE: string | undefined = '2026-10-29';
+
 export type OperationId =
   | 'aggregateEntries'
   | 'aggregateFormViewEntries'
@@ -543,7 +546,18 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
                 { $ref: 'WxworkNotificationRuleInput' },
                 { $ref: 'DingTalkNotificationRuleInput' },
                 { $ref: 'WebhookNotificationRuleInput' }
-              ]
+              ],
+              discriminator: {
+                propertyName: 'approach',
+                mapping: {
+                  SMS: 'SMSNotificationRuleInput',
+                  EMAIL: 'EmailNotificationRuleInput',
+                  WEIXIN_ONETIME: 'WeixinOnetimeNotificationRuleInput',
+                  WXWORK: 'WxworkNotificationRuleInput',
+                  DING_TALK: 'DingTalkNotificationRuleInput',
+                  WEBHOOK: 'WebhookNotificationRuleInput'
+                }
+              }
             }
           ]
         }
@@ -2631,6 +2645,57 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       label: { type: 'string' }
     },
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        TextField: 'TextFieldInput',
+        TextArea: 'TextAreaInput',
+        NumberField: 'NumberFieldInput',
+        EmailField: 'EmailFieldInput',
+        MobileField: 'MobileFieldInput',
+        IdCardField: 'IdCardFieldInput',
+        NameField: 'NameFieldInput',
+        RadioButton: 'RadioButtonInput',
+        CheckBox: 'CheckBoxInput',
+        DropDown: 'DropDownInput',
+        DateTimeField: 'DateTimeFieldInput',
+        RatingField: 'RatingFieldInput',
+        TableField: 'TableFieldInput',
+        TelephoneField: 'TelephoneFieldInput',
+        AddressField: 'AddressFieldInput',
+        AttachmentField: 'AttachmentFieldInput',
+        GeoField: 'GeoFieldInput',
+        LinkField: 'LinkFieldInput',
+        NpsField: 'NpsFieldInput',
+        TimeField: 'TimeFieldInput',
+        SortField: 'SortFieldInput',
+        ESignatureField: 'ESignatureFieldInput',
+        AudioField: 'AudioFieldInput',
+        CascadeDropDown: 'CascadeDropDownInput',
+        LikertField: 'LikertFieldInput',
+        MatrixField: 'MatrixFieldInput',
+        MatrixScaleField: 'MatrixScaleFieldInput',
+        GoodsField: 'GoodsFieldInput',
+        FormulaField: 'FormulaFieldInput',
+        ReservationField: 'ReservationFieldInput',
+        FormAssociation: 'FormAssociationInput',
+        ImageRadioButton: 'ImageRadioButtonInput',
+        ImageCheckBox: 'ImageCheckBoxInput',
+        SectionBreak: 'SectionBreakInput',
+        PageBreak: 'PageBreakInput',
+        WidgetButton: 'WidgetButtonInput',
+        WidgetContact: 'WidgetContactInput',
+        WidgetMap: 'WidgetMapInput',
+        WidgetMarquee: 'WidgetMarqueeInput',
+        SingleSelect: 'SingleSelectInput',
+        MultiSelect: 'MultiSelectInput',
+        ImageSingleSelect: 'ImageSingleSelectInput',
+        ImageMultiSelect: 'ImageMultiSelectInput',
+        DropDownSelect: 'DropDownSelectInput',
+        Rating: 'RatingInput',
+        Nps: 'NpsInput'
+      }
+    },
     oneOf: [
       { $ref: 'TextFieldInput' },
       { $ref: 'TextAreaInput' },
@@ -2792,6 +2857,61 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       label: { type: 'string' }
     },
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        TextField: 'TextFieldInput',
+        TextArea: 'TextAreaInput',
+        NumberField: 'NumberFieldInput',
+        EmailField: 'EmailFieldInput',
+        MobileField: 'MobileFieldInput',
+        IdCardField: 'IdCardFieldInput',
+        NameField: 'NameFieldInput',
+        RadioButton: 'RadioButtonInput',
+        CheckBox: 'CheckBoxInput',
+        DropDown: 'DropDownInput',
+        DateTimeField: 'DateTimeFieldInput',
+        RatingField: 'RatingFieldInput',
+        TableField: 'TableFieldInput',
+        TelephoneField: 'TelephoneFieldInput',
+        AddressField: 'AddressFieldInput',
+        AttachmentField: 'AttachmentFieldInput',
+        GeoField: 'GeoFieldInput',
+        LinkField: 'LinkFieldInput',
+        NpsField: 'NpsFieldInput',
+        TimeField: 'TimeFieldInput',
+        SortField: 'SortFieldInput',
+        ESignatureField: 'ESignatureFieldInput',
+        AudioField: 'AudioFieldInput',
+        CascadeDropDown: 'CascadeDropDownInput',
+        LikertField: 'LikertFieldInput',
+        MatrixField: 'MatrixFieldInput',
+        MatrixScaleField: 'MatrixScaleFieldInput',
+        GoodsField: 'GoodsFieldInput',
+        FormulaField: 'FormulaFieldInput',
+        ReservationField: 'ReservationFieldInput',
+        FormAssociation: 'FormAssociationInput',
+        ImageRadioButton: 'ImageRadioButtonInput',
+        ImageCheckBox: 'ImageCheckBoxInput',
+        SectionBreak: 'SectionBreakInput',
+        PageBreak: 'PageBreakInput',
+        WidgetButton: 'WidgetButtonInput',
+        WidgetContact: 'WidgetContactInput',
+        WidgetMap: 'WidgetMapInput',
+        WidgetMarquee: 'WidgetMarqueeInput',
+        SingleSelect: 'SingleSelectInput',
+        MultiSelect: 'MultiSelectInput',
+        ImageSingleSelect: 'ImageSingleSelectInput',
+        ImageMultiSelect: 'ImageMultiSelectInput',
+        TrueOrFalse: 'TrueOrFalseInput',
+        DropDownSelect: 'DropDownSelectInput',
+        FillInBlank: 'FillInBlankInput',
+        ShortAnswer: 'ShortAnswerInput',
+        FillInNumber: 'FillInNumberInput',
+        Department: 'DepartmentInput',
+        Grade: 'GradeInput'
+      }
+    },
     oneOf: [
       { $ref: 'TextFieldInput' },
       { $ref: 'TextAreaInput' },
@@ -2921,6 +3041,50 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         ]
       },
       label: { type: 'string' }
+    },
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        TextField: 'TextFieldInput',
+        TextArea: 'TextAreaInput',
+        NumberField: 'NumberFieldInput',
+        EmailField: 'EmailFieldInput',
+        MobileField: 'MobileFieldInput',
+        IdCardField: 'IdCardFieldInput',
+        NameField: 'NameFieldInput',
+        RadioButton: 'RadioButtonInput',
+        CheckBox: 'CheckBoxInput',
+        DropDown: 'DropDownInput',
+        DateTimeField: 'DateTimeFieldInput',
+        RatingField: 'RatingFieldInput',
+        TableField: 'TableFieldInput',
+        TelephoneField: 'TelephoneFieldInput',
+        AddressField: 'AddressFieldInput',
+        AttachmentField: 'AttachmentFieldInput',
+        GeoField: 'GeoFieldInput',
+        LinkField: 'LinkFieldInput',
+        NpsField: 'NpsFieldInput',
+        TimeField: 'TimeFieldInput',
+        SortField: 'SortFieldInput',
+        ESignatureField: 'ESignatureFieldInput',
+        AudioField: 'AudioFieldInput',
+        CascadeDropDown: 'CascadeDropDownInput',
+        LikertField: 'LikertFieldInput',
+        MatrixField: 'MatrixFieldInput',
+        MatrixScaleField: 'MatrixScaleFieldInput',
+        GoodsField: 'GoodsFieldInput',
+        FormulaField: 'FormulaFieldInput',
+        ReservationField: 'ReservationFieldInput',
+        FormAssociation: 'FormAssociationInput',
+        ImageRadioButton: 'ImageRadioButtonInput',
+        ImageCheckBox: 'ImageCheckBoxInput',
+        SectionBreak: 'SectionBreakInput',
+        PageBreak: 'PageBreakInput',
+        WidgetButton: 'WidgetButtonInput',
+        WidgetContact: 'WidgetContactInput',
+        WidgetMap: 'WidgetMapInput',
+        WidgetMarquee: 'WidgetMarqueeInput'
+      }
     },
     oneOf: [
       { $ref: 'TextFieldInput' },
@@ -4720,6 +4884,13 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         type: 'object',
         required: ['type'],
         properties: { type: { type: 'string', enum: ['by_day_repeat_weekly', 'by_time_range_repeat_daily'] } },
+        discriminator: {
+          propertyName: 'type',
+          mapping: {
+            by_day_repeat_weekly: 'ReservationByDayQuotaInput',
+            by_time_range_repeat_daily: 'ReservationByTimeRangeQuotaInput'
+          }
+        },
         oneOf: [{ $ref: 'ReservationByDayQuotaInput' }, { $ref: 'ReservationByTimeRangeQuotaInput' }]
       }
     }
@@ -5093,6 +5264,24 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         ]
       },
       label: { type: 'string' }
+    },
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        TextArea: 'TextAreaInput',
+        RadioButton: 'RadioButtonInput',
+        CheckBox: 'CheckBoxInput',
+        BooleanField: 'BooleanFieldInput',
+        MobileField: 'MobileFieldInput',
+        NumberField: 'NumberFieldInput',
+        DateTimeField: 'DateTimeFieldInput',
+        EmailField: 'EmailFieldInput',
+        LinkField: 'LinkFieldInput',
+        AttachmentField: 'AttachmentFieldInput',
+        FormulaField: 'FormulaFieldInput',
+        RelationField: 'RelationFieldInput',
+        SequenceField: 'SequenceFieldInput'
+      }
     },
     oneOf: [
       { $ref: 'TextAreaInput' },

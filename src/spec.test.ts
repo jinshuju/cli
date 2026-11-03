@@ -4,8 +4,18 @@ import assert from 'node:assert/strict';
 import { UsageError } from './errors.js';
 import { withQuery } from './http.js';
 import { FORM_IMAGE_TYPES } from './commands/upload.js';
-import { BASE_PATH, bodyChoices, call, choices, operation, unansweredLookups, type Schema } from './spec.js';
-import { nonconformities, operationOf, validate } from './testing/conformance.js';
+import { validate } from './schema.js';
+import {
+  BASE_PATH,
+  bodyChoices,
+  call,
+  choices,
+  operation,
+  operationOf,
+  unansweredLookups,
+  type Schema
+} from './spec.js';
+import { nonconformities } from './testing/conformance.js';
 
 test('a request is the operation openapi.yaml names, under the base path, its path parameters encoded', () => {
   const request = call('getEntry', {

@@ -3912,7 +3912,10 @@ test('what the API may have learned since this CLI was installed is sent, for th
     }),
     cli(['folder', 'list', '--limit', '500'], { env, client: mock.client }),
     cli(['table', 'create', '--json', '{"name":"t","fields":[]}'], { env, client: mock.client }),
-    cli(['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"TextField"}'], { env, client: mock.client }),
+    cli(['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"HologramField","label":"h","depth":3}'], {
+      env,
+      client: mock.client
+    }),
     cli(['comment', 'create', '--form', 'Kp7mQ2', '--entry', '12', 'x'.repeat(2001)], { env, client: mock.client })
   ]);
 

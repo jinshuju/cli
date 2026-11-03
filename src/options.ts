@@ -36,6 +36,12 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
     description: 'Output format: text, json, or jsonl (one JSON object per line; a listing streams its rows)'
   },
   { name: '--config', type: 'string', placeholder: '<path>', description: 'Config file path' },
+  {
+    name: '--as-is',
+    type: 'boolean',
+    description:
+      'Send a payload as it is, skipping the check against the openapi.yaml this CLI shipped with; for when the API has since learned what it refuses'
+  },
   { name: '--help', short: '-h', type: 'boolean', description: 'Show help' },
   // -V rather than -v: nearly every CLI reads -v as verbose, and a flag that
   // prints a version where the reader expected more output is a small betrayal.
