@@ -17,24 +17,32 @@ import { isRecord } from './values.js';
  * have made right — a key that is required, a value of the wrong type, null
  * where nothing may be null, a field read back and written back as it came —
  * and sends everything else for the API to judge: a key or a value this copy
- * does not list may be one the API has learned since. Three days of the
- * CLI's 400s were mostly the first kind: a field's `validation` written back
- * as `form get` returned it, `null` for every key left unset, a choice to
- * update named by its value rather than its api_code.
+ * does not list may be one the API has learned since. What the CLI's callers
+ * were most often refused for was the first kind: a field's `validation`
+ * written back as `form get` returned it, `null` for every key left unset, a
+ * choice to update named by its value rather than its api_code.
  *
- * What the look finds is said at once, every reason at its pointer, and
- * nothing is sent. `--as-is` sends the body anyway, for when the API has in
- * fact learned what this copy refuses; the refusal names the day the copy was
- * fetched so that case can be told.
+ * What the look finds is said at once, every reason at its pointer, and the
+ * request is not sent. `--as-is` sends the body anyway, for when the API has
+ * in fact learned what this copy refuses; the refusal names the day the copy
+ * was fetched so that case can be told.
  */
 
-/** The client with the look on the way: a request whose body it refuses never reaches the one wrapped. */
+/**
+ * The client with the look on the way: a request whose body it refuses never
+ * reaches the one wrapped. Its `check` is the same look without the sending,
+ * for a command that has a second request ready before its first has written.
+ */
 export function checked(client: HttpClient, asIs: boolean): HttpClient {
   if (asIs) return client;
+  const check = (request: HttpRequest): void => {
+    const refusals = preflight(request);
+    if (refusals.length > 0) throw new PreflightError(describe(refusals), refusals);
+  };
   return {
+    check,
     async request<T>(request: HttpRequest): Promise<T> {
-      const refusals = preflight(request);
-      if (refusals.length > 0) throw new PreflightError(describe(refusals), refusals);
+      check(request);
       return client.request<T>(request);
     }
   };
@@ -110,25 +118,14 @@ function hint(pointer: string): string {
 }
 
 /**
- * What the API refuses by a rule of its own rather than by the schema, and
- * says so plainly — kept here only where the CLI can say it sooner and name
- * its own command for the right way.
+ * What the API refuses by a rule of its own rather than by the schema — kept
+ * here only where the rule reads off the payload alone. `choices` on a field
+ * update is refused by what the field is now, a CascadeDropDown or a text
+ * field turning into a choice field taking them; that is the server's to
+ * know, so it is the server's to refuse.
  */
 function ownRules(id: OperationId, body: unknown): Refusal[] {
   const refusals: Refusal[] = [];
-  if ((id === 'updateForm' || id === 'updateTable') && isRecord(body) && isRecord(body.fields)) {
-    const updates = Array.isArray(body.fields.update) ? body.fields.update : [];
-    updates.forEach((field: unknown, index) => {
-      if (isRecord(field) && 'choices' in field) {
-        refusals.push({
-          pointer: `/fields/update/${index}/choices`,
-          message:
-            'choices are not changed on update; change them with ' +
-            '`jinshuju field update-choices <api-code> --json \'{"add":[…],"update":[…],"remove":[…]}\'`'
-        });
-      }
-    });
-  }
   if (id === 'createForm' && isRecord(body) && Array.isArray(body.fields)) {
     const first = body.fields[0];
     const typeOf = (field: unknown) => (isRecord(field) ? field.type : undefined);
@@ -147,7 +144,7 @@ function describe(refusals: readonly Refusal[]): string {
   return [
     `the payload would be refused, by ${copy} this CLI shipped with:`,
     ...refusals.map(({ pointer, message }) => `  ${pointer || '/'}: ${message}`),
-    'Nothing was sent. --as-is sends it anyway, for the API to judge by the spec it runs.'
+    'The request was not sent. --as-is sends it anyway, for the API to judge by the spec it runs.'
   ].join('\n');
 }
 

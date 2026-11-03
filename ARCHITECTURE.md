@@ -72,9 +72,9 @@ src/
 
 Dependencies point downward: `cli.ts` knows everything, `commands/` knows
 `options`, `spec`, `http` and `render` types, `preflight.ts` knows `schema`,
-`spec` and `errors`, `spec.ts` and `schema.ts` know the generated table and
-`errors`, `http.ts` knows `config`, `auth` and `errors`, and `errors.ts`,
-`values.ts`, `version.ts` know nothing.
+`spec` and `errors`, `spec.ts` and `schema.ts` know the generated table,
+`errors` and `values`, `http.ts` knows `config`, `auth` and `errors`, and
+`errors.ts`, `values.ts`, `version.ts` know nothing.
 
 ## A request, end to end
 
@@ -180,13 +180,18 @@ sends the rest, a key or a value this copy does not list included, for the API
 to judge. `schema.ts` says of each issue how surely its rule applied: a value
 that may be one of several shapes is told about the closest, and that is a
 guess, never refused on; a discriminator's branch is the value's own choice,
-and is held to. Three days of the CLI's 400s were mostly of the refused kind,
-and a field of a right type was being told about the wrong shapes besides.
+and is held to. What the CLI's callers were refused for was mostly of the
+refused kind, and a field of a right type was being told about the wrong
+shapes besides. A rule the API keeps outside its schema is refused here only
+when it reads off the payload alone: whether a field update may carry
+`choices` turns on what the field is now, and is the server's to say.
 `--as-is` sends a body anyway, and a refusal names the day `spec/fetched-on`
 records, so a copy that has fallen behind can be told from a payload that is
-wrong. Path and query are different. They come from the CLI's own flags, a
-new parameter needs a new release anyway, and they are held only to their
-type, never to a range or a list that may grow.
+wrong. A command that makes two requests asks the same look about its second
+before its first has written, through the client's `check`. Path and query
+are different. They come from the CLI's own flags, a new parameter needs a
+new release anyway, and they are held only to their type, never to a range or
+a list that may grow.
 
 The tests hold every request the command tests send, and every example in the
 help, to the spec — the body and the documents the query carries included —

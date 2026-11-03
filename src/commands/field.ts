@@ -5,15 +5,16 @@ import type { Command, CommandInput } from './types.js';
 
 /**
  * One field, or a list of them — the same objects `fields` holds above. And
- * what a field read back is not: three days of the CLI's 400s were mostly a
- * field written back as `form get` returned it.
+ * what a field read back is not: what the CLI's callers were most often
+ * refused for was a field written back as `form get` returned it.
  */
 const FIELD_PAYLOAD: readonly string[] = [
   '{ "type": "TextField", "label": "Notes", "required": false }',
   '',
   'A field as `form get` or `field list` returns it is not a field to write back:',
   '  validation: {required, unique, minimum_length, …} is written flat on the field',
-  '  choices are changed with `field update-choices`, not `field update`',
+  '  choices are changed with `field update-choices`; `field update` takes them only on a',
+  '    CascadeDropDown, or with a `type` that turns a text field into a choice field',
   '  a key read as null is left out, not written as null',
   '',
   'Field types: jinshuju field types'

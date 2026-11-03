@@ -49,7 +49,7 @@ test('a field written back as it was read is refused before it is sent, with the
   );
   assert.match(result.stderr, /write its keys flat on the field: \{"required":true,"unique":false\}/);
   assert.match(result.stderr, /leave out white_list_values, which a write does not take/);
-  assert.match(result.stderr, /Nothing was sent\. --as-is sends it anyway/);
+  assert.match(result.stderr, /The request was not sent\. --as-is sends it anyway/);
 });
 
 test('null for a key the spec does not let be null is refused, and the key read as null is named', async () => {
@@ -74,7 +74,7 @@ test('null for a key the spec does not let be null is refused, and the key read 
   });
 });
 
-test('a choice to update without its api_code, and choices on a field update, are refused with the way in', async () => {
+test('a choice to update without its api_code is refused with the way in; choices on a field update go', async () => {
   const mock = recording();
   const choices = await runCli(
     field('{"update":[{"value":"a","quota":3}],"add":[{"name":"c","position":1}]}', 'update-choices'),
@@ -87,14 +87,22 @@ test('a choice to update without its api_code, and choices on a field update, ar
   );
   // position is a key this copy of the spec does not list, which the API may have learned: not this check's to refuse.
   assert.doesNotMatch(choices.stderr, /position/);
-
-  const onUpdate = await runCli(field('{"choices":[{"name":"x"}]}'), { env: ENV, client: mock.client });
-  assert.equal(onUpdate.exitCode, 2);
-  assert.match(
-    onUpdate.stderr,
-    /\/fields\/update\/0\/choices: choices are not changed on update; change them with `jinshuju field update-choices/
-  );
   assert.equal(mock.requests.length, 0);
+
+  // Whether an update takes choices is decided by what the field is now — a
+  // CascadeDropDown does, a text field turning into a choice field does — which
+  // only the server knows, so both go to it.
+  const cascade = await runCli(field('{"choices":[{"value":"x","sub_choices":[{"value":"y"}]}]}'), {
+    env: ENV,
+    client: mock.client
+  });
+  assert.equal(cascade.exitCode, 0, cascade.stderr);
+  const turning = await runCli(field('{"type":"RadioButton","choices":[{"value":"x"}]}'), {
+    env: ENV,
+    client: mock.client
+  });
+  assert.equal(turning.exitCode, 0, turning.stderr);
+  assert.equal(mock.requests.length, 2);
 });
 
 test('what a newer spec may take is sent: an unknown key, an unknown value, an unknown field type, a longer list', async () => {
@@ -170,6 +178,26 @@ test('a form with page breaks that does not start with one is refused, as the AP
   );
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /\/fields\/0: a form with page breaks starts with one; put a PageBreak first/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('a command with two requests to make is refused for the second before the first has written', async () => {
+  const mock = recording();
+  const result = await runCli(
+    [
+      'form',
+      'create',
+      '--json',
+      '{"name":"x","fields":[{"type":"TextField","label":"a"}],"exam_setting":{"limited_time":"30"}}',
+      '--config',
+      NO_CONFIG
+    ],
+    { env: ENV, client: mock.client }
+  );
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /\/limited_time: must be integer, got "30"/);
+  assert.match(result.stderr, /The request was not sent\./);
+  assert.doesNotMatch(result.stderr, /was created/);
   assert.equal(mock.requests.length, 0);
 });
 

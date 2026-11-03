@@ -1,5 +1,6 @@
 import { SCHEMAS } from './generated/operations.js';
 import type { Schema } from './spec.js';
+import { isRecord } from './values.js';
 
 /**
  * A value held to a schema, as scripts/generate.mjs keeps one. The keywords
@@ -82,10 +83,10 @@ export function validate(schema: Schema | boolean, value: unknown, pointer = '',
       issue('shape', 'must contain a matching item');
     }
   }
-  if (isPlainObject(value)) issues.push(...objectIssues(s, value, pointer, certain));
+  if (isRecord(value)) issues.push(...objectIssues(s, value, pointer, certain));
 
   for (const part of s.allOf ?? []) issues.push(...validate(part, value, pointer, certain));
-  if (s.discriminator !== undefined && isPlainObject(value)) {
+  if (s.discriminator !== undefined && isRecord(value)) {
     issues.push(...discriminated(s, value, pointer, certain));
   } else {
     if (s.anyOf !== undefined) issues.push(...alternatives(s.anyOf, value, pointer, certain, 'anyOf'));
@@ -188,7 +189,7 @@ function discriminatedAmong(
   pointer: string,
   certain: boolean
 ): Issue[] | undefined {
-  if (!isPlainObject(value)) return undefined;
+  if (!isRecord(value)) return undefined;
   const unions = parts.flatMap((part) => {
     const here = typeof part === 'object' ? resolved(part) : undefined;
     return here?.discriminator === undefined ? [] : [here.discriminator];
@@ -251,14 +252,10 @@ function isType(value: unknown, type: string): boolean {
     case 'array':
       return Array.isArray(value);
     case 'object':
-      return isPlainObject(value);
+      return isRecord(value);
     default:
       return true;
   }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function same(a: unknown, b: unknown): boolean {
@@ -266,6 +263,6 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 /** A key as a JSON Pointer segment spells it. */
-export function escape(name: string): string {
+function escape(name: string): string {
   return name.replace(/~/g, '~0').replace(/\//g, '~1');
 }
