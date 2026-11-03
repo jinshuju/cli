@@ -25,6 +25,12 @@ export type HttpRequest = {
 
 export interface HttpClient {
   request<T>(request: HttpRequest): Promise<T>;
+  /**
+   * What `request` would be refused for before it was sent, thrown now and
+   * nothing sent: a command with two requests to make asks about the second
+   * before the first has written. A client that sends as given has none.
+   */
+  check?(request: HttpRequest): void;
 }
 
 /**
@@ -140,30 +146,38 @@ const MAX_REASONS = 20;
  * three of what may be a hundred and counts the rest. A caller shown the
  * description alone corrects what it was told, sends again, and learns the
  * next. So every reason is a line of its own, under whatever the description
- * said ahead of the first ("Request body invalid:"). One line per pointer: a
- * field that may be one of several shapes is told about the same pointer once
- * per shape, and the first telling is the shape it comes closest to. A list
- * too long to read is cut, and says how many it kept back.
+ * said ahead of the first ("Request body invalid:"). One line per pointer,
+ * carrying each distinct reason said at it: a value may break two rules at
+ * once (too short, and not of its pattern), and a field that may be one of
+ * several shapes is told about the same pointer once per shape. A list too
+ * long to read is cut, and says how many it kept back.
  */
 function everyReason(body: Record<string, unknown>, stated: string): { head: string; rest: string[] } | undefined {
   const errors = body.errors;
   if (!Array.isArray(errors) || errors.length === 0) return undefined;
 
-  const lines: string[] = [];
-  const said = new Set<string>();
+  // Pointer to the reasons said at it, in the order the pointers were first named.
+  const said = new Map<string, { at: string | undefined; messages: string[] }>();
   let first: string | undefined;
+  let count = 0;
   for (const item of errors) {
     if (item === null || typeof item !== 'object') continue;
     const { pointer, message } = item as { pointer?: unknown; message?: unknown };
     if (typeof message !== 'string' || !message.trim()) continue;
     const at = typeof pointer === 'string' && pointer ? pointer : undefined;
-    if (said.has(at ?? message)) continue;
-    said.add(at ?? message);
+    const entry = said.get(at ?? message) ?? { at, messages: [] };
+    if (entry.messages.includes(message)) continue;
+    entry.messages.push(message);
+    said.set(at ?? message, entry);
     first ??= message;
-    lines.push(at && !message.includes(at) ? `${at}: ${message}` : message);
+    count += 1;
   }
   if (first === undefined) return undefined;
-  if (lines.length === 1 && stated.includes(first)) return undefined;
+  if (count === 1 && stated.includes(first)) return undefined;
+  const lines = [...said.values()].map(({ at, messages }) => {
+    const text = messages.join('; ');
+    return at && !messages.some((message) => message.includes(at)) ? `${at}: ${text}` : text;
+  });
 
   const kept = lines.slice(0, MAX_REASONS);
   if (lines.length > kept.length) kept.push(`… and ${lines.length - kept.length} more; --output json carries them all`);

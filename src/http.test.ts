@@ -150,10 +150,10 @@ test('a refusal stating only the first of its reasons is reported with every one
   assert.equal(invalid.message, 'Request body invalid:\n  /name: name is required\n  /fields: fields must be an array');
 });
 
-test('a request body refused for many reasons is told every one of them, once per pointer', async () => {
+test('a request body refused for many reasons is told every one of them, grouped by pointer', async () => {
   // What API v1 answers: error_description repeats three of the reasons and
-  // counts the rest, and a field that may be one of several shapes is told
-  // about its type once per shape.
+  // counts the rest, a field that may be one of several shapes is told about
+  // its type once per shape, and a value may break two rules at once.
   const reasons = [
     {
       pointer: '/fields/add/0/validation',
@@ -184,7 +184,10 @@ test('a request body refused for many reasons is told every one of them, once pe
       pointer: '/fields/add/2/range_min',
       message: 'value at `/fields/add/2/range_min` is not a number',
       code: 'number'
-    }
+    },
+    { pointer: '/name', message: 'is shorter than 2 characters', code: 'minLength' },
+    { pointer: '/name', message: 'does not match ^[^/]+$', code: 'pattern' },
+    { pointer: '/name', message: 'is shorter than 2 characters', code: 'minLength' }
   ];
   const many = Array.from({ length: 25 }, (_, i) => ({
     pointer: `/fields/add/${i}`,
@@ -195,7 +198,7 @@ test('a request body refused for many reasons is told every one of them, once pe
     '/api/v1/forms/Kp7mQ2': {
       status: 400,
       body: JSON.stringify({
-        error_description: `Request body invalid: ${reasons[0]?.message} ${reasons[1]?.message} ${reasons[2]?.message} ... (6 errors total)`,
+        error_description: `Request body invalid: ${reasons[0]?.message} ${reasons[1]?.message} ${reasons[2]?.message} ... (9 errors total)`,
         errors: reasons
       })
     },
@@ -216,10 +219,11 @@ test('a request body refused for many reasons is told every one of them, once pe
     [
       'Request body invalid:',
       `  ${reasons[0]?.message}`,
-      `  ${reasons[1]?.message}`,
+      `  ${reasons[1]?.message}; ${reasons[3]?.message}`,
       `  ${reasons[2]?.message}`,
       `  ${reasons[4]?.message}`,
-      `  ${reasons[5]?.message}`
+      `  ${reasons[5]?.message}`,
+      '  /name: is shorter than 2 characters; does not match ^[^/]+$'
     ].join('\n')
   );
   assert.equal(refused.status, 400);
