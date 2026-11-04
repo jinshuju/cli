@@ -19,8 +19,8 @@ info:
       - Personal access token: acts as that user, on the forms they created or that are shared with them;
       - Account access token (Enterprise plan): acts across the account, on all of its forms. Endpoints then have no "current user", and create operations are recorded under the account owner;
       - OAuth 2.0 token: the endpoints it can call are limited by the token's scope; insufficient scope returns `403`. Each endpoint's description states the scope it needs
-        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `artifacts` / `read_contacts` / `users` / `routines` / `public`).
-    - An invalid or revoked token returns `401`; a plan without API v1 returns `402`.
+        (`forms` / `form_setting` / `read_entries` / `write_entries` / `submit_entries` / `artifacts` / `read_contacts` / `users` / `routines` / `memory` / `messages` / `public`).
+    - An invalid or revoked token returns `401`; a plan without API v1 returns `402`; a user disabled in the account, or a frozen account (the owner's, for an account token), returns `403`. Any request on a form or table that is frozen, or whose creator's account is frozen, also returns `403`.
 
     ## Cooperator permissions
     With a personal access token or an OAuth token, what an endpoint does on a form shared with the caller follows the caller's role on it; an account access token is not narrowed by any role.
@@ -53,10 +53,12 @@ info:
     `404` resource does not exist or is not accessible, `422` every item of a batch operation failed, `429` rate limit exceeded.
 
     ## Pagination
-    List endpoints return `{ total, count, data, next }`. `next` being `null` means this is the last page; pass it back unchanged to get the next page.
-    `skip` sets the starting row (from 0, at most 10000), for reading in parallel slices; `skip` and `next` cannot be passed together.
-    Form, table and entry lists, and the "my submissions" lists, take `limit` for the page size (default 50, max 1000); view entry lists are fixed at 50 per page.
-    The 小金商户 order / refund / payout lists are paged by page number: they return `page_info` (total, page, per_page, total_pages) and an array of records; `limit` defaults to and is capped at 50. `next` (the next page number) is present only when there is a next page; pass it back unchanged.
+    List endpoints return `{ total, count, data, next }` and take the same three paging parameters:
+    - `limit` sets the page size: 50 by default, at most 1000 (at most 100 for folders, account members and check-in campaigns).
+    - `next` continues a listing: pass back the previous page's `next` unchanged, with the same query, until it is `null`. The response also carries `Link: <url>; rel="next"`, the full URL of the next page.
+    - `page` (from 1) jumps to a page, e.g. to read pages in parallel; `(page - 1) × limit` can be at most 10000, and the returned `next` continues from there. `skip` (a row offset) still works but is deprecated in favor of `page`.
+    - Pass only one of `next`, `page` and `skip`.
+    The 小金商户 order / refund / payout lists name the array after the records and add `page_info` (total, page, per_page, total_pages); their `limit` is at most 50, and `page` / `next` is the page number, not capped at 10000.
 
     ## Time and time zone
     System times such as `created_at` / `updated_at` are returned in UTC ISO 8601 (e.g. `2021-09-28T02:59:42.539Z`);
@@ -104,10 +106,14 @@ tags:
   description: '小金商户: merchant and onboarding progress, payment orders, transaction statistics, refunds and payouts.'
 - name: Uploads
   description: Uploading attachments, form images, license images and import files.
+- name: Messages
+  description: 'Messages sent through registered channels: email, SMS, DingTalk and WeCom robots, and webhooks, with one record per recipient. OAuth tokens need the `messages` scope, which self-registered clients cannot get.'
 - name: Utilities
   description: Utility endpoints.
 - name: Routines
   description: 'Routines (`自动任务`): instructions Jiri carries out as you, on a schedule or when data changes, and their runs. The rules and messages are those of the routines page; times are in Beijing time (+08:00). OAuth tokens need the `routines` scope. As routines run unattended and spend AI points, self-registered clients cannot get it; only a registered application with `routines` among its scopes (such as the Jinshuju CLI) can ask for it.'
+- name: Memory
+  description: 'Memory (`记忆`): what Jiri remembers about you across conversations, your background and how you want things done; Jiri reads it at the start of every turn. OAuth tokens need the `memory` scope, which self-registered clients cannot get.'
 paths:
   "/forms":
     get:
@@ -128,6 +134,7 @@ paths:
       - $ref: '#/components/parameters/FormsFilters'
       - $ref: '#/components/parameters/FormsSort'
       - $ref: '#/components/parameters/FormsNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/FormsSkip'
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/IncludeTransactions'
@@ -348,7 +355,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          $ref: '#/components/responses/EntryCreatePaymentRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -491,6 +498,7 @@ paths:
       - $ref: '#/components/parameters/EntriesSort'
       - $ref: '#/components/parameters/EntriesCreatedAt'
       - $ref: '#/components/parameters/EntriesNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       - $ref: '#/components/parameters/PageLimit'
@@ -551,7 +559,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          $ref: '#/components/responses/EntryCreatePaymentRequired'
         '403':
           description: The form's entry count has reached its limit (`Form has reached entries limit`), or the OAuth scope is insufficient
           content:
@@ -834,7 +842,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          $ref: '#/components/responses/EntryCreatePaymentRequired'
         '403':
           description: The form's entry count has reached its limit, or the OAuth scope is insufficient
           content:
@@ -1268,8 +1276,6 @@ paths:
         Partially updates the form's settings, writing only the keys present in the request; PUT is accepted too.
         OAuth scope: form_setting
         - `submission_region_limited` / `submission_regions` (a paid feature), `payment_expirable` and `payment_expiration_time` are read-only here; to write them, use `setting` on the "Edit a form" endpoint.
-        - `manually_close_rule`, `by_time_range_close_rule`, `by_entries_close_rule` and `fill_frequency` are nested objects; the server creates or updates them as nested attributes.
-        - Returns `{ "status": "ok" }` on success; returns 400 when model validation fails, with body `{ "errors": "...", "status": "failed" }` (not the common error shape).
       operationId: updateFormSetting
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -1287,7 +1293,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FormSettingSaveOk'
         '400':
-          $ref: '#/components/responses/FormSettingBadRequest'
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -1366,7 +1372,6 @@ paths:
         Updates the form's fill frequency limit (fill_frequency); PUT is accepted too.
         This endpoint takes only the `fill_frequency` key; for the other access policy keys, use PATCH /forms/{form_token}/setting.
         OAuth scope: form_setting
-        Returns `{ "status": "ok" }` on success; returns 400 when validation fails, with body `{ "errors": "...", "status": "failed" }` (not the common error shape).
       operationId: updateAccessPolicy
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -1384,7 +1389,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FormSettingSaveOk'
         '400':
-          $ref: '#/components/responses/FormSettingBadRequest'
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -1545,7 +1550,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationRule'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Invalid parameters, including a `scope_conditions` item on a field, operator or value its field type does not take; `error_description` then names the operators the field takes, the value format and an example
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -1637,7 +1646,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationRule'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Invalid parameters, including a `scope_conditions` item sent on a field, operator or value its field type does not take (conditions not sent are kept as they are); `error_description` then names the operators the field takes, the value format and an example
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -1759,6 +1772,7 @@ paths:
           maximum: 1000
           default: 50
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -2124,10 +2138,11 @@ paths:
       - Forms
       summary: Move a form into a folder
       description: |
-        Moves the form into a folder, or out of one (pass null as `folder_token`); PUT is accepted too. The move affects only the calling user's folder placement.
+        Moves the form into a folder, or out of one (pass null as `folder_token`), the same as moving it on the product page; PUT is accepted too.
         OAuth scope: forms
         - The request body must contain the `folder_token` key (its value may be null); otherwise 400.
         - `folder_token` takes only a folder token (not an id); returns 404 when the folder does not exist or the current user lacks manage permission on it.
+        - Takes a role given on the form itself, not only one inherited from a shared folder, and manage permission on the folder the caller placed it in; otherwise 403. An account access token needs no role.
         - The folder type (form / table) must match the form's type; otherwise 400.
         - To move a table, use `PATCH /tables/{table_token}/folder`.
       operationId: moveFormToFolder
@@ -2382,7 +2397,7 @@ paths:
       tags:
       - Views
       summary: List a view's entries
-      description: 'Returns the form''s entries under the view''s filters and sort rules, at most 50 per page. The returned fields are limited to those in the view''s prefer_columns (serial_number always included); when prefer_columns is empty, all pushable fields are returned. Sorting follows the view''s sort rules, with serial_number ascending appended when they do not include serial_number. Paginate with the next parameter (a row offset); next is null on the last page. Returns 400 when the view''s filters use an operator the query engine does not support. Only views visible to the caller are accessible, otherwise 404 (View cannot be found). OAuth scope: read_entries'
+      description: 'Returns the form''s entries under the view''s filters and sort rules. The returned fields are limited to those in the view''s prefer_columns (serial_number always included); when prefer_columns is empty, all pushable fields are returned. Sorting follows the view''s sort rules, with serial_number ascending appended when they do not include serial_number. Returns 400 when the view''s filters use an operator the query engine does not support. Only views visible to the caller are accessible, otherwise 404 (View cannot be found). OAuth scope: read_entries'
       operationId: listFormViewEntries
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -2392,13 +2407,9 @@ paths:
         description: View token
         schema:
           type: string
-      - name: next
-        in: query
-        required: false
-        description: The next value from the previous page's response (a row offset, starting at 0); a negative value is treated as 0
-        schema:
-          type: integer
-          minimum: 0
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       responses:
         '200':
@@ -2675,7 +2686,7 @@ paths:
         Returns the progress and result of an entry import job. While `status` is `pending` / `running`, the job is still in progress, and `processed_rows` and `total_rows` can be used to show progress;
         `success` / `failed` / `cancelled` are final states; `imported_count` / `skip_count` / `invalid_count` are the numbers of rows written, skipped and failing validation, `warnings` holds per-row notices, and `error_message` is why the job failed.
         A job can be read only through the form it imports into: when the id does not exist, is not a valid id, or belongs to another form, returns 404 `Import job not found for this form — check the id, and that it belongs to this form.`.
-        Returns 404 `form cannot be found` when the form does not exist or is not accessible to the current caller.
+        Returns 404 `Form not found` when the form does not exist or is not accessible to the current caller.
 
         OAuth scope: write_entries
       parameters:
@@ -2793,6 +2804,7 @@ paths:
       - $ref: '#/components/parameters/EntryTaskEndDate'
       - $ref: '#/components/parameters/EntryTaskListLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -2957,6 +2969,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/EntryTaskLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -3253,6 +3266,7 @@ paths:
       - $ref: '#/components/parameters/EntryTaskEndDate'
       - $ref: '#/components/parameters/EntryTaskListLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -3372,6 +3386,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/EntryTaskLimit'
       - $ref: '#/components/parameters/EntryTaskNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -3649,7 +3664,7 @@ paths:
       summary: List tables
       operationId: listTables
       description: |
-        Returns the tables (`kind=table`) visible to the current caller. Pagination, `q`, `filters`, `sort`, `next`, `skip` and `limit` mean the same as in the form list; 50 per page by default, up to 1000.
+        Returns the tables (`kind=table`) visible to the current caller. Pagination, `q`, `filters`, `sort`, `next`, `page`, `skip` and `limit` mean the same as in the form list; 50 per page by default, up to 1000.
 
         OAuth scope: forms
       parameters:
@@ -3657,6 +3672,7 @@ paths:
       - $ref: '#/components/parameters/FormsFilters'
       - $ref: '#/components/parameters/FormsSort'
       - $ref: '#/components/parameters/FormsNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/FormsSkip'
       - $ref: '#/components/parameters/PageLimit'
       responses:
@@ -3728,7 +3744,7 @@ paths:
       summary: Show a table's structure
       operationId: getTable
       description: |
-        Returns the table's basic information, field definitions and the views visible to the current caller. Returns 404 `table cannot be found` when the token is not a table (for example, a regular form).
+        Returns the table's basic information, field definitions and the views visible to the current caller. Returns 404 `Table not found` when the token is not a table (for example, a regular form).
 
         OAuth scope: forms
       responses:
@@ -3829,7 +3845,7 @@ paths:
       - Tables
       summary: Check whether table columns already hold data
       description: |
-        Same as GET /forms/{form_token}/fields/check, applied to the columns of a table. Returns 404 (`table cannot be found`) when `table_token` does not point to a table.
+        Same as GET /forms/{form_token}/fields/check, applied to the columns of a table. Returns 404 (`Table not found`) when `table_token` does not point to a table.
 
         OAuth scope: forms
       operationId: checkTableFieldData
@@ -3862,7 +3878,7 @@ paths:
       summary: Preview a table column type change
       description: |
         Same as GET /forms/{form_token}/fields/preview_convert, applied to the columns of a table; `target_type` accepts only column types tables support (see `GET /field_types?kind=table`).
-        Returns 404 (`table cannot be found`) when `table_token` does not point to a table.
+        Returns 404 (`Table not found`) when `table_token` does not point to a table.
 
         OAuth scope: forms
       operationId: previewTableFieldTypeChange
@@ -3924,7 +3940,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: The table does not exist or is not accessible, or `table_token` is not a table's (`table cannot be found`)
+          description: The table does not exist or is not accessible, or `table_token` is not a table's; a form the caller can read is pointed to its `/forms/{form_token}` path
           content:
             application/json:
               schema:
@@ -3940,7 +3956,7 @@ paths:
       summary: List table entries
       operationId: listTableEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/entries`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/entries`, except that the target must be a table (otherwise 404 `Table not found`).
 
         OAuth scope: read_entries
       parameters:
@@ -3950,6 +3966,7 @@ paths:
       - $ref: '#/components/parameters/EntriesSort'
       - $ref: '#/components/parameters/EntriesCreatedAt'
       - $ref: '#/components/parameters/EntriesNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       - $ref: '#/components/parameters/PageLimit'
@@ -3999,7 +4016,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          $ref: '#/components/responses/EntryCreatePaymentRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -4015,7 +4032,7 @@ paths:
       summary: Count table entries
       operationId: countTableEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/entries/count`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/entries/count`, except that the target must be a table (otherwise 404 `Table not found`).
 
         OAuth scope: read_entries
       parameters:
@@ -4049,7 +4066,7 @@ paths:
       summary: Aggregate table entries
       operationId: aggregateTableEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/entries/aggregate`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/entries/aggregate`, except that the target must be a table (otherwise 404 `Table not found`).
         For the functions and groupings each field supports, see `GET /tables/{table_token}?include_analytics=true`.
 
         OAuth scope: read_entries
@@ -4087,7 +4104,7 @@ paths:
       summary: Summarize table entries
       operationId: summarizeTableEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/entries/summary`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/entries/summary`, except that the target must be a table (otherwise 404 `Table not found`).
 
         OAuth scope: read_entries
       parameters:
@@ -4124,7 +4141,7 @@ paths:
       summary: Count the entries of a view
       operationId: countTableViewEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/views/{view_token}/entries/count`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/views/{view_token}/entries/count`, except that the target must be a table (otherwise 404 `Table not found`).
 
         OAuth scope: read_entries
       parameters:
@@ -4159,7 +4176,7 @@ paths:
       summary: Aggregate the entries of a view
       operationId: aggregateTableViewEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/views/{view_token}/entries/aggregate`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/views/{view_token}/entries/aggregate`, except that the target must be a table (otherwise 404 `Table not found`).
 
         OAuth scope: read_entries
       parameters:
@@ -4197,7 +4214,7 @@ paths:
       summary: Summarize the entries of a view
       operationId: summarizeTableViewEntries
       description: |
-        Exactly the same as `GET /forms/{form_token}/views/{view_token}/entries/summary`, except that the target must be a table (otherwise 404 `table cannot be found`).
+        Exactly the same as `GET /forms/{form_token}/views/{view_token}/entries/summary`, except that the target must be a table (otherwise 404 `Table not found`).
 
         OAuth scope: read_entries
       parameters:
@@ -4402,7 +4419,7 @@ paths:
       tags:
       - Comments
       summary: List a table entry's comments
-      description: 'Returns all comments on this table entry in ascending order of creation time, under the same rules as form entry comments. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
+      description: 'Returns all comments on this table entry in ascending order of creation time, under the same rules as form entry comments. Returns 404 (Table not found) when the token is not a table. OAuth scope: read_entries'
       operationId: listTableEntryComments
       responses:
         '200':
@@ -4436,7 +4453,7 @@ paths:
       tags:
       - Comments
       summary: Comment on a table entry
-      description: 'Creates a comment on this table entry, with the same parameters and limits as form entry comments (content is required, at most 2000 characters, mentioned users must be cooperators, parent_id must belong to the same entry). Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
+      description: 'Creates a comment on this table entry, with the same parameters and limits as form entry comments (content is required, at most 2000 characters, mentioned users must be cooperators, parent_id must belong to the same entry). Returns 404 (Table not found) when the token is not a table. OAuth scope: read_entries'
       operationId: createTableEntryComment
       requestBody:
         required: true
@@ -4479,7 +4496,7 @@ paths:
       tags:
       - Comments
       summary: Update a comment on a table entry
-      description: 'Changes the content of a table entry comment; PUT is also accepted. Only the comment''s author can edit it, otherwise returns 400; returns 404 when the comment does not belong to this entry. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
+      description: 'Changes the content of a table entry comment; PUT is also accepted. Only the comment''s author can edit it, otherwise returns 400; returns 404 when the comment does not belong to this entry. Returns 404 (Table not found) when the token is not a table. OAuth scope: read_entries'
       operationId: updateTableEntryComment
       requestBody:
         required: true
@@ -4516,7 +4533,7 @@ paths:
       tags:
       - Comments
       summary: Delete a comment on a table entry
-      description: 'Deletes a table entry comment. The comment''s author, the table''s creator, or a cooperator with the admin role can delete it; other cooperators get 400; a comment already deleted returns 404. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
+      description: 'Deletes a table entry comment. The comment''s author, the table''s creator, or a cooperator with the admin role can delete it; other cooperators get 400; a comment already deleted returns 404. Returns 404 (Table not found) when the token is not a table. OAuth scope: read_entries'
       operationId: deleteTableEntryComment
       responses:
         '200':
@@ -4546,7 +4563,7 @@ paths:
       tags:
       - Views
       summary: List a table's views
-      description: 'Returns the views of this table visible to the current caller, under the same rules as listing form views. Returns 404 (table cannot be found) when the token is not a table (kind is not table). OAuth scope: forms'
+      description: 'Returns the views of this table visible to the current caller, under the same rules as listing form views. Returns 404 (Table not found) when the token is not a table (kind is not table). OAuth scope: forms'
       operationId: listTableViews
       parameters:
       - $ref: '#/components/parameters/TableToken'
@@ -4580,7 +4597,7 @@ paths:
       tags:
       - Views
       summary: Create a view on a table
-      description: 'Creates a view on a table, with the same parameters and limits as creating a form view (at most 100 views per user per table, name at most 120 characters, an invalid filter returns 422). Returns 404 (table cannot be found) when the token is not a table. view_type can be form (a form view, a public fill page); see creating a form view for the rules. OAuth scope: forms'
+      description: 'Creates a view on a table, with the same parameters and limits as creating a form view (at most 100 views per user per table, name at most 120 characters, an invalid filter returns 422). Returns 404 (Table not found) when the token is not a table. view_type can be form (a form view, a public fill page); see creating a form view for the rules. OAuth scope: forms'
       operationId: createTableView
       parameters:
       - $ref: '#/components/parameters/TableToken'
@@ -4630,7 +4647,7 @@ paths:
       tags:
       - Views
       summary: Show a view of a table
-      description: 'Returns one table view; only views visible to the caller can be read. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: forms'
+      description: 'Returns one table view; only views visible to the caller can be read. Returns 404 (Table not found) when the token is not a table. OAuth scope: forms'
       operationId: getTableView
       responses:
         '200':
@@ -4651,7 +4668,7 @@ paths:
       tags:
       - Views
       summary: Update a view of a table
-      description: 'Updates a table view''s settings; PUT is also accepted. The rules are the same as for updating a form view: only the creator can change visibility (otherwise 403), and a filter or model validation failure returns 422. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: forms'
+      description: 'Updates a table view''s settings; PUT is also accepted. The rules are the same as for updating a form view: only the creator can change visibility (otherwise 403), and a filter or model validation failure returns 422. Returns 404 (Table not found) when the token is not a table. OAuth scope: forms'
       operationId: updateTableView
       requestBody:
         required: true
@@ -4684,7 +4701,7 @@ paths:
       tags:
       - Views
       summary: Delete a view of a table
-      description: 'Deletes a table view. Predefined views, views whose view_scope is form, and the caller''s last visible view cannot be deleted; these return 422. Returns 404 (table cannot be found) when the token is not a table. Deleting a form view requires a predefined role that can add entries (otherwise 403); once deleted, its fill link stops working immediately, and this cannot be undone. OAuth scope: forms'
+      description: 'Deletes a table view. Predefined views, views whose view_scope is form, and the caller''s last visible view cannot be deleted; these return 422. Returns 404 (Table not found) when the token is not a table. Deleting a form view requires a predefined role that can add entries (otherwise 403); once deleted, its fill link stops working immediately, and this cannot be undone. OAuth scope: forms'
       operationId: deleteTableView
       responses:
         '200':
@@ -4718,7 +4735,7 @@ paths:
       tags:
       - Views
       summary: List a table view's entries
-      description: 'Returns entries using the table view''s filters and sort, at most 50 per page; pagination and the rules for which fields are returned are the same as for form view entries. Returns 404 (table cannot be found) when the token is not a table. OAuth scope: read_entries'
+      description: 'Returns entries using the table view''s filters and sort; pagination and the rules for which fields are returned are the same as for form view entries. Returns 404 (Table not found) when the token is not a table. OAuth scope: read_entries'
       operationId: listTableViewEntries
       parameters:
       - $ref: '#/components/parameters/TableToken'
@@ -4728,13 +4745,9 @@ paths:
         description: View token
         schema:
           type: string
-      - name: next
-        in: query
-        required: false
-        description: The next value from the previous page's response (a row offset, starting at 0); a negative value is treated as 0
-        schema:
-          type: integer
-          minimum: 0
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       responses:
         '200':
@@ -4772,12 +4785,14 @@ paths:
       - name: limit
         in: query
         required: false
-        description: How many to return, 50 by default and 100 at most. There is no paging; `total` is the full count and `count` the number returned
+        description: Page size
         schema:
           type: integer
           minimum: 1
           maximum: 100
           default: 50
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       responses:
         '200':
           description: Check-in campaigns
@@ -4794,6 +4809,16 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/CheckinCampaign'
+                  next:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Pass back as `next` to get the next page; null on the last page
+                required:
+                - total
+                - count
+                - data
+                - next
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -5155,7 +5180,6 @@ paths:
       operationId: listFolders
       description: |
         Lists the folders the current user has manage permission on (form folders and table folders alike, told apart by `kind`), newest first. With an account-level credential, returns the account owner's folders.
-        `limit` defaults to 50 and is clamped to 1 to 100; there is no paging: `total` is the full count, `count` the number returned this time.
 
         OAuth scope: forms
       parameters:
@@ -5168,6 +5192,8 @@ paths:
           minimum: 1
           maximum: 100
           default: 50
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       responses:
         '200':
           description: Folder list
@@ -5179,6 +5205,7 @@ paths:
                 - total
                 - count
                 - data
+                - next
                 properties:
                   total:
                     type: integer
@@ -5190,6 +5217,13 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Folder'
+                  next:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Pass back as `next` to get the next page; null on the last page
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5274,7 +5308,7 @@ paths:
       description: |
         The artifacts Jiri delivered for the current user in the current account, the most recently delivered first; one entry per artifact, however many versions it has.
         OAuth scope: artifacts
-        - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
+        - Paging: `next` is a row offset; pass it back unchanged for the next page. Only one of `next`, `page` and `skip` can be passed. 50 per page by default, `limit` changes it (at most 1000).
         - An artifact belongs to a person: an account access token returns `400`.
       parameters:
       - name: q
@@ -5285,6 +5319,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -5557,16 +5592,17 @@ paths:
       summary: List contacts
       operationId: listContacts
       description: |
-        Lists the current user's contacts page by page, by ID descending, a fixed 50 per page. With an account-level credential, returns the account owner's contacts.
+        Lists the current user's contacts page by page, by ID descending. With an account-level credential, returns the account owner's contacts.
         OAuth scope: read_contacts
-        Cursor paging: `next` in the response is the ID of the first contact on the next page; pass it as the query parameter `next` to get that page. `next` is null when there is no more data.
       parameters:
       - name: next
         in: query
         required: false
-        description: The `next` cursor from the previous page's response (a contact ID)
+        description: The `next` cursor from the previous page's response (a contact ID). Cannot be combined with `page`.
         schema:
           type: string
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageLimit'
       responses:
         '200':
           description: Contact list
@@ -5595,6 +5631,8 @@ paths:
                     - string
                     - 'null'
                     description: Cursor for the next page; null when there is no more data
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5655,7 +5693,6 @@ paths:
       description: |
         Lists the members of the current account (deactivated members included), by status ascending (active first), then by creation time, newest first.
         OAuth scope: users
-        `limit` defaults to 50 and is clamped to 1 to 100; there is no paging: `total` is the total number of members, `count` the number returned this time.
       parameters:
       - name: limit
         in: query
@@ -5666,6 +5703,8 @@ paths:
           minimum: 1
           maximum: 100
           default: 50
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       responses:
         '200':
           description: Member list
@@ -5677,6 +5716,7 @@ paths:
                 - total
                 - count
                 - data
+                - next
                 properties:
                   total:
                     type: integer
@@ -5688,6 +5728,13 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/BillingAccountUser'
+                  next:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Pass back as `next` to get the next page; null on the last page
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -5875,6 +5922,7 @@ paths:
           type: string
       - $ref: '#/components/parameters/TradePageLimit'
       - $ref: '#/components/parameters/TradePageNext'
+      - $ref: '#/components/parameters/TradePage'
       responses:
         '200':
           description: Payment orders
@@ -5977,6 +6025,7 @@ paths:
       - $ref: '#/components/parameters/TradeInclude'
       - $ref: '#/components/parameters/TradePageLimit'
       - $ref: '#/components/parameters/TradePageNext'
+      - $ref: '#/components/parameters/TradePage'
       responses:
         '200':
           description: Refunds and statistics
@@ -6024,6 +6073,7 @@ paths:
       - $ref: '#/components/parameters/TradeInclude'
       - $ref: '#/components/parameters/TradePageLimit'
       - $ref: '#/components/parameters/TradePageNext'
+      - $ref: '#/components/parameters/TradePage'
       responses:
         '200':
           description: Payouts and statistics
@@ -6092,6 +6142,7 @@ paths:
           - FAIL
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -6287,6 +6338,7 @@ paths:
           - FAIL
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -6458,6 +6510,366 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/message_channels":
+    get:
+      tags:
+      - Messages
+      summary: List message channels
+      operationId: listMessageChannels
+      description: |
+        Lists the channels messages can be sent through, newest first: the ones the current user registered, or every channel of the account for an account-level credential.
+        OAuth scope: messages
+      parameters:
+      - name: type
+        in: query
+        required: false
+        description: Only channels of this type
+        schema:
+          $ref: '#/components/schemas/MessageType'
+      - $ref: '#/components/parameters/PageLimit'
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Message channels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageChannelListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+      - Messages
+      summary: Register a message channel
+      operationId: createMessageChannel
+      description: |
+        Registers where messages of a type go before any is sent through it.
+        OAuth scope: messages
+        - A webhook's `signing_secret` is returned only here; delete the channel and register it again to change it. A routine run cannot register channels.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageChannelCreateInput'
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageChannelCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The plan does not include API v1 or this channel type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/message_channels/{id}":
+    get:
+      tags:
+      - Messages
+      summary: Get a message channel
+      operationId: getMessageChannel
+      description: |
+        Shows a channel the caller can send through.
+        OAuth scope: messages
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Channel ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: The channel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageChannel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+      - Messages
+      summary: Delete a message channel
+      operationId: deleteMessageChannel
+      description: |
+        Deletes a channel; its queued messages fail instead of being sent, and messages already sent keep their records. A routine run cannot delete channels.
+        OAuth scope: messages
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Channel ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - id
+                properties:
+                  id:
+                    type: string
+                    description: ID of the deleted channel
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/messages":
+    get:
+      tags:
+      - Messages
+      summary: List messages
+      operationId: listMessages
+      description: |
+        Lists sent and queued messages newest first, one per recipient: the current user's, or the whole account's for an account-level credential.
+        OAuth scope: messages
+      parameters:
+      - name: type
+        in: query
+        required: false
+        description: Only messages of this type
+        schema:
+          $ref: '#/components/schemas/MessageType'
+      - name: channel_id
+        in: query
+        required: false
+        description: Only messages sent through this channel
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        description: Only messages in this status
+        schema:
+          $ref: '#/components/schemas/MessageStatus'
+      - name: source
+        in: query
+        required: false
+        description: Only messages sent from here
+        schema:
+          $ref: '#/components/schemas/MessageSource'
+      - name: request_id
+        in: query
+        required: false
+        description: Only the messages one send request created
+        schema:
+          type: string
+      - name: created_after
+        in: query
+        required: false
+        description: Only messages created at or after this time
+        schema:
+          type: string
+          format: date-time
+      - name: created_before
+        in: query
+        required: false
+        description: Only messages created before this time
+        schema:
+          type: string
+          format: date-time
+      - $ref: '#/components/parameters/PageLimit'
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+      - Messages
+      summary: Send a message
+      operationId: sendMessage
+      description: |
+        Queues a message through a registered channel and returns at once; follow each record with `GET /messages/{id}`.
+        OAuth scope: messages
+        - `ding_talk`, `wxwork` and `webhook` go to the channel itself; `email` and `sms` go to each of `to`, one record per recipient. `sms` takes `variables`, not a title or content: the channel's template is the text.
+        - `email` without `channel_id` goes from Jinshuju's address and only to verified members of the account.
+        - The same `idempotency_key` from the same credential owner within 24 hours returns the first request's records with `replayed: true` instead of sending again.
+        - Daily limits per account: 1000 robot and webhook messages, 2000 emails through SMTP channels, 1000 SMS records (however many parts each is billed as); per recipient within the account: 20 emails, 10 SMS. A robot takes at most 20 messages a minute; the rest wait.
+        - An SMS template with variables sends at most 100 SMS a day without content review; past that the request is refused (`403`), not queued for review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageInput'
+      responses:
+        '201':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSendResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The plan does not include API v1 or this message type, or the SMS or email quota is not enough
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: SMS is turned off for the account, a template with variables used up its daily allowance without content review, or the OAuth scope is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: The `idempotency_key` was already used for a different request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A request with the same `idempotency_key` is still being processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: The account or a recipient reached a daily message limit, or the API rate limit was hit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/messages/estimate":
+    post:
+      tags:
+      - Messages
+      summary: Estimate a message
+      operationId: estimateMessage
+      description: |
+        Checks a send request as `POST /messages` does and tells how many records it would create and how many SMS it would bill, without sending.
+        OAuth scope: messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageInput'
+      responses:
+        '200':
+          description: Estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEstimate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The plan does not include API v1 or this message type, or the SMS or email quota is not enough
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: SMS is turned off for the account, a template with variables used up its daily allowance without content review, or the OAuth scope is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: The account or a recipient reached a daily message limit, or the API rate limit was hit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/messages/{id}":
+    get:
+      tags:
+      - Messages
+      summary: Get a message
+      operationId: getMessage
+      description: |
+        Shows one record with its delivery status.
+        OAuth scope: messages
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Message ID
+        schema:
+          type: string
+      responses:
+        '200':
+          description: The message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/jamr_v":
     get:
       tags:
@@ -6550,10 +6962,10 @@ paths:
     - name: type
       in: path
       required: true
-      description: Field type name (case-sensitive); one of the `type` values returned by `GET /field_types`, e.g. `TextField`, `RadioButton`.
+      description: Field type name, one of the `type` values `GET /field_types` returns, e.g. `TextField`, `RadioButton`; a near miss (`SingleChoice`, `mobile`, `DateTime`) or the name a field reads back as (`single_line_text`) resolves to the type it means, which the response names in `type`.
       schema:
         type: string
-        pattern: "^[A-Za-z]+$"
+        pattern: "^[A-Za-z_]+$"
       example: NumberField
     get:
       tags:
@@ -6561,7 +6973,6 @@ paths:
       summary: Show a field type
       description: |
         Returns the validation switches and type-specific settings one field type accepts, shaped like one item of the `GET /field_types` list.
-        Returns 404, listing the available types in `error_description`, when the type name does not exist or is not among the types available for `kind` (e.g. querying a type tables do not support with `kind=table`).
 
         OAuth scope: forms
       operationId: getFieldType
@@ -6581,7 +6992,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: The type name does not exist or is not among the types available for `kind`
+          description: Neither the name nor a near miss of it is a type available for `kind` (e.g. a form-only type with `kind=table`); `error_description` lists the available types
           content:
             application/json:
               schema:
@@ -6800,13 +7211,14 @@ paths:
       description: |
         Returns the forms the current user has submitted entries to as a submitter (quick payment forms excluded), most recent submission first. These forms need not be created by or shared with the current user;
         each row gives the current user's own submission count and latest submission time, not the form's total entry count. Deleted forms do not appear in `data` (`total` still counts them).
-        - Pagination: `next` is a row offset, passed back as is for the next page; `skip` and `next` cannot be combined. 50 rows per page by default, adjustable with `limit` (at most 1000).
+        - Pagination: `next` is a row offset, passed back as is for the next page; only one of `next`, `page` and `skip` can be passed. 50 rows per page by default, adjustable with `limit` (at most 1000).
         - An account access token has no "current user"; calling with one returns 400.
 
         OAuth scope: forms
       parameters:
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -6863,6 +7275,7 @@ paths:
       - $ref: '#/components/parameters/EntriesIncludeLabels'
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -7164,12 +7577,13 @@ paths:
       - Tables
       summary: Move a table into a folder
       description: |
-        Moves a table into a folder, or out of its folder (`folder_token` set to null); PUT is also accepted. The move affects only the calling user's folder placement.
+        Moves a table into a folder, or out of its folder (`folder_token` set to null), the same as moving it on the product page; PUT is also accepted.
         OAuth scope: forms
         - The request body must include the `folder_token` key (its value may be null); otherwise 400.
         - `folder_token` accepts only a folder token (not an id); returns 404 when the folder does not exist or the current user lacks manage permission on it.
+        - Takes a role given on the table itself, not only one inherited from a shared folder, and manage permission on the folder the caller placed it in; otherwise 403. An account access token needs no role.
         - The target folder's kind must be table; otherwise 400.
-        - Returns 404 `table cannot be found` when the token is not a table's.
+        - Returns 404 `Table not found` when the token is not a table's.
       operationId: moveTableToFolder
       parameters:
       - $ref: '#/components/parameters/TableToken'
@@ -7205,7 +7619,7 @@ paths:
       description: |
         The current user's own routines, newest first.
         OAuth scope: routines
-        - Paging: `next` is a row offset; pass it back unchanged for the next page. `skip` and `next` cannot be passed together. 50 per page by default, `limit` changes it (at most 1000).
+        - Paging: `next` is a row offset; pass it back unchanged for the next page. Only one of `next`, `page` and `skip` can be passed. 50 per page by default, `limit` changes it (at most 1000).
         - Routines belong to a person: a credential with no current user (an account access token and the like) returns `403`, and so does an account that cannot use routines yet.
       parameters:
       - name: state
@@ -7219,6 +7633,7 @@ paths:
           - paused
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -7470,6 +7885,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/PageLimit'
       - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/EntriesSkip'
       responses:
         '200':
@@ -7488,6 +7904,155 @@ paths:
           $ref: '#/components/responses/RoutineForbidden'
         '404':
           $ref: '#/components/responses/RoutineNotFound'
+  "/memory":
+    get:
+      tags:
+      - Memory
+      summary: Get the memory
+      operationId: getMemory
+      description: |
+        Your notes, numbered from 1 in the order Jiri lists them. A note's number moves up when an earlier one is deleted.
+        OAuth scope: memory
+      responses:
+        '200':
+          description: The memory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResponse'
+        '400':
+          $ref: '#/components/responses/MemoryBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/MemoryForbidden'
+  "/memory/notes":
+    post:
+      tags:
+      - Memory
+      summary: Add a note
+      operationId: createMemoryNote
+      description: |
+        Adds a note: background is a fact about you that always holds, with no `scope`; a preference is how to do something, and `scope` says when.
+        OAuth scope: memory
+        - A note with the `kind`, `text` and `scope` of one already kept, spacing aside, is not added again: `200` `duplicate` with that note.
+        - At most 20 notes: a full memory returns `422` `memory_full` with the notes to choose from.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryNoteInput'
+      responses:
+        '201':
+          description: The note added (`created`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryWriteResponse'
+        '200':
+          description: The same note was already kept (`duplicate`); nothing was added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryWriteResponse'
+        '400':
+          $ref: '#/components/responses/MemoryBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/MemoryForbidden'
+        '409':
+          $ref: '#/components/responses/MemoryRefused'
+        '422':
+          $ref: '#/components/responses/MemoryRefused'
+  "/memory/notes/{id}":
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: 'Updating: one note''s number. Deleting: one or more numbers separated by commas, such as `2,3`'
+      schema:
+        type: string
+        pattern: "^[1-9][0-9]{0,2}(,[1-9][0-9]{0,2})*$"
+    patch:
+      tags:
+      - Memory
+      summary: Replace a note
+      operationId: updateMemoryNote
+      description: |
+        Replaces the note numbered `id` as a whole: send every field of the new note, and in `current` the `text` and `scope` the note has in the list you read.
+        OAuth scope: memory
+        - The note is found by `current`, so it is the one you read even if its number has moved since. When no note says that, nothing changes: `404` `note_not_found` with the current list.
+        - `PUT` does the same: both replace the whole note. It keeps its `source`.
+        - New text and scope that another note already has return `200` `duplicate` with that note, and nothing changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryNoteUpdateInput'
+      responses:
+        '200':
+          description: The note replaced (`updated`), already as sent (`unchanged`), or the same as another note (`duplicate`, nothing changed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryWriteResponse'
+        '400':
+          $ref: '#/components/responses/MemoryBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/MemoryForbidden'
+        '404':
+          $ref: '#/components/responses/MemoryRefused'
+        '409':
+          $ref: '#/components/responses/MemoryRefused'
+        '422':
+          $ref: '#/components/responses/MemoryRefused'
+    delete:
+      tags:
+      - Memory
+      summary: Delete notes
+      operationId: deleteMemoryNotes
+      description: |
+        Deletes the notes numbered in `id`, all at once. `notes` gives each number with the `text` and `scope` it has in the list you read, and the notes are found by those.
+        OAuth scope: memory
+        - When any of them is not found, none is deleted: `404` `note_not_found` with `missing_numbers` and the current list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryNotesDeleteInput'
+      responses:
+        '200':
+          description: The notes deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryDeleteResponse'
+        '400':
+          $ref: '#/components/responses/MemoryBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/MemoryForbidden'
+        '404':
+          $ref: '#/components/responses/MemoryRefused'
+        '409':
+          $ref: '#/components/responses/MemoryRefused'
+        '422':
+          $ref: '#/components/responses/MemoryRefused'
 components:
   securitySchemes:
     bearerAuth:
@@ -7496,7 +8061,7 @@ components:
       description: |
         `Authorization: Bearer ACCESS_TOKEN`. Accepts personal access tokens, account access tokens (Enterprise plan) and OAuth 2.0 tokens.
         OAuth tokens can call only the endpoints their scopes allow: `forms` (forms / tables / views / folders / public queries / templates), `form_setting` (form settings, predefined choice sets),
-        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `artifacts` (Jiri's artifacts, and who can open an HTML artifact's share link), `public` (everything else).
+        `read_entries` / `write_entries` (entries, comments, attachment uploads, WeChat authorization sessions, SMS / email tasks), `submit_entries` (fill pages and submitting through them), `read_contacts` (contacts), `users` (current user / account and its members, e-invoices, payment history / 小金商户 and transactions / SMS signatures and templates, SMTP accounts, license image uploads), `routines` (routines and their runs), `artifacts` (Jiri's artifacts, and who can open an HTML artifact's share link), `messages` (message channels and messages), `public` (everything else).
   parameters:
     FormToken:
       name: form_token
@@ -7562,18 +8127,19 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response, passed back as is to get the next page. Cannot be combined with `skip`."
+      description: "`next` from the previous page's response, passed back as is to get the next page. Cannot be combined with `page` or `skip`."
       schema:
         type: string
     FormsSkip:
       name: skip
       in: query
       required: false
-      description: Starting row offset (from 0, at most 10000), for reading in parallel slices; the returned `next` still pages onward. Cannot be combined with `next`.
+      description: Deprecated, use `page`. Starting row offset (from 0, at most 10000); the returned `next` still pages onward. Cannot be combined with `next` or `page`.
       schema:
         type: integer
         minimum: 0
         maximum: 10000
+      deprecated: true
     EntriesFields:
       name: fields
       in: query
@@ -7639,7 +8205,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response. Under the default sort it is a serial-number cursor (returns entries with serial number ≥ this value); with filters / creation-time ordering / an explicit sort it is a row offset. Cannot be combined with `skip`. Also accepts a string: one starting with an integer is read as that integer, anything else as 0, i.e. starting from the first page."
+      description: "`next` from the previous page's response. Under the default sort it is a serial-number cursor (returns entries with serial number ≥ this value); with filters / creation-time ordering / an explicit sort it is a row offset. Cannot be combined with `page` or `skip`. Also accepts a string: one starting with an integer is read as that integer, anything else as 0, i.e. starting from the first page."
       schema:
         type:
         - integer
@@ -7648,11 +8214,12 @@ components:
       name: skip
       in: query
       required: false
-      description: Starting row offset (from 0, max 10000), for reading in parallel slices. Cannot be combined with `next`.
+      description: Deprecated, use `page`. Starting row offset (from 0, max 10000). Cannot be combined with `next` or `page`.
       schema:
         type: integer
         minimum: 0
         maximum: 10000
+      deprecated: true
     FieldDataChecks:
       name: checks
       in: query
@@ -7776,7 +8343,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page. Cannot be combined with `skip`."
+      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page. Cannot be combined with `page` or `skip`."
       schema:
         type: integer
         minimum: 0
@@ -7853,7 +8420,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page."
+      description: "`next` from the previous page's response (a row offset, starting at 0); pass it back unchanged to get the next page. Cannot be combined with `page` or `skip`."
       schema:
         type: integer
         minimum: 0
@@ -7989,7 +8556,7 @@ components:
       name: next
       in: query
       required: false
-      description: "`next` from the previous page's response (a page number, starting at 1); pass it back unchanged to get the next page. Defaults to page 1."
+      description: "`next` from the previous page's response (a page number, starting at 1); pass it back unchanged to get the next page. Defaults to page 1. Cannot be combined with `page`."
       schema:
         type: integer
     RoutineId:
@@ -8006,6 +8573,22 @@ components:
       description: The routine's ID (`id` from `GET /routines`)
       schema:
         type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Page number from 1, for jumping to a page or reading pages in parallel; `(page - 1) × limit` can be at most 10000, and the returned `next` continues from there. Cannot be combined with `next` or `skip`.
+      schema:
+        type: integer
+        minimum: 1
+    TradePage:
+      name: page
+      in: query
+      required: false
+      description: Page number from 1, for jumping straight to a page; the same as passing it as `next`. Cannot be combined with `next`.
+      schema:
+        type: integer
+        minimum: 1
   responses:
     BadRequest:
       description: Invalid request parameters or data
@@ -8035,6 +8618,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    EntryCreatePaymentRequired:
+      description: The current plan does not include API v1, the form uses paid features the account no longer has (the message names them), or the account has used up its audio quota
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Forbidden:
       description: 'Forbidden: the OAuth token lacks the required scope, or a business rule refused the operation'
       content:
@@ -8044,13 +8633,13 @@ components:
           example:
             error_description: OAuth token scope is insufficient
     NotFound:
-      description: The resource does not exist or is not accessible to the current identity (a personal token can access only the forms its user created or that were shared with that user)
+      description: The resource does not exist or is not accessible to the current identity (a personal token can access only the forms its user created or that were shared with that user); `error_description` says what to do next, e.g. `GET /my/forms/{form_token}/entries` for a form the caller has filled but does not manage
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error_description: form cannot be found
+            error_description: "Form not found: the token does not exist or the form is not shared with you. Do not retry it as a table or a query; confirm the token with the user, or ask the form's owner to add you as a cooperator."
     TooManyRequests:
       description: Rate limit exceeded
       headers:
@@ -8112,6 +8701,34 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             error_description: 找不到这个自动任务
+    MemoryForbidden:
+      description: 'Forbidden: the OAuth token lacks the `memory` scope, or Jiri running a routine tried to change the memory (it can only read it).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_description: 自动任务运行时不能修改记忆
+    MemoryBadRequest:
+      description: The request does not follow this document, or the credential has no current user (an account access token and the like, as the memory belongs to a person) (the generic shape); or its numbers do not name notes one each (`invalid_numbers`). Nothing was changed.
+      content:
+        application/json:
+          schema:
+            anyOf:
+            - $ref: '#/components/schemas/Error'
+            - $ref: '#/components/schemas/MemoryRefusal'
+    MemoryRefused:
+      description: Nothing was changed; `code` says why.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MemoryRefusal'
+          example:
+            error_description: 没有找到这些编号对应的记忆（编号或内容和现在的清单对不上），什么都没有改
+            code: note_not_found
+            missing_numbers:
+            - 3
+            notes: []
     RoutineRefused:
       description: Against the rules for routines; nothing was changed. `errors` gives each reason, and `error_description` is the first one's `message`.
       content:
@@ -8141,6 +8758,11 @@ components:
           type: string
           deprecated: true
           description: Deprecated alias of `field`; use `field`.
+        scope_attr:
+          type: string
+          enum:
+          - date_time
+          description: 'Only for a reservation field tested by its date: `date_time`; leave it out otherwise. `GET /forms/{form_token}/condition_triggerable_fields` gives it for each field that needs it'
         operator:
           type: string
           enum:
@@ -8740,7 +9362,12 @@ components:
           type:
           - integer
           - 'null'
-          description: Choice quota (absent when unset or when the quota is hidden)
+          description: 'Places left on the choice: an entry takes one when it picks the choice after the limit is set, and gives it back by switching away or, when the field recovers places, by being deleted; `recover_quota` gives places back by hand. Absent when the choice has no limit, and on a fill page also while the field hides places and some are left'
+        quota_setting:
+          type:
+          - integer
+          - 'null'
+          description: 'Limit on the choice''s places, the value a write sends as `quota`, so the places used in the current cycle are `quota_setting - quota`. Only on form and table reads, and not on matrix choices'
         operand_value:
           type: number
           description: Value assigned to the choice
@@ -8993,7 +9620,7 @@ components:
           type:
           - integer
           - 'null'
-          description: Cursor for the next page (the serial number under the default sort, a row offset otherwise); null on the last page
+          description: Pass back as `next` to get the next page; null on the last page
     EntryInput:
       type: object
       description: |
@@ -9816,6 +10443,7 @@ components:
               - by_ip
               - by_device
               - by_fields
+              description: With by_weixin only submissions made in WeChat are accepted, and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account; changing condition later does not stop that
             cycle_period:
               type: string
               enum:
@@ -9858,6 +10486,13 @@ components:
           type: array
           items:
             type: string
+        locale:
+          type: string
+          enum:
+          - zh-CN
+          - zh-TW
+          - en
+          description: Language of the fill page's built-in text (buttons, validation messages, the default success message); the form's own name, description and fields are not translated
         merchant_account_id:
           type:
           - string
@@ -9925,7 +10560,7 @@ components:
       properties:
         trigger:
           type: string
-          description: Field api_code, or `trade_status` for the payment status
+          description: Field api_code (a table column as `<table>.<column>`), or `trade_status` for the payment status, whose codes include `paid`, `refunded` and `TRANSACTION_TIMEOUT`
         operator:
           type: string
           enum:
@@ -9944,10 +10579,19 @@ components:
           - like
           - not_like
           - match
+          description: Each field type takes the operators of the notification settings page's conditions, and also those the entry query handles beyond them, such as eq on text, gte on a date, eq / ne with one code on a radio button or with the exact set on a checkbox; any other returns 400 listing the page's
         value:
-          description: Value to compare with; choice fields take choice api_codes
+          description: Value in the shape the field type and operator take, as the notification settings page saves it (an array of choice api_codes on a choice field); another shape returns 400 naming the format with an example
         group_index:
           type: integer
+        scope_attr:
+          type:
+          - string
+          - 'null'
+          enum:
+          - date_time
+          - null
+          description: 'Only for a reservation field tested by its date: `date_time`; leave it out otherwise. `GET /forms/{form_token}/condition_triggerable_fields` gives it for each field that needs it'
       additionalProperties: false
     NotificationRuleScheduleTimeRule:
       type: object
@@ -10672,15 +11316,21 @@ components:
           type: integer
           minimum: 1
           description: Goods per row on mobile
+        formula:
+          type: string
+          description: The formula, calling only the functions in x-functions; an existing field is named by api_code and a field created in the same request as $(cid), e.g. IF(FIND("overdue", field_3) > 0, $(price) * $(qty), 0); used instead of formula_display when both are given
+          x-functions:
+            $ref: '#/components/schemas/FormulaFunction'
         formula_display:
           type: string
-          description: The formula as HTML; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
+          description: Older HTML form of formula; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
         result_display_type:
           type: string
           enum:
           - string
           - numeric
           - datetime
+          - boolean
           description: How the result is shown
         result_display_as_date:
           type: boolean
@@ -10867,7 +11517,11 @@ components:
                 - integer
                 - 'null'
                 minimum: 0
-                description: Maximum number of places; 0 closes the choice. Changing an existing limit keeps the places already taken; null lifts the limit
+                description: Maximum number of places, read back as `quota_setting`; 0 closes the choice. Changing a limit keeps the places already taken; null lifts the limit
+              recover_quota:
+                type: integer
+                minimum: 1
+                description: Places to give back to a single choice, multiple choice or drop-down choice with a limit, keeping the limit, as deleting an entry does; the places left stop at the limit
             additionalProperties: false
       additionalProperties: false
     FieldRuleOperations:
@@ -11062,7 +11716,7 @@ components:
           - by_ip
           - by_device
           - by_fields
-          description: What identifies the same submitter; by_fields is a paid feature. Cleared when fill_type is unlimited
+          description: What identifies the same submitter; by_fields is a paid feature. Cleared when fill_type is unlimited. With by_weixin only submissions made in WeChat are accepted, and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account; changing condition later does not stop that
         cycle_period:
           type: string
           enum:
@@ -11085,6 +11739,7 @@ components:
           description: Required and cannot be empty when condition is by_fields
           items:
             type: string
+      additionalProperties: false
     FormSetting:
       type: object
       description: Form settings (the response of GET /forms/{form_token}/setting)
@@ -11103,6 +11758,9 @@ components:
       - hide_login_and_signup
       - show_close_count_down
       - show_form_before_open
+      - open_entry_action
+      - open_entry_message
+      - open_entry_cancel_reservation
       - manually_close_rule
       - by_time_range_close_rule
       - by_entries_close_rule
@@ -11114,6 +11772,7 @@ components:
       - weixin_collect_way
       - submission_region_limited
       - submission_regions
+      - locale
       - entry_post_url
       - post_new_entry
       - post_updated_entry
@@ -11194,6 +11853,23 @@ components:
           - boolean
           - 'null'
           description: Whether to show the form before it opens
+        open_entry_action:
+          type: string
+          enum:
+          - hide
+          - view
+          - edit
+          description: What a submitter sees on revisiting the form (edit lets them modify the submitted entry)
+        open_entry_message:
+          type:
+          - string
+          - 'null'
+          description: Message shown to a submitter revisiting the form
+        open_entry_cancel_reservation:
+          type:
+          - boolean
+          - 'null'
+          description: Whether a revisiting submitter can cancel their reservation
         manually_close_rule:
           type:
           - object
@@ -11278,6 +11954,13 @@ components:
           description: Regions allowed to submit (read-only)
           items:
             type: string
+        locale:
+          type: string
+          enum:
+          - zh-CN
+          - zh-TW
+          - en
+          description: Language of the fill page's built-in text; write it with `setting` on the "Edit a form" endpoint
         entry_post_url:
           type:
           - string
@@ -13171,6 +13854,11 @@ components:
           description: 'Operator, the same as the entry list filters: eq, ne, any_in, none_in, between, not_between, null, not_null, gte, gt, lte, lt, like, not_like, match, within_last; the aliases start / end / equal / not_equal are equivalent to gte / lte / eq / ne respectively. The server decides which subset each field type supports. On choice fields, eq / ne are saved as any_in / none_in and the value is turned into an array.'
         value:
           description: 'Condition value; its type depends on the field and the operator: a two-element array for between; {"unit": "day", "n": 30} for within_last (unit can be minute / day / week / month); on choice fields, pass choice api_codes or choice texts, with "null" meaning not filled in; null / not_null take no value.'
+        scope_attr:
+          type: string
+          enum:
+          - date_time
+          description: 'Only for a reservation field tested by its date: `date_time`; leave it out otherwise. `GET /forms/{form_token}/condition_triggerable_fields` gives it for each field that needs it'
     FormView:
       type: object
       required:
@@ -15273,15 +15961,21 @@ components:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
+        formula:
+          type: string
+          description: The formula, calling only the functions in x-functions; an existing field is named by api_code and a field created in the same request as $(cid), e.g. IF(FIND("overdue", field_3) > 0, $(price) * $(qty), 0); used instead of formula_display when both are given
+          x-functions:
+            $ref: '#/components/schemas/FormulaFunction'
         formula_display:
           type: string
-          description: The formula as HTML; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
+          description: Older HTML form of formula; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
         result_display_type:
           type: string
           enum:
           - string
           - numeric
           - datetime
+          - boolean
           description: How the result is shown
         result_display_as_date:
           type: boolean
@@ -19615,6 +20309,7 @@ components:
       - page_info
       - queried_range
       - transactions
+      - next
       properties:
         page_info:
           $ref: '#/components/schemas/TradePageInfo'
@@ -19628,8 +20323,10 @@ components:
           items:
             $ref: '#/components/schemas/TradeTransaction'
         next:
-          type: string
-          description: Number of the next page; pass it back unchanged as the `next` parameter. Omitted when there is no next page
+          type:
+          - string
+          - 'null'
+          description: Number of the next page; pass it back unchanged as the `next` parameter. null on the last page
         detail_limit:
           type: string
           description: Why the detail limit was exceeded; omitted when it was not
@@ -19901,6 +20598,7 @@ components:
       - page_info
       - queried_range
       - refunds
+      - next
       properties:
         page_info:
           $ref: '#/components/schemas/TradePageInfo'
@@ -19917,8 +20615,10 @@ components:
           $ref: '#/components/schemas/TradeRefundStats'
           description: Statistics over all matching refunds; omitted with `include=records` when the detail limit is not exceeded
         next:
-          type: string
-          description: Number of the next page; pass it back unchanged as the `next` parameter. Omitted when there is no next page
+          type:
+          - string
+          - 'null'
+          description: Number of the next page; pass it back unchanged as the `next` parameter. null on the last page
         detail_limit:
           type: string
           description: Why the detail limit was exceeded; omitted when it was not
@@ -20058,6 +20758,7 @@ components:
       - page_info
       - queried_range
       - payouts
+      - next
       properties:
         page_info:
           $ref: '#/components/schemas/TradePageInfo'
@@ -20074,8 +20775,10 @@ components:
           $ref: '#/components/schemas/TradeAmountStats'
           description: Statistics over all matching payouts; omitted with `include=records` when the detail limit is not exceeded
         next:
-          type: string
-          description: Number of the next page; pass it back unchanged as the `next` parameter. Omitted when there is no next page
+          type:
+          - string
+          - 'null'
+          description: Number of the next page; pass it back unchanged as the `next` parameter. null on the last page
         detail_limit:
           type: string
           description: Why the detail limit was exceeded; omitted when it was not
@@ -20918,6 +21621,439 @@ components:
           - integer
           - 'null'
           description: Row offset of the next page; null on the last page
+    MessageType:
+      type: string
+      enum:
+      - email
+      - sms
+      - ding_talk
+      - wxwork
+      - webhook
+    MessageStatus:
+      type: string
+      description: "`queued` also covers waiting for a retry (`next_retry_at`); `succeeded` means the receiving server, robot, SMTP server or SMS provider accepted it, not that it was read"
+      enum:
+      - queued
+      - sending
+      - succeeded
+      - failed
+    MessageSource:
+      type: string
+      enum:
+      - api
+      - jiri
+      - routine
+    MessageChannelCreateInput:
+      oneOf:
+      - $ref: '#/components/schemas/EmailMessageChannelInput'
+      - $ref: '#/components/schemas/SMSMessageChannelInput'
+      - $ref: '#/components/schemas/DingTalkMessageChannelInput'
+      - $ref: '#/components/schemas/WxworkMessageChannelInput'
+      - $ref: '#/components/schemas/WebhookMessageChannelInput'
+      discriminator:
+        propertyName: type
+        mapping:
+          email: "#/components/schemas/EmailMessageChannelInput"
+          sms: "#/components/schemas/SMSMessageChannelInput"
+          ding_talk: "#/components/schemas/DingTalkMessageChannelInput"
+          wxwork: "#/components/schemas/WxworkMessageChannelInput"
+          webhook: "#/components/schemas/WebhookMessageChannelInput"
+    EmailMessageChannelInput:
+      type: object
+      description: Sends through a verified SMTP account of the account
+      additionalProperties: false
+      required:
+      - type
+      - name
+      - smtp_account_id
+      properties:
+        type:
+          type: string
+          enum:
+          - email
+        name:
+          $ref: '#/components/schemas/MessageChannelName'
+        smtp_account_id:
+          type: string
+          description: See `GET /smtp_accounts`
+    SMSMessageChannelInput:
+      type: object
+      description: Sends with an SMS template whose variables are declared, once the template is approved
+      additionalProperties: false
+      required:
+      - type
+      - name
+      - sms_template_id
+      properties:
+        type:
+          type: string
+          enum:
+          - sms
+        name:
+          $ref: '#/components/schemas/MessageChannelName'
+        sms_template_id:
+          type: string
+          description: See `GET /sms/templates`
+    DingTalkMessageChannelInput:
+      type: object
+      description: A DingTalk group robot
+      additionalProperties: false
+      required:
+      - type
+      - name
+      - url
+      properties:
+        type:
+          type: string
+          enum:
+          - ding_talk
+        name:
+          $ref: '#/components/schemas/MessageChannelName'
+        url:
+          type: string
+          description: "`https://oapi.dingtalk.com/robot/send?access_token=...`"
+        secret:
+          type: string
+          description: Signing secret, when the robot has signing turned on
+    WxworkMessageChannelInput:
+      type: object
+      description: A WeCom group robot
+      additionalProperties: false
+      required:
+      - type
+      - name
+      - url
+      properties:
+        type:
+          type: string
+          enum:
+          - wxwork
+        name:
+          $ref: '#/components/schemas/MessageChannelName'
+        url:
+          type: string
+          description: "`https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...`"
+    WebhookMessageChannelInput:
+      type: object
+      description: An https address of your own server, which must resolve to a public address. Each message is a POST of JSON `{id, request_id, title, content, created_at}`; on 5xx or 429 the same `id` is posted again, up to 6 attempts in all, so deduplicate by `id`.
+      additionalProperties: false
+      required:
+      - type
+      - name
+      - url
+      properties:
+        type:
+          type: string
+          enum:
+          - webhook
+        name:
+          $ref: '#/components/schemas/MessageChannelName'
+        url:
+          type: string
+          maxLength: 2000
+    MessageChannelName:
+      type: string
+      maxLength: 50
+      description: Name to tell the channel apart
+    MessageChannel:
+      type: object
+      required:
+      - id
+      - type
+      - name
+      - address
+      - created_at
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/MessageType'
+        name:
+          type: string
+        address:
+          type:
+          - string
+          - 'null'
+          description: Robot or webhook address with its key hidden; null for email and SMS
+        smtp_account_id:
+          type: string
+          description: Only for `email`
+        sms_template_id:
+          type: string
+          description: Only for `sms`
+        created_at:
+          type: string
+          format: date-time
+    MessageChannelCreated:
+      allOf:
+      - $ref: '#/components/schemas/MessageChannel'
+      - type: object
+        properties:
+          signing_secret:
+            type: string
+            description: Only for `webhook`, and only in this response; each request carries `X-Jinshuju-Timestamp` and `X-Jinshuju-Signature` = `sha256=` + hex HMAC-SHA256 of `<timestamp>.<body>` with this secret
+    MessageChannelListResponse:
+      type: object
+      required:
+      - total
+      - count
+      - data
+      - next
+      properties:
+        total:
+          type: integer
+          description: Number of channels matching the conditions
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageChannel'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
+    MessageInput:
+      oneOf:
+      - $ref: '#/components/schemas/EmailMessageInput'
+      - $ref: '#/components/schemas/SMSMessageInput'
+      - $ref: '#/components/schemas/ChannelMessageInput'
+      discriminator:
+        propertyName: type
+        mapping:
+          email: "#/components/schemas/EmailMessageInput"
+          sms: "#/components/schemas/SMSMessageInput"
+          ding_talk: "#/components/schemas/ChannelMessageInput"
+          wxwork: "#/components/schemas/ChannelMessageInput"
+          webhook: "#/components/schemas/ChannelMessageInput"
+    EmailMessageInput:
+      type: object
+      additionalProperties: false
+      required:
+      - type
+      - to
+      - content
+      properties:
+        type:
+          type: string
+          enum:
+          - email
+        channel_id:
+          type: string
+          description: Email channel to send through; without it the email goes from Jinshuju's address, only to verified members of the account
+        to:
+          $ref: '#/components/schemas/MessageRecipients'
+        title:
+          type: string
+          maxLength: 200
+          description: Subject
+        content:
+          type: string
+          maxLength: 20000
+          description: Markdown body
+        idempotency_key:
+          type: string
+          maxLength: 255
+          description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
+    SMSMessageInput:
+      type: object
+      additionalProperties: false
+      required:
+      - type
+      - channel_id
+      - to
+      properties:
+        type:
+          type: string
+          enum:
+          - sms
+        channel_id:
+          type: string
+        to:
+          $ref: '#/components/schemas/MessageRecipients'
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 100
+          description: Value of every variable the channel's template declares, keyed as in the template (`var_1`...)
+        idempotency_key:
+          type: string
+          maxLength: 255
+          description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
+    ChannelMessageInput:
+      type: object
+      description: A robot or webhook message; the channel is the recipient
+      additionalProperties: false
+      required:
+      - type
+      - channel_id
+      - content
+      properties:
+        type:
+          type: string
+          enum:
+          - ding_talk
+          - wxwork
+          - webhook
+        channel_id:
+          type: string
+        title:
+          type: string
+          maxLength: 200
+          description: Heading shown above `content`; do not repeat it in `content`
+        content:
+          type: string
+          description: Markdown text. Robots get the title as a `### ` heading line above it, and that whole text takes at most 4096 bytes for WeCom and 20000 for DingTalk; webhooks take 65536 bytes of title and content
+        idempotency_key:
+          type: string
+          maxLength: 255
+          description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
+    MessageRecipients:
+      type: array
+      minItems: 1
+      maxItems: 50
+      uniqueItems: true
+      items:
+        type: string
+      description: Email addresses or mobile numbers, one record each
+    MessageEstimate:
+      type: object
+      required:
+      - message_count
+      - billed_count
+      properties:
+        message_count:
+          type: integer
+          description: Records the request would create, one per recipient
+        billed_count:
+          type: integer
+          description: SMS it would bill, or emails it would take from the email quota; 0 for the rest
+    Message:
+      type: object
+      required:
+      - id
+      - request_id
+      - type
+      - channel_id
+      - recipient
+      - title
+      - content
+      - variables
+      - status
+      - attempts
+      - next_retry_at
+      - error
+      - response_code
+      - billed_count
+      - source
+      - created_at
+      - sent_at
+      properties:
+        id:
+          type: string
+        request_id:
+          type: string
+          description: Shared by the records one send request created
+        type:
+          $ref: '#/components/schemas/MessageType'
+        channel_id:
+          type:
+          - string
+          - 'null'
+          description: Null for email from Jinshuju's address
+        recipient:
+          type:
+          - string
+          - 'null'
+          description: Email address or mobile number; null for robots and webhooks
+        title:
+          type:
+          - string
+          - 'null'
+        content:
+          type:
+          - string
+          - 'null'
+        variables:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            type: string
+        status:
+          $ref: '#/components/schemas/MessageStatus'
+        attempts:
+          type: integer
+        next_retry_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why the last attempt failed
+        response_code:
+          type:
+          - integer
+          - 'null'
+          description: HTTP status the robot or webhook answered with. A webhook's reply body is never returned; for a robot, `error` carries the platform's `errcode` and `errmsg`
+        billed_count:
+          type: integer
+          description: SMS billed, or emails taken from the email quota
+        source:
+          $ref: '#/components/schemas/MessageSource'
+        created_at:
+          type: string
+          format: date-time
+        sent_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    MessageListResponse:
+      type: object
+      required:
+      - total
+      - count
+      - data
+      - next
+      properties:
+        total:
+          type: integer
+          description: Number of messages matching the conditions
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
+    MessageSendResponse:
+      type: object
+      required:
+      - request_id
+      - replayed
+      - data
+      properties:
+        request_id:
+          type: string
+        replayed:
+          type: boolean
+          description: True when the records come from an earlier request with the same `idempotency_key`
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
     SMSTemplateListResponse:
       type: object
       required:
@@ -21549,7 +22685,7 @@ components:
                 - delete_authorization_page_only
                 description: |
                   What kind of reason it is: `active_limit` 20 routines are enabled already; `once_passed` a one-off's time has passed; `object_unavailable` an object or the data trigger's source does not exist or you cannot reach it;
-                  `field_unavailable` a trigger field does not exist, cannot be seen or cannot be watched (formula and association fields); `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else.
+                  `field_unavailable` a trigger field does not exist, cannot be seen, cannot be watched (formula and association fields) or cannot be used in a condition; `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else, such as a condition's operator or value its field type does not take.
               message:
                 type: string
                 description: The message the routines page shows, word for word
@@ -21656,7 +22792,7 @@ components:
           description: "`updated`: the api_codes of the fields watched, 1–10; fields the system computes (formula, association) cannot be watched"
         scope_conditions:
           type: array
-          description: Data conditions, written as view filters are. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. Each item reads only the keys below.
+          description: Data conditions, written as the routines page saves them. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. Each item reads only the keys below. A condition on an operator or value its field type does not take returns `422` saying what the field takes.
           items:
             type: object
             properties:
@@ -21665,7 +22801,7 @@ components:
                 description: The field's api_code (a table column as `<field>.<column>`)
               operator:
                 type: string
-                description: The comparison, such as eq, ne, gt, lt, any_in, none_in, null, not_null, like or between
+                description: The comparison, one the field type offers on the routines page, such as any_in on a choice field or between on a date, or one the entry query handles beyond them, such as eq on text, gte on a date, eq / ne with one code on a radio button or with the exact set on a checkbox
               value:
                 description: The value compared with
               group_index:
@@ -21673,7 +22809,7 @@ components:
                 description: The condition's group
               scope_attr:
                 type: string
-                description: The attribute the condition applies to
+                description: "`date_time` for the date of a reservation field; left out otherwise"
         include_bulk:
           type: boolean
           default: false
@@ -22034,6 +23170,264 @@ components:
           - integer
           - 'null'
           description: The next page's row offset; null on the last page
+    MemoryKind:
+      type: string
+      enum:
+      - background
+      - preference
+      description: "`background`: a fact about you that always holds; `preference`: how to do something, with a `scope` saying when"
+    MemorySource:
+      type: string
+      enum:
+      - asked
+      - inferred
+      description: "`asked`: you asked for it to be kept; `inferred`: Jiri judged it worth keeping"
+    MemoryNoteText:
+      type: string
+      minLength: 1
+      maxLength: 40
+      description: What to remember, in a sentence
+    MemoryNoteScope:
+      type:
+      - string
+      - 'null'
+      maxLength: 20
+      description: When a preference applies; required for a preference, ignored for background
+    MemoryNoteQuote:
+      type: string
+      minLength: 1
+      maxLength: 120
+      description: Your own words the note is taken from
+    MemoryListedText:
+      type: string
+      pattern: "\\S"
+      description: The note's text, as the list you read shows it
+    MemoryListedScope:
+      type:
+      - string
+      - 'null'
+      description: The note's scope, as the list you read shows it; null for background
+    MemoryNote:
+      type: object
+      required:
+      - number
+      - kind
+      - text
+      - scope
+      - quote
+      - source
+      - conversation_id
+      - created_at
+      - updated_at
+      properties:
+        number:
+          type: integer
+          description: Where the note stands in the list now, from 1
+        kind:
+          $ref: '#/components/schemas/MemoryKind'
+        text:
+          type: string
+        scope:
+          type:
+          - string
+          - 'null'
+          description: When a preference applies; null for background
+        quote:
+          type: string
+          description: Your own words the note was taken from
+        source:
+          $ref: '#/components/schemas/MemorySource'
+        conversation_id:
+          type:
+          - string
+          - 'null'
+          description: The Jiri conversation it was last written in
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MemoryResponse:
+      type: object
+      required:
+      - max
+      - notes
+      properties:
+        max:
+          type: integer
+          description: How many notes the memory holds at most
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryNote'
+    MemoryCallId:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: 'Idempotency key: a write sent again with the same `call_id` returns its first `outcome` and is not applied again (the last 50 writes are kept); `note`, `notes` and the numbers are as they are now. A write refused with `memory_full` or `note_not_found` is not kept, so sending it again tries again. Retry a write with the `call_id` it was first sent with.'
+    MemoryNoteContent:
+      type: object
+      additionalProperties: false
+      required:
+      - text
+      properties:
+        text:
+          $ref: '#/components/schemas/MemoryListedText'
+        scope:
+          $ref: '#/components/schemas/MemoryListedScope'
+    MemoryNoteInput:
+      type: object
+      additionalProperties: false
+      required:
+      - call_id
+      - kind
+      - text
+      - quote
+      - source
+      properties:
+        call_id:
+          $ref: '#/components/schemas/MemoryCallId'
+        kind:
+          $ref: '#/components/schemas/MemoryKind'
+        text:
+          $ref: '#/components/schemas/MemoryNoteText'
+        scope:
+          $ref: '#/components/schemas/MemoryNoteScope'
+        quote:
+          $ref: '#/components/schemas/MemoryNoteQuote'
+        source:
+          $ref: '#/components/schemas/MemorySource'
+    MemoryNoteUpdateInput:
+      type: object
+      additionalProperties: false
+      required:
+      - call_id
+      - current
+      - kind
+      - text
+      - quote
+      properties:
+        call_id:
+          $ref: '#/components/schemas/MemoryCallId'
+        current:
+          $ref: '#/components/schemas/MemoryNoteContent'
+        kind:
+          $ref: '#/components/schemas/MemoryKind'
+        text:
+          $ref: '#/components/schemas/MemoryNoteText'
+        scope:
+          $ref: '#/components/schemas/MemoryNoteScope'
+        quote:
+          $ref: '#/components/schemas/MemoryNoteQuote'
+    MemoryNotesDeleteInput:
+      type: object
+      additionalProperties: false
+      required:
+      - call_id
+      - notes
+      properties:
+        call_id:
+          $ref: '#/components/schemas/MemoryCallId'
+        notes:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: Each number in `id`, once, with what it says in the list you read
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - number
+            - text
+            properties:
+              number:
+                type: integer
+                minimum: 1
+              text:
+                $ref: '#/components/schemas/MemoryListedText'
+              scope:
+                $ref: '#/components/schemas/MemoryListedScope'
+    MemoryWriteResponse:
+      type: object
+      required:
+      - outcome
+      - note
+      - notes
+      properties:
+        outcome:
+          type: string
+          enum:
+          - created
+          - duplicate
+          - updated
+          - unchanged
+        note:
+          description: 'The note the write was about: the one added, replaced, or already kept. Null when a repeated `call_id` names a note deleted since.'
+          oneOf:
+          - $ref: '#/components/schemas/MemoryNote'
+          - type: 'null'
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryNote'
+    MemoryDeleteResponse:
+      type: object
+      required:
+      - outcome
+      - numbers
+      - notes
+      properties:
+        outcome:
+          type: string
+          const: removed
+        numbers:
+          type: array
+          items:
+            type: integer
+          description: The numbers the request named
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryNote'
+    MemoryRefusal:
+      type: object
+      required:
+      - error_description
+      - code
+      properties:
+        error_description:
+          type: string
+        code:
+          type: string
+          enum:
+          - invalid_numbers
+          - note_not_found
+          - conflict
+          - call_id_reused
+          - memory_full
+          - field_blank
+          - text_too_long
+          - scope_too_long
+          - quote_too_long
+          - invalid_kind
+          - invalid_source
+        field:
+          type: string
+          description: "`field_blank`: the field"
+        max:
+          type: integer
+          description: "`memory_full`: how many notes at most; `*_too_long`: the most characters"
+        missing_numbers:
+          type: array
+          items:
+            type: integer
+          description: "`note_not_found`: the numbers no note answered to"
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryNote'
+          description: "`note_not_found`, `memory_full`: the notes as they are now"
     RoutineRunListResponse:
       type: object
       required:
@@ -22057,6 +23451,93 @@ components:
           - integer
           - 'null'
           description: The next page's row offset; null on the last page
+    FormulaFunction:
+      title: FormulaFunction
+      type: string
+      description: A function a formula can call, case-insensitive
+      oneOf:
+      - const: ABS
+        description: 'ABS(number): Absolute value'
+      - const: AND
+        description: 'AND(condition, condition, ...): TRUE when every condition holds'
+      - const: AVG
+        description: 'AVG(number, number, ...): Average of the values, skipping blanks; also takes a table column'
+      - const: CONCAT
+        description: 'CONCAT(text, text, ...): Joins the values into one text, same as text & text'
+      - const: COUNT
+        description: 'COUNT(value, value, ...): Number of values; also takes a table column'
+      - const: DATE
+        description: 'DATE(text): The date written as YYYY-MM-DD, or "today", "yesterday" or "tomorrow"'
+      - const: DATEADD
+        description: 'DATEADD(date, amount, unit): The date moved by amount units; unit is "y", "M", "w", "d", "h", "m" or "s"'
+      - const: DATEDIF
+        description: 'DATEDIF(start_date, end_date, unit): Whole calendar years ("y"), months ("m") or days ("d") from start_date to end_date; blank when start_date is later'
+      - const: DATETIME_DIFF
+        description: 'DATETIME_DIFF(end_time, start_time, unit): Time from start_time to end_time in the unit, "y", "M", "w", "d", "h", "m" or "s", with decimals'
+      - const: DAY
+        description: 'DAY(date): Day of the month, 1 to 31'
+      - const: DAYS
+        description: 'DAYS(end_date, start_date): Whole days from start_date to end_date'
+      - const: FIND
+        description: 'FIND(text_to_find, within_text): Position of text_to_find in within_text counting from 1, case-sensitive; 0 when not found'
+      - const: ID
+        description: 'ID(id_card_number, part): From an 18-digit ID card number: the age when part is 0, the gender text when 1, the birth date when 2'
+      - const: IF
+        description: 'IF(condition, value_if_true, value_if_false): value_if_true when the condition holds, otherwise value_if_false'
+      - const: IFS
+        description: 'IFS(condition, value, condition, value, ...): The value paired with the first condition that holds; blank when none holds. Use TRUE as the last condition for a default'
+      - const: INT
+        description: 'INT(number): Rounds down to an integer, so INT(-1.5) is -2'
+      - const: ISBLANK
+        description: 'ISBLANK(value): TRUE when the value is blank; a blank number field reads as 0, so it is never blank'
+      - const: LEFT
+        description: 'LEFT(text, count): The first count characters'
+      - const: LEN
+        description: 'LEN(text): Number of characters'
+      - const: LOG
+        description: 'LOG(number, base): Logarithm of the number in the base; natural logarithm when base is left out'
+      - const: LOWER
+        description: 'LOWER(text): The text in lower case'
+      - const: MAX
+        description: 'MAX(value, value, ...): Largest number or latest date; also takes a table column'
+      - const: MID
+        description: 'MID(text, start, count): count characters starting at position start, counting from 1'
+      - const: MIN
+        description: 'MIN(value, value, ...): Smallest number or earliest date; also takes a table column'
+      - const: MOD
+        description: 'MOD(number, divisor): Remainder of the division, with the sign of the divisor; blank when divisor is 0'
+      - const: MONTH
+        description: 'MONTH(date): Month, 1 to 12'
+      - const: NOT
+        description: 'NOT(condition): TRUE when the condition does not hold'
+      - const: NOW
+        description: 'NOW(): The current time; formulas using it refresh at most every 15 minutes while the form is read'
+      - const: OR
+        description: 'OR(condition, condition, ...): TRUE when any condition holds'
+      - const: RIGHT
+        description: 'RIGHT(text, count): The last count characters'
+      - const: ROUND
+        description: 'ROUND(number, digits): Rounds to the given decimal places, 0 by default'
+      - const: ROUNDDOWN
+        description: 'ROUNDDOWN(number, digits): Rounds toward zero to the given decimal places, 0 by default'
+      - const: ROUNDUP
+        description: 'ROUNDUP(number, digits): Rounds away from zero to the given decimal places, 0 by default'
+      - const: SEARCH
+        description: 'SEARCH(text_to_find, within_text): Like FIND but ignoring case'
+      - const: SUM
+        description: 'SUM(number, number, ...): Sum of the values, skipping blanks; also takes a table column'
+      - const: SWITCH
+        description: 'SWITCH(value, match, result, match, result, ..., default): The result paired with the first match equal to value; the optional last argument is the default'
+      - const: TODAY
+        description: 'TODAY(): Today''s date; formulas using it refresh once a day when the form is read'
+      - const: TRIM
+        description: 'TRIM(text): The text without leading and trailing spaces, full-width spaces included'
+      - const: UPPER
+        description: 'UPPER(text): The text in upper case'
+      - const: WEEKDAY
+        description: 'WEEKDAY(date): Day of the week, 1 for Sunday to 7 for Saturday'
+      - const: YEAR
+        description: 'YEAR(date): Four-digit year'
     ExamFieldInput:
       type: object
       description: 'A field definition for scene=exam, branched on type: the FieldInput types plus the ones only this scene takes'
