@@ -156,7 +156,7 @@ test('the check the tests hold requests to knows the keywords the generator keep
     properties: {
       kind: { enum: ['a', 'b'] },
       size: { type: 'integer', minimum: 1 },
-      tags: { type: 'array', maxItems: 2, items: { type: 'string', pattern: '^[a-z]+$' } },
+      tags: { type: 'array', maxItems: 2, uniqueItems: true, items: { type: 'string', pattern: '^[a-z]+$' } },
       shape: { oneOf: [{ type: 'string' }, { type: 'object', required: ['id'] }] }
     },
     if: { properties: { kind: { const: 'b' } } },
@@ -175,6 +175,9 @@ test('the check the tests hold requests to knows the keywords the generator keep
   assert.deepEqual(messages({ kind: 'a', tags: ['ok', 'No', 'x'] }), [
     '/tags must have at most 2 items',
     '/tags/1 must match ^[a-z]+$'
+  ]);
+  assert.deepEqual(messages({ kind: 'a', tags: ['ok', 'ok'] }), [
+    '/tags must have each item once; item 1 repeats item 0'
   ]);
   assert.deepEqual(messages({ kind: 'a', shape: {} }), ['/shape/id is required']);
   assert.deepEqual(messages([]), [' must be object']);

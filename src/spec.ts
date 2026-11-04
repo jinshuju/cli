@@ -42,6 +42,7 @@ export interface Schema {
   readonly maxLength?: number;
   readonly minItems?: number;
   readonly maxItems?: number;
+  readonly uniqueItems?: boolean;
   readonly pattern?: string;
   /**
    * Which of the shapes beside it (oneOf, anyOf) a value is, named by one of

@@ -24,13 +24,15 @@ const SCHEMA_REF = '#/components/schemas/';
 const JSON_TEXT = 'application/json';
 
 /**
- * The schema keywords src/schema.ts knows how to check, by what they hold. A
- * keyword missing from both lists stops the generator: dropping one it did not
- * understand would let through a request the spec refuses.
+ * The schema keywords src/schema.ts knows how to check, by what they hold: a
+ * value kept as it is (a number, a boolean, a list of names), a schema, or a
+ * list of schemas. A keyword missing from every list stops the generator:
+ * dropping one it did not understand would let through a request the spec
+ * refuses.
  */
 const KEYWORDS = {
   value: ['type', 'enum', 'const', 'required', 'dependentRequired', 'pattern'],
-  number: ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems'],
+  number: ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems', 'uniqueItems'],
   schema: ['items', 'not', 'if', 'then', 'else', 'contains'],
   schemas: ['allOf', 'oneOf', 'anyOf']
 };

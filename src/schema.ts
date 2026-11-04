@@ -74,6 +74,13 @@ export function validate(schema: Schema | boolean, value: unknown, pointer = '',
   if (Array.isArray(value)) {
     if (s.minItems !== undefined && value.length < s.minItems) issue('range', `must have at least ${s.minItems} items`);
     if (s.maxItems !== undefined && value.length > s.maxItems) issue('range', `must have at most ${s.maxItems} items`);
+    if (s.uniqueItems === true) {
+      const again = value.findIndex((item, index) => value.slice(0, index).some((earlier) => same(earlier, item)));
+      if (again >= 0) {
+        const first = value.findIndex((item) => same(item, value[again]));
+        issue('range', `must have each item once; item ${again} repeats item ${first}`);
+      }
+    }
     const items = s.items;
     if (items !== undefined) {
       value.forEach((item, index) => issues.push(...validate(items, item, `${pointer}/${index}`, certain)));
