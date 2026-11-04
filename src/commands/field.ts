@@ -3,9 +3,19 @@ import { call, choices } from '../spec.js';
 import { YES_OPTION, confirmed, onContainer, one, payload, requiredOption } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
-/** One field, or a list of them — the same objects `fields` holds above. */
+/**
+ * One field, or a list of them — the same objects `fields` holds above. And
+ * what a field read back is not: what the CLI's callers were most often
+ * refused for was a field written back as `form get` returned it.
+ */
 const FIELD_PAYLOAD: readonly string[] = [
   '{ "type": "TextField", "label": "Notes", "required": false }',
+  '',
+  'A field as `form get` or `field list` returns it is not a field to write back:',
+  '  validation: {required, unique, minimum_length, …} is written flat on the field',
+  '  choices are changed with `field update-choices`; `field update` takes them only on a',
+  '    CascadeDropDown, or with a `type` that turns a text field into a choice field',
+  '  a key read as null is left out, not written as null',
   '',
   'Field types: jinshuju field types'
 ];
@@ -251,9 +261,12 @@ export const FIELD: readonly Command[] = [
   {
     path: ['field', 'update'],
     summary: 'Update one field',
-    description: 'The patch is merged onto the field; the api_code comes from the argument, not the payload.',
+    description:
+      'The patch is merged onto the field; the api_code comes from the argument, not the payload. ' +
+      'Write only the keys to change, flat on the field, as the payload below says.',
     args: [{ name: 'api-code', required: true, description: 'Field api_code, e.g. field_3' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    payload: FIELD_PAYLOAD,
     request: (input) =>
       onContainer(input, 'updateForm', 'updateTable', {
         body: {

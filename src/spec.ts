@@ -43,6 +43,12 @@ export interface Schema {
   readonly minItems?: number;
   readonly maxItems?: number;
   readonly pattern?: string;
+  /**
+   * Which of the shapes beside it (oneOf, anyOf) a value is, named by one of
+   * its own properties: `type: TextField` is a TextFieldInput. The mapping
+   * names schemas in SCHEMAS.
+   */
+  readonly discriminator?: { readonly propertyName: string; readonly mapping: { readonly [tag: string]: string } };
 }
 
 export interface Parameter {
@@ -72,6 +78,27 @@ export function operation(id: OperationId): Operation {
   return OPERATIONS[id];
 }
 
+/**
+ * The operation a request was sent to, read off its method and path, so a
+ * request can be held to the spec without trusting how it was built.
+ */
+export function operationOf(request: Pick<HttpRequest, 'method' | 'path'>): OperationId | undefined {
+  if (!request.path.startsWith(BASE_PATH)) return undefined;
+  const path = request.path.slice(BASE_PATH.length);
+  const matches = (Object.keys(OPERATIONS) as OperationId[]).filter((id) => {
+    const op = OPERATIONS[id];
+    if (op.method !== request.method) return false;
+    const pattern = op.path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[^}]+\}/g, '[^/]+');
+    return new RegExp(`^${pattern}$`).test(path);
+  });
+  // A literal segment beats a parameter: /entries/count is not /entries/{serial_number}.
+  return matches.sort((a, b) => literalLength(OPERATIONS[b].path) - literalLength(OPERATIONS[a].path))[0];
+}
+
+function literalLength(path: string): number {
+  return path.replace(/\{[^}]+\}/g, '').length;
+}
+
 // --- the request -----------------------------------------------------------
 
 /** A query value as a command has it; `call` spells it for the wire. */
@@ -99,6 +126,8 @@ export interface CallParts {
  * date — and answers a 400 that says exactly what is wrong. A check here
  * would save that round trip at the price of refusing, in every CLI already
  * installed, each field type, key and value the API learns after it ships.
+ * The one look the CLI takes at a body is src/preflight.ts, on the way to the
+ * wire, and it refuses only what no newer spec could have made right.
  */
 export function call(id: OperationId, parts: CallParts = {}): HttpRequest {
   const op = OPERATIONS[id];

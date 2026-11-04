@@ -143,10 +143,100 @@ test('a refusal stating only the first of its reasons is reported with every one
   const invalid = await failure(server.url, '/api/v1/forms');
   await server.close();
 
-  assert.equal(refused.message, '启用中的自动任务最多 20 条，请先暂停或删除一些; 找不到表单 Kp7mQ2，或者你没有权限');
+  assert.equal(refused.message, '启用中的自动任务最多 20 条，请先暂停或删除一些\n  找不到表单 Kp7mQ2，或者你没有权限');
   assert.equal(refused.status, 422);
-  // A description that says something of its own is said as it is.
-  assert.equal(invalid.message, 'Request body invalid: name is required. fields must be an array');
+  // The description's own words introduce the list, and a pointer the message
+  // already names is not repeated in front of it.
+  assert.equal(invalid.message, 'Request body invalid:\n  /name: name is required\n  /fields: fields must be an array');
+});
+
+test('a request body refused for many reasons is told every one of them, grouped by pointer', async () => {
+  // What API v1 answers: error_description repeats three of the reasons and
+  // counts the rest, a field that may be one of several shapes is told about
+  // its type once per shape, and a value may break two rules at once.
+  const reasons = [
+    {
+      pointer: '/fields/add/0/validation',
+      message: 'LikertFieldInput does not take `validation` (at `/fields/add/0/validation`); it takes: type, label',
+      code: 'schema'
+    },
+    {
+      pointer: '/fields/add/0/type',
+      message: 'value at `/fields/add/0/type` is not one of: ["TextArea", "RadioButton"]',
+      code: 'enum'
+    },
+    {
+      pointer: '/fields/add/0',
+      message: 'value at `/fields/add/0` is invalid ("discriminator")',
+      code: 'discriminator'
+    },
+    {
+      pointer: '/fields/add/0/type',
+      message: 'value at `/fields/add/0/type` is not one of: ["TextField", "TextArea"]',
+      code: 'enum'
+    },
+    {
+      pointer: '/fields/add/1',
+      message: 'object at `/fields/add/1` is missing required properties: label',
+      code: 'required'
+    },
+    {
+      pointer: '/fields/add/2/range_min',
+      message: 'value at `/fields/add/2/range_min` is not a number',
+      code: 'number'
+    },
+    { pointer: '/name', message: 'is shorter than 2 characters', code: 'minLength' },
+    { pointer: '/name', message: 'does not match ^[^/]+$', code: 'pattern' },
+    { pointer: '/name', message: 'is shorter than 2 characters', code: 'minLength' }
+  ];
+  const many = Array.from({ length: 25 }, (_, i) => ({
+    pointer: `/fields/add/${i}`,
+    message: `object at \`/fields/add/${i}\` is missing required properties: label`,
+    code: 'required'
+  }));
+  const server = await serve({
+    '/api/v1/forms/Kp7mQ2': {
+      status: 400,
+      body: JSON.stringify({
+        error_description: `Request body invalid: ${reasons[0]?.message} ${reasons[1]?.message} ${reasons[2]?.message} ... (9 errors total)`,
+        errors: reasons
+      })
+    },
+    '/api/v1/forms/Vn4xR8': {
+      status: 400,
+      body: JSON.stringify({
+        error_description: `Request body invalid: ${many[0]?.message} ... (25 errors total)`,
+        errors: many
+      })
+    }
+  });
+  const refused = await failure(server.url, '/api/v1/forms/Kp7mQ2');
+  const cut = await failure(server.url, '/api/v1/forms/Vn4xR8');
+  await server.close();
+
+  assert.equal(
+    refused.message,
+    [
+      'Request body invalid:',
+      `  ${reasons[0]?.message}`,
+      `  ${reasons[1]?.message}; ${reasons[3]?.message}`,
+      `  ${reasons[2]?.message}`,
+      `  ${reasons[4]?.message}`,
+      `  ${reasons[5]?.message}`,
+      '  /name: is shorter than 2 characters; does not match ^[^/]+$'
+    ].join('\n')
+  );
+  assert.equal(refused.status, 400);
+  assert.deepEqual(refused.body, {
+    error_description: (refused.body as { error_description: string }).error_description,
+    errors: reasons
+  });
+
+  const lines = cut.message.split('\n');
+  assert.equal(lines.length, 1 + 20 + 1);
+  assert.equal(lines[0], 'Request body invalid:');
+  assert.equal(lines[20], `  ${many[19]?.message}`);
+  assert.equal(lines[21], '  … and 5 more; --output json carries them all');
 });
 
 test('an HTML error page is reported as the status it is, not as broken JSON', async () => {

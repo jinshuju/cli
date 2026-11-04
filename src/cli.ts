@@ -5,6 +5,7 @@ import { helpFor, rootHelp } from './help.js';
 import { HttpError, JinshujuHttpClient, type HttpClient, type HttpRequest } from './http.js';
 import { runLocal } from './local.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, type OutputFormat } from './options.js';
+import { checked } from './preflight.js';
 import { progress, type Progress } from './progress.js';
 import { format, terminalWidth } from './render.js';
 import { fail, ok, outputOf, unknown, type CliResult, type CliRuntime } from './result.js';
@@ -52,15 +53,19 @@ async function runRemote(
   const output = (options.output as OutputFormat) ?? 'text';
   const width = runtime.width ?? terminalWidth();
 
-  const client =
+  // Every request leaves through the preflight, a test's mock client's too:
+  // a body is looked at once, on its way to the wire, whichever command built it.
+  const client = checked(
     runtime.client ??
-    new JinshujuHttpClient(
-      loadConfig({
-        configPath: (options.config as string) ?? defaultConfigPath,
-        env: runtime.env,
-        cli: { host: options.host as string | undefined }
-      })
-    );
+      new JinshujuHttpClient(
+        loadConfig({
+          configPath: (options.config as string) ?? defaultConfigPath,
+          env: runtime.env,
+          cli: { host: options.host as string | undefined }
+        })
+      ),
+    options.as_is === true
+  );
 
   // A command that needs more than one round trip, or has to decide how many,
   // runs itself and answers with what should be printed.

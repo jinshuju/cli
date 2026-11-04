@@ -270,6 +270,9 @@ export const FORM: readonly Command[] = [
       const { body, settings } = createFormBody(input);
       if (!settings) return client.request(call('createForm', { body }));
 
+      // The settings can only be sent to a form that exists, but what they
+      // would be refused for here can be said before one is made.
+      client.check?.(saveSettings('new', settings));
       const form = await client.request<{ token: string }>(call('createForm', { body }));
       try {
         await client.request(saveSettings(form.token, settings));
@@ -308,7 +311,9 @@ export const FORM: readonly Command[] = [
       delete body[settings.key];
       // The settings go first: they are the half that can be refused for what
       // the form is, so leading with them is what keeps a refusal from landing
-      // after the rest was already written.
+      // after the rest was already written. What the rest would be refused for
+      // here is said before either goes.
+      if (Object.keys(body).length > 0) client.check?.(call('updateForm', { path: { form_token: form }, body }));
       await client.request(saveSettings(form, settings));
       if (Object.keys(body).length === 0) return client.request(call('getForm', { path: { form_token: form } }));
 

@@ -163,9 +163,13 @@ maximum (50 in most cases), and anything larger is capped.
 `--all` reads at most 200 pages. Past that it stops with an error naming the
 cursor; pass it to `--next` (with `--all` again) to read on.
 
-`--filter` is repeatable and the conditions are AND-combined. For conditions it
-cannot express, use `--filters <json|@file>`. Cursors are opaque strings — pass
-the `next` value from the previous response back verbatim.
+`--filter` is repeatable, one condition per flag, and the conditions are
+AND-combined. An operator written otherwise (`=`, `in`, `not_empty`) is refused
+with the one meant, one the CLI's copy of the spec does not list goes through
+for the API to judge, two conditions in one flag are refused with the way to
+write them, and a value in quotes is taken whole, without them. For conditions
+it cannot express, use `--filters <json|@file>`. Cursors are opaque strings —
+pass the `next` value from the previous response back verbatim.
 
 ## Analysis
 
@@ -239,6 +243,14 @@ jinshuju field update --form Kp7mQ2 field_3 --json '{"required":true}'
 jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"Third"}]}'
 jinshuju field remove --form Kp7mQ2 field_9 --yes
 ```
+
+A payload is looked at once before it is sent, against the openapi.yaml the
+CLI shipped with, and refused only for what a newer API could not have made
+right: a required key missing, a value of the wrong type, `null` for a key
+that cannot be null, a field's `validation` written back as `form get` returned
+it. A key or a value that copy does not list is sent for the API to judge, since
+the API may have learned it since. A refusal names the day the copy was
+fetched, and `--as-is` sends the payload anyway.
 
 Data and views:
 
@@ -429,6 +441,11 @@ parsing anything:
 | 6    | the server failed (5xx)                                                  |
 | 7    | transport: the connection failed or timed out                            |
 | 8    | rate limited: wait and retry; the message and `retry_after` say how long |
+
+A refusal with several reasons lists every one of them, one line each, even
+when the server's own description repeats only the first three: a request body
+that is wrong in five places is corrected in one go rather than in five. A list
+longer than twenty is cut, and says how many it kept back.
 
 With `--output json`, stderr carries the same as JSON, plus the status and body
 the server answered with:

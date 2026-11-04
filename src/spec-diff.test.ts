@@ -59,12 +59,14 @@ test('a spec with nothing but prose changed releases nothing', () => {
   );
 });
 
-test('a body the CLI sends as given changing releases nothing: the API judges bodies', () => {
+test('a body the CLI holds a payload to changing is a feat, naming the operations that send it', () => {
+  // A CLI left on the old copy would refuse what the API now takes, so the
+  // change releases, and the operations whose bodies moved are named.
   assert.equal(
     titleAfter((spec) => {
       spec.components.schemas.TextFieldInput.properties.future_option = { type: 'boolean' };
     }),
-    'chore: sync openapi.yaml, nothing the CLI checks or offers changed'
+    'feat: follow openapi.yaml changes to createForm, updateForm, updateTable'
   );
 });
 
