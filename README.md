@@ -563,6 +563,21 @@ jinshuju email smtp-account list
 jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课提醒 --content '<p>明天上午 9 点开课</p>' --yes
 ```
 
+## Sending one message
+
+`message send` sends one message through a channel registered with the API: a
+DingTalk or WeCom group robot, or a webhook, is the recipient itself; email and
+SMS go to each `--to`, at most 50. `--mention` @s group members by mobile number,
+or everyone with `@all`; WeCom sends a message that mentions anyone as plain
+text, so leave Markdown out of it. A sent message cannot be recalled, so it
+takes `--yes`. After a timeout, send again with the same `--idempotency-key`:
+the API answers the first records instead of sending twice.
+
+```bash
+jinshuju message send --type wxwork --channel 6729f1c2a1b2c3d4e5f60718 --content '今天是星期三，该吃午饭啦！' --mention 13800000000 --yes
+jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes
+```
+
 ## Artifacts
 
 An artifact is a file Jiri made for you; any of your conversations can revise

@@ -19,6 +19,7 @@ import { FILL } from './fill.js';
 import { FOLDER } from './folder.js';
 import { FORM } from './form.js';
 import { LOCAL } from './local.js';
+import { MESSAGE } from './message.js';
 import { NOTIFICATION } from './notification.js';
 import { OPENSEARCH } from './opensearch.js';
 import { ROUTINE } from './routine.js';
@@ -100,6 +101,10 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'sms', summary: 'Manage SMS signatures and templates, and send SMS to entries' },
   { name: 'email', summary: 'Send email to entries' },
   {
+    name: 'message',
+    summary: 'Send one message through a registered channel: group robots, webhooks, email and SMS'
+  },
+  {
     name: 'artifact',
     summary: 'Artifacts Jiri made in a conversation: find and download them, and who can open an HTML one by its link',
     note:
@@ -127,6 +132,7 @@ export const COMMANDS: readonly Command[] = [
   ...TRADE,
   ...SMS,
   ...EMAIL,
+  ...MESSAGE,
   ...ARTIFACT
 ];
 
