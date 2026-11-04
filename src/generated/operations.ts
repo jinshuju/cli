@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-10-29';
+export const SPEC_DATE: string | undefined = '2026-11-04';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -36,6 +36,8 @@ export type OperationId =
   | 'createForm'
   | 'createFormView'
   | 'createFormWebhook'
+  | 'createMemoryNote'
+  | 'createMessageChannel'
   | 'createNotificationRule'
   | 'createOpensearchQuery'
   | 'createRoutine'
@@ -54,6 +56,8 @@ export type OperationId =
   | 'deleteForm'
   | 'deleteFormView'
   | 'deleteFormWebhook'
+  | 'deleteMemoryNotes'
+  | 'deleteMessageChannel'
   | 'deleteNotificationRule'
   | 'deleteRoutine'
   | 'deleteSmsSignature'
@@ -64,6 +68,7 @@ export type OperationId =
   | 'deleteTableView'
   | 'estimateEmailTask'
   | 'estimateEmailTaskResend'
+  | 'estimateMessage'
   | 'estimateSmsTask'
   | 'estimateSmsTaskChange'
   | 'estimateSmsTaskResend'
@@ -84,6 +89,9 @@ export type OperationId =
   | 'getFormSetting'
   | 'getFormView'
   | 'getManuallyCloseRule'
+  | 'getMemory'
+  | 'getMessage'
+  | 'getMessageChannel'
   | 'getNotificationRule'
   | 'getOpensearchQuery'
   | 'getPublishedArtifact'
@@ -113,6 +121,8 @@ export type OperationId =
   | 'listFormViewEntries'
   | 'listFormViews'
   | 'listForms'
+  | 'listMessageChannels'
+  | 'listMessages'
   | 'listMyFilledForms'
   | 'listMySubmittedEntries'
   | 'listNotificationRuleNotifications'
@@ -153,6 +163,7 @@ export type OperationId =
   | 'runRoutine'
   | 'searchEntriesAcrossForms'
   | 'searchMySubmittedEntries'
+  | 'sendMessage'
   | 'sendSmsTask'
   | 'summarizeEntries'
   | 'summarizeFormViewEntries'
@@ -170,6 +181,7 @@ export type OperationId =
   | 'updateFormTheme'
   | 'updateFormView'
   | 'updateManuallyCloseRule'
+  | 'updateMemoryNote'
   | 'updateNotificationRule'
   | 'updateOpensearchQuery'
   | 'updatePublishedArtifact'
@@ -523,6 +535,18 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'WebhookInput' } } }
   },
+  createMemoryNote: {
+    method: 'POST',
+    path: '/memory/notes',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'MemoryNoteInput' } } }
+  },
+  createMessageChannel: {
+    method: 'POST',
+    path: '/message_channels',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'MessageChannelCreateInput' } } }
+  },
   createNotificationRule: {
     method: 'POST',
     path: '/forms/{form_token}/notification_rules',
@@ -695,6 +719,24 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/webhook',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
+  deleteMemoryNotes: {
+    method: 'DELETE',
+    path: '/memory/notes/{id}',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', pattern: '^[1-9][0-9]{0,2}(,[1-9][0-9]{0,2})*$' }
+      }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'MemoryNotesDeleteInput' } } }
+  },
+  deleteMessageChannel: {
+    method: 'DELETE',
+    path: '/message_channels/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   deleteNotificationRule: {
     method: 'DELETE',
     path: '/forms/{form_token}/notification_rules/{id}',
@@ -782,6 +824,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'keyword', in: 'query', schema: { type: 'string', maxLength: 200 } },
       { name: 'view_token', in: 'query', schema: { type: 'string' } }
     ]
+  },
+  estimateMessage: {
+    method: 'POST',
+    path: '/messages/estimate',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'MessageInput' } } }
   },
   estimateSmsTask: {
     method: 'GET',
@@ -888,7 +936,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/field_types/{type}',
     parameters: [
-      { name: 'type', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z]+$' } },
+      { name: 'type', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z_]+$' } },
       { name: 'kind', in: 'query', schema: { type: 'string' } }
     ]
   },
@@ -936,6 +984,17 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/forms/{form_token}/manually_close_rule',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getMemory: { method: 'GET', path: '/memory', parameters: [] },
+  getMessage: {
+    method: 'GET',
+    path: '/messages/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getMessageChannel: {
+    method: 'GET',
+    path: '/message_channels/{id}',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getNotificationRule: {
     method: 'GET',
@@ -1002,6 +1061,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'q', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1021,20 +1081,30 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   listBillingAccountUsers: {
     method: 'GET',
     path: '/billing_account/users',
-    parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }]
+    parameters: [
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
+    ]
   },
   listCheckinCampaigns: {
     method: 'GET',
     path: '/plugins/checkin/campaigns',
     parameters: [
       { name: 'form_token', in: 'query', schema: { type: 'string' } },
-      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   listContacts: {
     method: 'GET',
     path: '/contacts',
-    parameters: [{ name: 'next', in: 'query', schema: { type: 'string' } }]
+    parameters: [
+      { name: 'next', in: 'query', schema: { type: 'string' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } }
+    ]
   },
   listEmailTaskActivities: {
     method: 'GET',
@@ -1046,6 +1116,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'email', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1063,6 +1134,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'end_date', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1087,6 +1159,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       },
       { name: 'created_at', in: 'query', schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: ['integer', 'string'] } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
@@ -1118,7 +1191,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
   listFolders: {
     method: 'GET',
     path: '/folders',
-    parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }]
+    parameters: [
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
+    ]
   },
   listFormConditionTriggerableFields: {
     method: 'GET',
@@ -1140,6 +1217,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -1166,9 +1245,38 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         schema: { type: 'array', items: { $ref: 'FormSortRule' } }
       },
       { name: 'next', in: 'query', schema: { type: 'string' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'include_transactions', in: 'query', schema: { type: 'boolean' } }
+    ]
+  },
+  listMessageChannels: {
+    method: 'GET',
+    path: '/message_channels',
+    parameters: [
+      { name: 'type', in: 'query', schema: { $ref: 'MessageType' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
+  listMessages: {
+    method: 'GET',
+    path: '/messages',
+    parameters: [
+      { name: 'type', in: 'query', schema: { $ref: 'MessageType' } },
+      { name: 'channel_id', in: 'query', schema: { type: 'string' } },
+      { name: 'status', in: 'query', schema: { $ref: 'MessageStatus' } },
+      { name: 'source', in: 'query', schema: { $ref: 'MessageSource' } },
+      { name: 'request_id', in: 'query', schema: { type: 'string' } },
+      { name: 'created_after', in: 'query', schema: { type: 'string' } },
+      { name: 'created_before', in: 'query', schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
   listMyFilledForms: {
@@ -1177,6 +1285,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1196,6 +1305,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1217,6 +1327,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       },
       { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 1000 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1242,6 +1353,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1252,6 +1364,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'state', in: 'query', schema: { type: 'string', enum: ['active', 'paused'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1263,6 +1376,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1276,6 +1390,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'mobile', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1309,6 +1424,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'end_date', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1322,6 +1438,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['CHECKING', 'SUCCESS', 'FAIL'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
@@ -1355,6 +1472,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       },
       { name: 'created_at', in: 'query', schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: ['integer', 'string'] } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
@@ -1375,6 +1493,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'view_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
       { name: 'include_labels', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -1401,6 +1521,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         schema: { type: 'array', items: { $ref: 'FormSortRule' } }
       },
       { name: 'next', in: 'query', schema: { type: 'string' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
       { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } }
     ]
@@ -1414,7 +1535,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'status', in: 'query', schema: { type: 'string', enum: ['processing', 'success', 'error'] } },
       { name: 'include', in: 'query', schema: { type: 'string', enum: ['both', 'stats', 'records'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'next', in: 'query', schema: { type: 'integer' } }
+      { name: 'next', in: 'query', schema: { type: 'integer' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   listTradeRefunds: {
@@ -1427,7 +1549,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'refund_no', in: 'query', schema: { type: 'string' } },
       { name: 'include', in: 'query', schema: { type: 'string', enum: ['both', 'stats', 'records'] } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'next', in: 'query', schema: { type: 'integer' } }
+      { name: 'next', in: 'query', schema: { type: 'integer' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   listTradeTransactions: {
@@ -1449,7 +1572,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'query', schema: { type: 'string' } },
       { name: 'order_no', in: 'query', schema: { type: 'string' } },
       { name: 'limit', in: 'query', schema: { type: 'integer' } },
-      { name: 'next', in: 'query', schema: { type: 'integer' } }
+      { name: 'next', in: 'query', schema: { type: 'integer' } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } }
     ]
   },
   moveFormToFolder: {
@@ -1644,6 +1768,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_tokens', in: 'query', explode: false, schema: { type: 'array', items: { type: 'string' } } }
     ]
   },
+  sendMessage: {
+    method: 'POST',
+    path: '/messages',
+    parameters: [],
+    body: { required: true, content: { 'application/json': { $ref: 'MessageInput' } } }
+  },
   sendSmsTask: {
     method: 'PATCH',
     path: '/forms/{form_token}/sms_tasks/{id}/auto_send',
@@ -1812,6 +1942,19 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/manually_close_rule',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'FormManuallyCloseRuleInput' } } }
+  },
+  updateMemoryNote: {
+    method: 'PATCH',
+    path: '/memory/notes/{id}',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', pattern: '^[1-9][0-9]{0,2}(,[1-9][0-9]{0,2})*$' }
+      }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'MemoryNoteUpdateInput' } } }
   },
   updateNotificationRule: {
     method: 'PATCH',
@@ -2174,6 +2317,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' }
     }
   },
+  ChannelMessageInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'channel_id', 'content'],
+    properties: {
+      type: { type: 'string', enum: ['ding_talk', 'wxwork', 'webhook'] },
+      channel_id: { type: 'string' },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: 'string' },
+      idempotency_key: { type: 'string', maxLength: 255 }
+    }
+  },
   CheckBoxInput: {
     type: 'object',
     additionalProperties: false,
@@ -2303,7 +2458,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             value: { type: 'string' },
             operand_value: { type: 'number' },
             selected: { type: 'boolean' },
-            quota: { type: ['integer', 'null'], minimum: 0 }
+            quota: { type: ['integer', 'null'], minimum: 0 },
+            recover_quota: { type: 'integer', minimum: 1 }
           },
           additionalProperties: false
         }
@@ -2402,6 +2558,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       api_code: { type: 'string' },
       cid: { type: 'string' },
       choices: { type: 'array', items: { $ref: 'ChoiceInput' } }
+    }
+  },
+  DingTalkMessageChannelInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'name', 'url'],
+    properties: {
+      type: { type: 'string', enum: ['ding_talk'] },
+      name: { $ref: 'MessageChannelName' },
+      url: { type: 'string' },
+      secret: { type: 'string' }
     }
   },
   DingTalkNotificationRuleInput: {
@@ -2506,6 +2673,29 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
       placeholder: { type: 'string' }
+    }
+  },
+  EmailMessageChannelInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'name', 'smtp_account_id'],
+    properties: {
+      type: { type: 'string', enum: ['email'] },
+      name: { $ref: 'MessageChannelName' },
+      smtp_account_id: { type: 'string' }
+    }
+  },
+  EmailMessageInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'to', 'content'],
+    properties: {
+      type: { type: 'string', enum: ['email'] },
+      channel_id: { type: 'string' },
+      to: { $ref: 'MessageRecipients' },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: 'string', maxLength: 20000 },
+      idempotency_key: { type: 'string', maxLength: 255 }
     }
   },
   EmailNotificationRuleInput: {
@@ -3285,8 +3475,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unit: { type: 'string', maxLength: 2 },
       collapse_on_mobile: { type: 'boolean' },
       columns_on_mobile: { type: 'integer', minimum: 1 },
+      formula: { type: 'string' },
       formula_display: { type: 'string' },
-      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime'] },
+      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime', 'boolean'] },
       result_display_as_date: { type: 'boolean' },
       allow_multiple_items: { type: 'boolean' },
       item_allow_multiple_reservations: { type: 'boolean' },
@@ -3548,7 +3739,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       cycles_per_period: { type: 'integer', minimum: 1, maximum: 1000 },
       limited_time: { type: 'integer', minimum: 1 },
       limited_field_api_codes: { type: 'array', items: { type: 'string' } }
-    }
+    },
+    additionalProperties: false
   },
   FormFolderMoveInput: {
     type: 'object',
@@ -3688,6 +3880,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       weixin_limited: { type: 'boolean' },
       submission_region_limited: { type: 'boolean' },
       submission_regions: { type: 'array', items: { type: 'string' } },
+      locale: { type: 'string', enum: ['zh-CN', 'zh-TW', 'en'] },
       merchant_account_id: { type: ['string', 'null'] },
       wxpay_account_id: { type: ['string', 'null'] },
       alipay_account_id: { type: ['string', 'null'] },
@@ -3747,7 +3940,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   FormViewFilterCondition: {
     type: 'object',
     required: ['field', 'operator'],
-    properties: { field: { type: 'string' }, operator: { type: 'string' }, value: {} }
+    properties: {
+      field: { type: 'string' },
+      operator: { type: 'string' },
+      value: {},
+      scope_attr: { type: 'string', enum: ['date_time'] }
+    }
   },
   FormViewInput: {
     type: 'object',
@@ -3802,8 +4000,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
+      formula: { type: 'string' },
       formula_display: { type: 'string' },
-      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime'] },
+      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime', 'boolean'] },
       result_display_as_date: { type: 'boolean' },
       precision: { type: 'integer', minimum: 0, maximum: 14 },
       display_precision: { type: 'integer', minimum: 0 },
@@ -4302,6 +4501,106 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       horizontal_on_mobile: { type: 'boolean' }
     }
   },
+  MemoryCallId: { type: 'string', minLength: 1, maxLength: 100 },
+  MemoryKind: { type: 'string', enum: ['background', 'preference'] },
+  MemoryListedScope: { type: ['string', 'null'] },
+  MemoryListedText: { type: 'string', pattern: '\\S' },
+  MemoryNoteContent: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['text'],
+    properties: { text: { $ref: 'MemoryListedText' }, scope: { $ref: 'MemoryListedScope' } }
+  },
+  MemoryNoteInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['call_id', 'kind', 'text', 'quote', 'source'],
+    properties: {
+      call_id: { $ref: 'MemoryCallId' },
+      kind: { $ref: 'MemoryKind' },
+      text: { $ref: 'MemoryNoteText' },
+      scope: { $ref: 'MemoryNoteScope' },
+      quote: { $ref: 'MemoryNoteQuote' },
+      source: { $ref: 'MemorySource' }
+    }
+  },
+  MemoryNoteQuote: { type: 'string', minLength: 1, maxLength: 120 },
+  MemoryNoteScope: { type: ['string', 'null'], maxLength: 20 },
+  MemoryNoteText: { type: 'string', minLength: 1, maxLength: 40 },
+  MemoryNoteUpdateInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['call_id', 'current', 'kind', 'text', 'quote'],
+    properties: {
+      call_id: { $ref: 'MemoryCallId' },
+      current: { $ref: 'MemoryNoteContent' },
+      kind: { $ref: 'MemoryKind' },
+      text: { $ref: 'MemoryNoteText' },
+      scope: { $ref: 'MemoryNoteScope' },
+      quote: { $ref: 'MemoryNoteQuote' }
+    }
+  },
+  MemoryNotesDeleteInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['call_id', 'notes'],
+    properties: {
+      call_id: { $ref: 'MemoryCallId' },
+      notes: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['number', 'text'],
+          properties: {
+            number: { type: 'integer', minimum: 1 },
+            text: { $ref: 'MemoryListedText' },
+            scope: { $ref: 'MemoryListedScope' }
+          }
+        }
+      }
+    }
+  },
+  MemorySource: { type: 'string', enum: ['asked', 'inferred'] },
+  MessageChannelCreateInput: {
+    oneOf: [
+      { $ref: 'EmailMessageChannelInput' },
+      { $ref: 'SMSMessageChannelInput' },
+      { $ref: 'DingTalkMessageChannelInput' },
+      { $ref: 'WxworkMessageChannelInput' },
+      { $ref: 'WebhookMessageChannelInput' }
+    ],
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        email: 'EmailMessageChannelInput',
+        sms: 'SMSMessageChannelInput',
+        ding_talk: 'DingTalkMessageChannelInput',
+        wxwork: 'WxworkMessageChannelInput',
+        webhook: 'WebhookMessageChannelInput'
+      }
+    }
+  },
+  MessageChannelName: { type: 'string', maxLength: 50 },
+  MessageInput: {
+    oneOf: [{ $ref: 'EmailMessageInput' }, { $ref: 'SMSMessageInput' }, { $ref: 'ChannelMessageInput' }],
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        email: 'EmailMessageInput',
+        sms: 'SMSMessageInput',
+        ding_talk: 'ChannelMessageInput',
+        wxwork: 'ChannelMessageInput',
+        webhook: 'ChannelMessageInput'
+      }
+    }
+  },
+  MessageRecipients: { type: 'array', minItems: 1, maxItems: 50, uniqueItems: true, items: { type: 'string' } },
+  MessageSource: { type: 'string', enum: ['api', 'jiri', 'routine'] },
+  MessageStatus: { type: 'string', enum: ['queued', 'sending', 'succeeded', 'failed'] },
+  MessageType: { type: 'string', enum: ['email', 'sms', 'ding_talk', 'wxwork', 'webhook'] },
   MobileFieldInput: {
     type: 'object',
     additionalProperties: false,
@@ -4440,7 +4739,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         ]
       },
       value: {},
-      group_index: { type: 'integer' }
+      group_index: { type: 'integer' },
+      scope_attr: { type: ['string', 'null'], enum: ['date_time', null] }
     },
     additionalProperties: false
   },
@@ -4946,6 +5246,28 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       month_days: { type: 'array', items: { type: 'integer' } }
     }
   },
+  SMSMessageChannelInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'name', 'sms_template_id'],
+    properties: {
+      type: { type: 'string', enum: ['sms'] },
+      name: { $ref: 'MessageChannelName' },
+      sms_template_id: { type: 'string' }
+    }
+  },
+  SMSMessageInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'channel_id', 'to'],
+    properties: {
+      type: { type: 'string', enum: ['sms'] },
+      channel_id: { type: 'string' },
+      to: { $ref: 'MessageRecipients' },
+      variables: { type: 'object', additionalProperties: { type: 'string', maxLength: 100 } },
+      idempotency_key: { type: 'string', maxLength: 255 }
+    }
+  },
   SMSNotificationRuleInput: {
     type: 'object',
     properties: {
@@ -5068,6 +5390,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       field: { type: 'string' },
       api_code: { type: 'string' },
       trigger: { type: 'string' },
+      scope_attr: { type: 'string', enum: ['date_time'] },
       operator: {
         type: 'string',
         enum: [
@@ -5543,6 +5866,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     ]
   },
   WebhookInput: { type: 'object', properties: { entry_post_url: { type: 'string' } }, additionalProperties: false },
+  WebhookMessageChannelInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'name', 'url'],
+    properties: {
+      type: { type: 'string', enum: ['webhook'] },
+      name: { $ref: 'MessageChannelName' },
+      url: { type: 'string', maxLength: 2000 }
+    }
+  },
   WebhookNotificationRuleInput: {
     type: 'object',
     properties: {
@@ -5664,6 +5997,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       entries_init_number: { type: 'integer', minimum: 0 },
       entries_number_visible: { type: 'boolean' },
       marquee_data_type: { type: 'string', enum: ['fake', 'real'] }
+    }
+  },
+  WxworkMessageChannelInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'name', 'url'],
+    properties: {
+      type: { type: 'string', enum: ['wxwork'] },
+      name: { $ref: 'MessageChannelName' },
+      url: { type: 'string' }
     }
   },
   WxworkNotificationRuleInput: {
