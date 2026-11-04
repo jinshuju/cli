@@ -917,6 +917,60 @@ test('email send wants a subject and content only to send, and lists the SMTP ac
   assert.deepEqual(mock.requests[2].body, { status: 'ALL' });
 });
 
+test('message send wants --yes, and sends what the flags give', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['message', 'send', ...args], { env: WRITE_ENV, client: mock.client });
+
+  const unconfirmed = await run(['--type', 'wxwork', '--channel', 'ch_1', '--content', '吃饭啦']);
+  assert.match(unconfirmed.stderr, /pass --yes to send/);
+  await run([
+    '--type',
+    'wxwork',
+    '--channel',
+    'ch_1',
+    '--content',
+    '今天是星期三，吃饭啦',
+    '--mention',
+    '13800000000',
+    '--mention',
+    '@all',
+    '--idempotency-key',
+    'run-1',
+    '--yes'
+  ]);
+  await run([
+    '--type',
+    'email',
+    '--to',
+    'a@example.com',
+    '--to',
+    'b@example.com',
+    '--title',
+    '上课提醒',
+    '--content',
+    '明天见',
+    '--yes'
+  ]);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['POST /api/v1/messages', 'POST /api/v1/messages']
+  );
+  assert.deepEqual(mock.requests[0].body, {
+    type: 'wxwork',
+    channel_id: 'ch_1',
+    content: '今天是星期三，吃饭啦',
+    mentioned_mobile_list: ['13800000000', '@all'],
+    idempotency_key: 'run-1'
+  });
+  assert.deepEqual(mock.requests[1].body, {
+    type: 'email',
+    to: ['a@example.com', 'b@example.com'],
+    title: '上课提醒',
+    content: '明天见'
+  });
+});
+
 test('form copy takes the notification rules along only when asked', async () => {
   const mock = createMockClient();
   const run = (args: string[]) => cli(['form', 'copy', 'Kp7mQ2', ...args], { env: WRITE_ENV, client: mock.client });
