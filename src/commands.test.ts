@@ -1989,7 +1989,7 @@ test('form get --include names the blocks, and setting is honoured by already be
   const asked = createMockClient();
   const settingOnly = createMockClient();
 
-  await cli(['form', 'get', 'Kp7mQ2', '--include', 'theme,rules,extended,transactions,analytics'], {
+  await cli(['form', 'get', 'Kp7mQ2', '--include', 'theme,rules,extended,transactions,analytics,exam_setting'], {
     env: WRITE_ENV,
     client: asked.client
   });
@@ -2002,6 +2002,7 @@ test('form get --include names the blocks, and setting is honoured by already be
   const query = new URL(url(asked.requests[0]), 'https://x').searchParams;
   assert.deepEqual([...query.keys()].sort(), [
     'include_analytics',
+    'include_exam_setting',
     'include_extended_attributes',
     'include_field_rules',
     'include_theme',
@@ -2009,7 +2010,10 @@ test('form get --include names the blocks, and setting is honoured by already be
   ]);
   assert.equal(settingOnly.requests[0].path, '/api/v1/forms/Kp7mQ2');
   assert.equal(unknown.exitCode, 2);
-  assert.match(unknown.stderr, /--include takes setting, theme, rules, extended, transactions, analytics/);
+  assert.match(
+    unknown.stderr,
+    /--include takes setting, theme, rules, extended, transactions, analytics, exam_setting/
+  );
 });
 
 test('form list asks for transaction totals only when told to', async () => {

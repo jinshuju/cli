@@ -85,6 +85,7 @@ field — the server assigns it.
 jinshuju form create --json @form.json --scene registry --layout card --folder Fd2xK8
 jinshuju form create --json @exam.json --type exam        # the payload may carry exam_setting
 jinshuju form edit Kp7mQ2 --json '{"exam_setting":{"limited_time":45}}'
+jinshuju form get Kp7mQ2 --include exam_setting          # reads it back with the form
 
 jinshuju form create --json '{
   "name": "Event signup",
