@@ -1002,6 +1002,27 @@ test('message send wants --yes, and sends what the flags give', async () => {
   });
 });
 
+test('message channel list filters by type and pages by row offset, and get shows one channel', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) => cli(['message', 'channel', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['list']);
+  await run(['list', '--type', 'sms', '--limit', '20', '--next', '20']);
+  await run(['get', 'ch_1']);
+  const wrong = await run(['list', '--type', 'telegram']);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${url(request)}`),
+    [
+      'GET /api/v1/message_channels',
+      'GET /api/v1/message_channels?type=sms&limit=20&next=20',
+      'GET /api/v1/message_channels/ch_1'
+    ]
+  );
+  assert.equal(wrong.exitCode, 2);
+  assert.match(wrong.stderr, /--type must be one of email, sms, ding_talk, wxwork, webhook/);
+});
+
 test('form copy takes the notification rules along only when asked', async () => {
   const mock = createMockClient();
   const run = (args: string[]) => cli(['form', 'copy', 'Kp7mQ2', ...args], { env: WRITE_ENV, client: mock.client });
