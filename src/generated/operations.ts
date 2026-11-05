@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-04';
+export const SPEC_DATE: string | undefined = '2026-11-05';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -964,6 +964,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'include_theme', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_field_rules', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_extended_attributes', in: 'query', schema: { type: 'boolean' } },
+      { name: 'include_exam_setting', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_transactions', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -2317,18 +2318,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' }
     }
   },
-  ChannelMessageInput: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['type', 'channel_id', 'content'],
-    properties: {
-      type: { type: 'string', enum: ['ding_talk', 'wxwork', 'webhook'] },
-      channel_id: { type: 'string' },
-      title: { type: 'string', maxLength: 200 },
-      content: { type: 'string' },
-      idempotency_key: { type: 'string', maxLength: 255 }
-    }
-  },
   CheckBoxInput: {
     type: 'object',
     additionalProperties: false,
@@ -3163,7 +3152,47 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       limited_time: { type: 'integer', minimum: 1, maximum: 9999 },
       need_attention: { type: 'string' },
       success_message_rich_text: { type: 'string' },
-      interval_comments: { type: 'array', items: { $ref: 'FormIntervalCommentInput' } }
+      interval_comments: { type: 'array', items: { $ref: 'FormIntervalCommentInput' } },
+      random_questions: {
+        type: 'object',
+        properties: {
+          enabled: { type: 'boolean' },
+          mode: { type: 'string', enum: ['by_type', 'from_all'] },
+          count: { type: 'integer', minimum: 1 },
+          question_types: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              required: ['question_type', 'count'],
+              properties: {
+                question_type: {
+                  type: 'string',
+                  enum: [
+                    'single_select_only_fields',
+                    'multi_select_fields',
+                    'true_or_false_fields',
+                    'simple_text_fields',
+                    'multi_text_fields'
+                  ]
+                },
+                count: { type: 'integer', minimum: 0 }
+              },
+              additionalProperties: false
+            }
+          },
+          shuffle: { type: 'boolean' }
+        },
+        additionalProperties: false,
+        allOf: [
+          { if: { properties: { enabled: { const: true } }, required: ['enabled'] }, then: { required: ['mode'] } },
+          {
+            if: { properties: { mode: { const: 'by_type' } }, required: ['mode'] },
+            then: { required: ['question_types'] }
+          },
+          { if: { properties: { mode: { const: 'from_all' } }, required: ['mode'] }, then: { required: ['count'] } }
+        ]
+      }
     },
     additionalProperties: false
   },
@@ -3797,6 +3826,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         ]
       },
       weixin_limited: { type: 'boolean' },
+      locale: { type: 'string', enum: ['zh-CN', 'zh-TW', 'en'] },
       entry_post_url: { type: 'string' },
       post_new_entry: { type: 'boolean' },
       post_updated_entry: { type: 'boolean' },
@@ -4585,15 +4615,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   },
   MessageChannelName: { type: 'string', maxLength: 50 },
   MessageInput: {
-    oneOf: [{ $ref: 'EmailMessageInput' }, { $ref: 'SMSMessageInput' }, { $ref: 'ChannelMessageInput' }],
+    oneOf: [
+      { $ref: 'EmailMessageInput' },
+      { $ref: 'SMSMessageInput' },
+      { $ref: 'RobotMessageInput' },
+      { $ref: 'WebhookMessageInput' }
+    ],
     discriminator: {
       propertyName: 'type',
       mapping: {
         email: 'EmailMessageInput',
         sms: 'SMSMessageInput',
-        ding_talk: 'ChannelMessageInput',
-        wxwork: 'ChannelMessageInput',
-        webhook: 'ChannelMessageInput'
+        ding_talk: 'RobotMessageInput',
+        wxwork: 'RobotMessageInput',
+        webhook: 'WebhookMessageInput'
       }
     }
   },
@@ -5195,6 +5230,28 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     }
   },
+  RobotMessageInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'channel_id', 'content'],
+    properties: {
+      type: { type: 'string', enum: ['ding_talk', 'wxwork'] },
+      channel_id: { type: 'string' },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: 'string' },
+      mentioned_mobile_list: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'string' } },
+      idempotency_key: { type: 'string', maxLength: 255 }
+    }
+  },
+  RoutineDataConditionInput: {
+    type: 'object',
+    required: ['scope_conditions'],
+    properties: {
+      source_kind: { type: 'string' },
+      source_token: { type: 'string' },
+      scope_conditions: { type: 'array', items: { $ref: 'RoutineScopeCondition' } }
+    }
+  },
   RoutineEventInput: {
     type: 'object',
     properties: {
@@ -5202,19 +5259,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       source_token: { type: 'string' },
       on: { type: 'string' },
       field_codes: { type: 'array', items: { type: 'string' } },
-      scope_conditions: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            trigger: { type: 'string' },
-            operator: { type: 'string' },
-            value: {},
-            group_index: { type: 'integer' },
-            scope_attr: { type: 'string' }
-          }
-        }
-      },
+      scope_conditions: { type: 'array', items: { $ref: 'RoutineScopeCondition' } },
       include_bulk: { type: 'boolean' }
     }
   },
@@ -5232,6 +5277,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       trigger_kind: { type: ['string', 'null'] },
       schedule: { oneOf: [{ $ref: 'RoutineScheduleInput' }, { type: 'null' }] },
       event: { oneOf: [{ $ref: 'RoutineEventInput' }, { type: 'null' }] },
+      data_condition: { oneOf: [{ $ref: 'RoutineDataConditionInput' }, { type: 'null' }] },
       delete_authorized: {}
     }
   },
@@ -5244,6 +5290,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       time: { type: 'string' },
       weekdays: { type: 'array', items: { type: 'integer' } },
       month_days: { type: 'array', items: { type: 'integer' } }
+    }
+  },
+  RoutineScopeCondition: {
+    type: 'object',
+    properties: {
+      trigger: { type: 'string' },
+      operator: { type: 'string' },
+      value: {},
+      group_index: { type: 'integer' },
+      scope_attr: { type: 'string' }
     }
   },
   SMSMessageChannelInput: {
@@ -5874,6 +5930,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       type: { type: 'string', enum: ['webhook'] },
       name: { $ref: 'MessageChannelName' },
       url: { type: 'string', maxLength: 2000 }
+    }
+  },
+  WebhookMessageInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'channel_id', 'content'],
+    properties: {
+      type: { type: 'string', enum: ['webhook'] },
+      channel_id: { type: 'string' },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: 'string' },
+      idempotency_key: { type: 'string', maxLength: 255 }
     }
   },
   WebhookNotificationRuleInput: {
