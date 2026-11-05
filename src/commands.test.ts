@@ -951,10 +951,35 @@ test('message send wants --yes, and sends what the flags give', async () => {
     '明天见',
     '--yes'
   ]);
+  await run([
+    '--type',
+    'sms',
+    '--channel',
+    'ch_2',
+    '--to',
+    '13800000000',
+    '--variable',
+    'var_1=张三',
+    '--variable',
+    'var_2=a=b',
+    '--yes'
+  ]);
+  const malformed = await run([
+    '--type',
+    'sms',
+    '--channel',
+    'ch_2',
+    '--to',
+    '13800000000',
+    '--variable',
+    '张三',
+    '--yes'
+  ]);
+  assert.match(malformed.stderr, /--variable must be '<name>=<value>'/);
 
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${request.path}`),
-    ['POST /api/v1/messages', 'POST /api/v1/messages']
+    ['POST /api/v1/messages', 'POST /api/v1/messages', 'POST /api/v1/messages']
   );
   assert.deepEqual(mock.requests[0].body, {
     type: 'wxwork',
@@ -968,6 +993,12 @@ test('message send wants --yes, and sends what the flags give', async () => {
     to: ['a@example.com', 'b@example.com'],
     title: '上课提醒',
     content: '明天见'
+  });
+  assert.deepEqual(mock.requests[2].body, {
+    type: 'sms',
+    channel_id: 'ch_2',
+    to: ['13800000000'],
+    variables: { var_1: '张三', var_2: 'a=b' }
   });
 });
 

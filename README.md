@@ -569,13 +569,16 @@ jinshuju email send --form Kp7mQ2 --field field_3 --select-all --subject 上课�
 DingTalk or WeCom group robot, or a webhook, is the recipient itself; email and
 SMS go to each `--to`, at most 50. `--mention` @s group members by mobile number,
 or everyone with `@all`; WeCom sends a message that mentions anyone as plain
-text, so leave Markdown out of it. A sent message cannot be recalled, so it
+text, so leave Markdown out of it. SMS sends the channel's template: it takes
+no `--title` or `--content`, and each of the template's variables comes as
+`--variable <name>=<value>`. A sent message cannot be recalled, so it
 takes `--yes`. After a timeout, send again with the same `--idempotency-key`:
 the API answers the first records instead of sending twice.
 
 ```bash
 jinshuju message send --type wxwork --channel 6729f1c2a1b2c3d4e5f60718 --content '今天是星期三，该吃午饭啦！' --mention 13800000000 --yes
 jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes
+jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 --variable var_2=9:00 --yes
 ```
 
 ## Artifacts

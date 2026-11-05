@@ -3,6 +3,13 @@ import { call } from '../spec.js';
 import { given, requiredOption, SEND_OPTION } from './shared.js';
 import type { Command } from './types.js';
 
+/** `var_1=张三`: one variable of an SMS channel's template. */
+function parseVariable(input: string): [string, string] {
+  const at = input.indexOf('=');
+  if (at <= 0) throw new UsageError(`--variable must be '<name>=<value>', got ${JSON.stringify(input)}`);
+  return [input.slice(0, at), input.slice(at + 1)];
+}
+
 export const MESSAGE: readonly Command[] = [
   {
     path: ['message', 'send'],
@@ -10,7 +17,8 @@ export const MESSAGE: readonly Command[] = [
     description:
       'Queues the message and answers at once with one record per recipient; a group robot or webhook is the ' +
       'recipient itself. --mention is for DingTalk and WeCom robots only, at most 50; WeCom sends a message that ' +
-      'mentions anyone as plain text, so leave Markdown out of it. Sent messages cannot be recalled: after a timeout ' +
+      "mentions anyone as plain text, so leave Markdown out of it. SMS sends the channel's template, so it takes no " +
+      '--title or --content: give each of its variables with --variable. Sent messages cannot be recalled: after a timeout ' +
       'or a dropped connection, send again with the same --idempotency-key, which answers the first records instead ' +
       'of sending twice. --yes sends.',
     options: [
@@ -42,6 +50,13 @@ export const MESSAGE: readonly Command[] = [
         description: 'The message, in Markdown unless it mentions anyone on WeCom'
       },
       {
+        name: '--variable',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<name>=<value>',
+        description: "A variable of the SMS channel's template, as it is named there (var_1...); repeatable"
+      },
+      {
         name: '--mention',
         type: 'string',
         repeatable: true,
@@ -59,6 +74,7 @@ export const MESSAGE: readonly Command[] = [
     request: (input) => {
       const type = requiredOption(input, 'type');
       if (!input.options.yes) throw new UsageError('A sent message cannot be recalled; pass --yes to send');
+      const variables = input.options.variable as string[] | undefined;
       return call('sendMessage', {
         body: given({
           type,
@@ -66,6 +82,7 @@ export const MESSAGE: readonly Command[] = [
           to: input.options.to as string[] | undefined,
           title: input.options.title as string | undefined,
           content: input.options.content as string | undefined,
+          variables: variables && Object.fromEntries(variables.map(parseVariable)),
           mentioned_mobile_list: input.options.mention as string[] | undefined,
           idempotency_key: input.options.idempotency_key as string | undefined
         })
@@ -74,7 +91,9 @@ export const MESSAGE: readonly Command[] = [
     examples: [
       "jinshuju message send --type wxwork --channel 6729f1c2a1b2c3d4e5f60718 --content '今天是星期三，该吃午饭啦！' " +
         '--mention 13800000000 --yes',
-      "jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes"
+      "jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes",
+      'jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 ' +
+        '--variable var_2=9:00 --yes'
     ]
   }
 ];
