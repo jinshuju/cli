@@ -252,6 +252,13 @@ paths:
         schema:
           type: boolean
           default: false
+      - name: include_exam_setting
+        in: query
+        required: false
+        description: When `true`, an exam form includes `exam_setting` (exam settings, the same as `GET /forms/{form_token}/exam_setting`); an OAuth token needs the `form_setting` scope for it.
+        schema:
+          type: boolean
+          default: false
       - $ref: '#/components/parameters/IncludeTransactions'
     patch:
       tags:
@@ -1407,7 +1414,7 @@ paths:
         Sets the form's entry push URL `entry_post_url` and turns on pushing new entries (post_new_entry = true).
         OAuth scope: form_setting
         The plan must support Webhook; otherwise returns 402 with an empty body.
-        The server does not check the save result and echoes `entry_post_url` from the settings as is (whether an invalid URL was persisted depends on the server implementation).
+        The URL must be http or https and must not resolve to a private network address.
       operationId: createFormWebhook
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -1439,6 +1446,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          description: The URL is not a valid link or resolves to a private network address; nothing is saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
       - Form Settings
@@ -1846,7 +1859,7 @@ paths:
       - Form Settings
       summary: Show a form's exam settings
       description: |
-        Returns an exam form's settings for what is shown after the exam is submitted, the time limit, the pre-exam notice and score range comments.
+        Returns an exam form's settings for what is shown after the exam is submitted, the time limit, the pre-exam notice, score range comments and random questions.
         Only for forms in the exam scene (scene = exam); otherwise returns 400. Returns an empty object `{}` when the form has no exam settings record yet.
         OAuth scope: form_setting
       operationId: getExamSetting
@@ -1893,7 +1906,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExamSetting'
         '400':
-          description: 'Invalid parameters, including: the form is not an exam, range comments overlap or end before they start, or `show_timeout` is turned on while questions are required'
+          description: 'Invalid parameters, including: the form is not an exam, range comments overlap or end before they start, `show_timeout` is turned on while questions are required, a random question count is more than the questions there are, a question type is listed twice, or the `by_type` counts add up to 0'
           content:
             application/json:
               schema:
@@ -6738,7 +6751,7 @@ paths:
         Queues a message through a registered channel and returns at once; follow each record with `GET /messages/{id}`.
         OAuth scope: messages
         - `ding_talk`, `wxwork` and `webhook` go to the channel itself; `email` and `sms` go to each of `to`, one record per recipient. `sms` takes `variables`, not a title or content: the channel's template is the text.
-        - `email` without `channel_id` goes from Jinshuju's address and only to verified members of the account.
+        - `email` without `channel_id` goes from Jinshuju's address to any recipient, billed per recipient.
         - The same `idempotency_key` from the same credential owner within 24 hours returns the first request's records with `replayed: true` instead of sending again.
         - Daily limits per account: 1000 robot and webhook messages, 2000 emails through SMTP channels, 1000 SMS records (however many parts each is billed as); per recipient within the account: 20 emails, 10 SMS. A robot takes at most 20 messages a minute; the rest wait.
         - An SMS template with variables sends at most 100 SMS a day without content review; past that the request is refused (`403`), not queued for review.
@@ -7661,6 +7674,7 @@ paths:
         - A routine against the rules returns `422`, and `errors` gives each reason with its `code` and the page's message.
         - Delete authorization (`delete_authorized`) cannot be set here: a body that names it, true or false, returns `422` `delete_authorization_page_only` and creates nothing.
         - The response's `preview_condition_matches` shows which of your latest entries of the source meet each condition group; if they are not the ones the routine is meant for, fix the conditions.
+        - A schedule's `data_condition` makes a firing with no data meeting it end at once, without AI points; the response's `data_condition_match` says whether entries meet it now.
         - Jiri running a routine cannot create routines (`403`).
       requestBody:
         required: true
@@ -11960,7 +11974,7 @@ components:
           - zh-CN
           - zh-TW
           - en
-          description: Language of the fill page's built-in text; write it with `setting` on the "Edit a form" endpoint
+          description: Language of the fill page's built-in text
         entry_post_url:
           type:
           - string
@@ -12079,6 +12093,13 @@ components:
           - gd_user_only
         weixin_limited:
           type: boolean
+        locale:
+          type: string
+          enum:
+          - zh-CN
+          - zh-TW
+          - en
+          description: Language of the fill page's built-in text (buttons, validation messages, the default success message); the form's own name, description and fields are not translated
         entry_post_url:
           type: string
           description: Webhook push URL; must be a valid URL
@@ -12273,6 +12294,57 @@ components:
           description: Score-range comments; returned only when score-range comments are on
           items:
             $ref: '#/components/schemas/IntervalComment'
+        random_questions:
+          type: object
+          description: Random questions, drawn for each examinee
+          required:
+          - enabled
+          - mode
+          - total
+          - shuffle
+          - question_types
+          properties:
+            enabled:
+              type: boolean
+            mode:
+              type: string
+              enum:
+              - by_type
+              - from_all
+              description: by_type draws `count` of each question type; from_all draws `count` from all exam questions
+            count:
+              type: integer
+              description: Questions drawn in from_all mode
+            total:
+              type: integer
+              description: Exam questions on the form
+            shuffle:
+              type: boolean
+              description: Whether the question order is shuffled
+            question_types:
+              type: array
+              description: Every question type, with what by_type draws of it
+              items:
+                type: object
+                required:
+                - question_type
+                - count
+                - total
+                properties:
+                  question_type:
+                    type: string
+                    enum:
+                    - single_select_only_fields
+                    - multi_select_fields
+                    - true_or_false_fields
+                    - simple_text_fields
+                    - multi_text_fields
+                  count:
+                    type: integer
+                    description: Questions of this type drawn in by_type mode
+                  total:
+                    type: integer
+                    description: Questions of this type on the form
     ExamSettingInput:
       type: object
       description: Request body of PATCH /forms/{form_token}/exam_setting; only the keys present are written
@@ -12304,6 +12376,79 @@ components:
           description: Replaces the score-range comments as a whole; ranges must not overlap. Takes effect only when notice_after_filling_mode is grade / explaination / answer; an empty array is ignored
           items:
             $ref: '#/components/schemas/FormIntervalCommentInput'
+        random_questions:
+          type: object
+          description: Random questions; only the keys present are written. Turning it on takes `mode`, `by_type` takes `question_types` and `from_all` takes `count`
+          properties:
+            enabled:
+              type: boolean
+              description: Draw questions at random for each examinee; false turns it off and keeps the rest
+            mode:
+              type: string
+              enum:
+              - by_type
+              - from_all
+              description: by_type draws a count of each question type; from_all draws `count` from all exam questions
+            count:
+              type: integer
+              minimum: 1
+              description: Questions to draw in from_all mode; at most `random_questions.total` in GET
+            question_types:
+              type: array
+              minItems: 1
+              description: Replaces the by_type counts as a whole; list each type once, a type left out draws none, and the counts must add up to more than 0
+              items:
+                type: object
+                required:
+                - question_type
+                - count
+                properties:
+                  question_type:
+                    type: string
+                    enum:
+                    - single_select_only_fields
+                    - multi_select_fields
+                    - true_or_false_fields
+                    - simple_text_fields
+                    - multi_text_fields
+                    description: GET lists every type with the questions it has
+                  count:
+                    type: integer
+                    minimum: 0
+                    description: Questions to draw of this type; at most the type's `total` in GET
+                additionalProperties: false
+            shuffle:
+              type: boolean
+              description: Shuffle the question order
+          additionalProperties: false
+          allOf:
+          - if:
+              properties:
+                enabled:
+                  const: true
+              required:
+              - enabled
+            then:
+              required:
+              - mode
+          - if:
+              properties:
+                mode:
+                  const: by_type
+              required:
+              - mode
+            then:
+              required:
+              - question_types
+          - if:
+              properties:
+                mode:
+                  const: from_all
+              required:
+              - mode
+            then:
+              required:
+              - count
       additionalProperties: false
     CheckinDateSetting:
       type: object
@@ -19271,6 +19416,9 @@ components:
             description: Source-tracking links (present when `include_extended_attributes=true`), same as `data` of `GET /forms/{form_token}/extended_attributes`
             items:
               $ref: '#/components/schemas/ExtendedAttribute'
+          exam_setting:
+            $ref: '#/components/schemas/ExamSetting'
+            description: Exam settings (present on an exam form when `include_exam_setting=true`), same as `GET /forms/{form_token}/exam_setting`
           transactions:
             $ref: '#/components/schemas/FormTransactions'
     FormViewFillItem:
@@ -21819,15 +21967,16 @@ components:
       oneOf:
       - $ref: '#/components/schemas/EmailMessageInput'
       - $ref: '#/components/schemas/SMSMessageInput'
-      - $ref: '#/components/schemas/ChannelMessageInput'
+      - $ref: '#/components/schemas/RobotMessageInput'
+      - $ref: '#/components/schemas/WebhookMessageInput'
       discriminator:
         propertyName: type
         mapping:
           email: "#/components/schemas/EmailMessageInput"
           sms: "#/components/schemas/SMSMessageInput"
-          ding_talk: "#/components/schemas/ChannelMessageInput"
-          wxwork: "#/components/schemas/ChannelMessageInput"
-          webhook: "#/components/schemas/ChannelMessageInput"
+          ding_talk: "#/components/schemas/RobotMessageInput"
+          wxwork: "#/components/schemas/RobotMessageInput"
+          webhook: "#/components/schemas/WebhookMessageInput"
     EmailMessageInput:
       type: object
       additionalProperties: false
@@ -21842,7 +21991,7 @@ components:
           - email
         channel_id:
           type: string
-          description: Email channel to send through; without it the email goes from Jinshuju's address, only to verified members of the account
+          description: Email channel to send through; without it the email goes from Jinshuju's address
         to:
           $ref: '#/components/schemas/MessageRecipients'
         title:
@@ -21883,9 +22032,9 @@ components:
           type: string
           maxLength: 255
           description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
-    ChannelMessageInput:
+    RobotMessageInput:
       type: object
-      description: A robot or webhook message; the channel is the recipient
+      description: A DingTalk or WeCom robot message; the channel is the recipient
       additionalProperties: false
       required:
       - type
@@ -21897,7 +22046,6 @@ components:
           enum:
           - ding_talk
           - wxwork
-          - webhook
         channel_id:
           type: string
         title:
@@ -21906,7 +22054,39 @@ components:
           description: Heading shown above `content`; do not repeat it in `content`
         content:
           type: string
-          description: Markdown text. Robots get the title as a `### ` heading line above it, and that whole text takes at most 4096 bytes for WeCom and 20000 for DingTalk; webhooks take 65536 bytes of title and content
+          description: Markdown text. The title becomes a `### ` heading line above it, and that whole text takes at most 4096 bytes for WeCom and 20000 for DingTalk
+        mentioned_mobile_list:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+          description: Group members to mention by mobile number, or `@all` for everyone. WeCom can only mention in plain text, so a WeCom message with mentions is sent as text (no markdown) of at most 2048 bytes
+        idempotency_key:
+          type: string
+          maxLength: 255
+          description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
+    WebhookMessageInput:
+      type: object
+      description: A webhook message; the channel is the recipient
+      additionalProperties: false
+      required:
+      - type
+      - channel_id
+      - content
+      properties:
+        type:
+          type: string
+          enum:
+          - webhook
+        channel_id:
+          type: string
+        title:
+          type: string
+          maxLength: 200
+        content:
+          type: string
+          description: Title and content take at most 65536 bytes
         idempotency_key:
           type: string
           maxLength: 255
@@ -21942,6 +22122,7 @@ components:
       - title
       - content
       - variables
+      - mentioned_mobile_list
       - status
       - attempts
       - next_retry_at
@@ -21983,6 +22164,13 @@ components:
           - 'null'
           additionalProperties:
             type: string
+        mentioned_mobile_list:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: Mobile numbers or `@all` a robot message mentions
         status:
           $ref: '#/components/schemas/MessageStatus'
         attempts:
@@ -22742,6 +22930,10 @@ components:
           oneOf:
           - $ref: '#/components/schemas/RoutineEventInput'
           - type: 'null'
+        data_condition:
+          oneOf:
+          - $ref: '#/components/schemas/RoutineDataConditionInput'
+          - type: 'null'
         delete_authorized:
           description: Not accepted. A body that names it, whatever its value, returns `422` `delete_authorization_page_only`.
     RoutineScheduleInput:
@@ -22792,28 +22984,50 @@ components:
           description: "`updated`: the api_codes of the fields watched, 1–10; fields the system computes (formula, association) cannot be watched"
         scope_conditions:
           type: array
-          description: Data conditions, written as the routines page saves them. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. Each item reads only the keys below. A condition on an operator or value its field type does not take returns `422` saying what the field takes.
+          description: Data conditions, written as the routines page saves them. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. A condition on an operator or value its field type does not take returns `422` saying what the field takes.
           items:
-            type: object
-            properties:
-              trigger:
-                type: string
-                description: The field's api_code (a table column as `<field>.<column>`)
-              operator:
-                type: string
-                description: The comparison, one the field type offers on the routines page, such as any_in on a choice field or between on a date, or one the entry query handles beyond them, such as eq on text, gte on a date, eq / ne with one code on a radio button or with the exact set on a checkbox
-              value:
-                description: The value compared with
-              group_index:
-                type: integer
-                description: The condition's group
-              scope_attr:
-                type: string
-                description: "`date_time` for the date of a reservation field; left out otherwise"
+            $ref: '#/components/schemas/RoutineScopeCondition'
         include_bulk:
           type: boolean
           default: false
           description: Imports and bulk edits trigger it too (one import or bulk edit is one run)
+    RoutineScopeCondition:
+      type: object
+      description: One data condition. Each item reads only the keys below.
+      properties:
+        trigger:
+          type: string
+          description: The field's api_code (a table column as `<field>.<column>`)
+        operator:
+          type: string
+          description: The comparison, one the field type offers on the routines page, such as any_in on a choice field or between on a date, or one the entry query handles beyond them, such as eq on text, gte on a date, eq / ne with one code on a radio button or with the exact set on a checkbox
+        value:
+          description: The value compared with
+        group_index:
+          type: integer
+          description: The condition's group
+        scope_attr:
+          type: string
+          description: "`date_time` for the date of a reservation field; left out otherwise"
+    RoutineDataConditionInput:
+      type: object
+      description: |
+        A schedule's data condition: when the clock fires the routine, it runs only if the form or table has data meeting the conditions now; otherwise the run is completed at once, titled `没有满足条件的数据`, without Jiri and without AI points. A run started by hand is not held to it. Only with `trigger_kind` `schedule`.
+        Sent, it replaces the routine's condition whole, so `scope_conditions` is required; an empty `scope_conditions` removes the condition. Left out, or null, the condition stays as it is.
+      required:
+      - scope_conditions
+      properties:
+        source_kind:
+          type: string
+          description: form or table
+        source_token:
+          type: string
+          description: The form or table, one you created or whose data you can read; it is added to the objects on save
+        scope_conditions:
+          type: array
+          description: As in `RoutineEventInput.scope_conditions`. Values standing for whoever submits (`$(current_submitter_id)`) are refused.
+          items:
+            $ref: '#/components/schemas/RoutineScopeCondition'
     Routine:
       type: object
       required:
@@ -22830,6 +23044,7 @@ components:
       - next_run_at
       - next_runs
       - event
+      - data_condition
       - objects
       - delete_authorized
       - runs_count
@@ -22956,6 +23171,37 @@ components:
                 type: string
             include_bulk:
               type: boolean
+        data_condition:
+          type:
+          - object
+          - 'null'
+          description: A schedule's data condition (see `RoutineDataConditionInput`); null without one, for a data trigger, or when its form is gone
+          required:
+          - source_kind
+          - source_token
+          - source_name
+          - scope_conditions
+          - conditions
+          properties:
+            source_kind:
+              type: string
+              enum:
+              - form
+              - table
+            source_token:
+              type: string
+            source_name:
+              type: string
+            scope_conditions:
+              type: array
+              description: The conditions as stored, in the shape `RoutineDataConditionInput.scope_conditions` takes; empty when you can no longer read the form
+              items:
+                type: object
+            conditions:
+              type: array
+              description: The conditions in words, one sentence per group
+              items:
+                type: string
         objects:
           type: array
           items:
@@ -23015,6 +23261,31 @@ components:
             - $ref: '#/components/schemas/RoutinePreviewConditionMatches'
             - type: 'null'
             description: How the data trigger's conditions meet your latest entries of its source; null for a schedule, a data trigger without conditions, or one whose fields no longer work
+          data_condition_match:
+            type:
+            - object
+            - 'null'
+            description: Whether any entry meets a schedule's data condition now, checked over all the entries you can see, as a firing would; null without a data condition
+            required:
+            - status
+            - serial_numbers
+            - more
+            properties:
+              status:
+                type: string
+                enum:
+                - matched
+                - empty
+                - unknown
+                description: "`matched` some entries meet it, `empty` none do (a firing now would end without Jiri), `unknown` it could not be checked (a firing runs as without a condition, or fails as `invalid_trigger` when the condition's fields no longer work)"
+              serial_numbers:
+                type: array
+                items:
+                  type: integer
+                description: Up to 20 of the entries that meet it, a sample, in no set order
+              more:
+                type: boolean
+                description: Whether more entries meet it than are listed
     RoutinePreviewConditionMatches:
       type: object
       description: Which entries meet the conditions as they are now, to check the conditions mean what the routine is for. Meeting them is not firing; `created` fires for new entries only, `updated` also needs a watched field changed, and `matched` only when an entry comes to meet them.
