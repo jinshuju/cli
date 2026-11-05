@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.21.0](https://github.com/jinshuju/cli/compare/v0.20.0...v0.21.0) (2026-11-05)
+
+
+### Features
+
+* follow openapi.yaml changes to aggregateEntries, aggregateFormViewEntries, aggregateTableEntries and 50 more ([#87](https://github.com/jinshuju/cli/issues/87)) ([3203a2a](https://github.com/jinshuju/cli/commit/3203a2a8b94db8668c203d87d852c3e0724f3077))
+* follow openapi.yaml changes to getForm, createRoutine, updateExamSetting and 1 more ([#94](https://github.com/jinshuju/cli/issues/94)) ([9979ea2](https://github.com/jinshuju/cli/commit/9979ea2559a940c0cfcf0932c0f97220f75d62da))
+* **form:** read an exam form's exam settings with form get --include exam_setting ([#93](https://github.com/jinshuju/cli/issues/93)) ([86f33d5](https://github.com/jinshuju/cli/commit/86f33d5939e8ad86bc0d8c0ec09746161199ebf1))
+* look once at a payload before sending it, and say every reason the server refuses it for ([#89](https://github.com/jinshuju/cli/issues/89)) ([edf1733](https://github.com/jinshuju/cli/commit/edf17330682116c3688640996a83ac02cbe88d3c))
+
+
+### Fixes
+
+* keep uniqueItems, which the published openapi.yaml now uses ([#91](https://github.com/jinshuju/cli/issues/91)) ([352a9d2](https://github.com/jinshuju/cli/commit/352a9d211cd8d21213e3e1a75ad37a738f9c3f86))
+
 ## [0.20.0](https://github.com/jinshuju/cli/compare/v0.19.0...v0.20.0) (2026-10-29)
 
 
