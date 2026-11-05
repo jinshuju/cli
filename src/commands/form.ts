@@ -84,7 +84,13 @@ const FORM_INCLUDES: Record<string, string> = {
   rules: 'include_field_rules',
   extended: 'include_extended_attributes',
   transactions: 'include_transactions',
-  analytics: 'include_analytics'
+  analytics: 'include_analytics',
+  // An exam form's exam settings, under the key `form edit` writes them by;
+  // any other form carries nothing for it. The one name here that is the key
+  // itself: `exam` alone reads as the scene, and this list already has
+  // `setting`, which it sits beside. An OAuth token needs the form_setting
+  // scope, which the CLI's own login asks for.
+  exam_setting: 'include_exam_setting'
 };
 
 const INCLUDE_OPTION: OptionSpec = {
@@ -223,13 +229,18 @@ export const FORM: readonly Command[] = [
     description:
       'The form carries its setting already. --include adds the blocks that are separate reads ' +
       'otherwise, so asking for a form and its rules is one round trip. analytics says which ' +
-      'statistics each field takes, which is what the analysis reads validate against. `fields` ' +
+      'statistics each field takes, which is what the analysis reads validate against. ' +
+      "exam_setting is an exam form's, read back in the shape `form edit` writes it. `fields` " +
       'comes back as a list of one-key objects keyed by api_code, not a flat list — `field list` ' +
       'answers the same fields flattened, with api_code on each.',
     args: [{ name: 'form', required: true, description: 'Form token, six letters and digits, e.g. Kp7mQ2' }],
     options: [INCLUDE_OPTION],
     request: (input) => call('getForm', { path: { form_token: input.args.form }, query: includes(input) }),
-    examples: ['jinshuju form get Kp7mQ2', 'jinshuju form get Kp7mQ2 --include theme,rules,analytics']
+    examples: [
+      'jinshuju form get Kp7mQ2',
+      'jinshuju form get Kp7mQ2 --include theme,rules,analytics',
+      'jinshuju form get Kp7mQ2 --include exam_setting'
+    ]
   },
   {
     path: ['form', 'create'],
