@@ -102,7 +102,7 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'email', summary: 'Send email to entries' },
   {
     name: 'message',
-    summary: 'Send one message through a registered channel: group robots, webhooks, email and SMS'
+    summary: 'Send one message through a registered channel: group robots, webhooks, email and SMS; list the channels'
   },
   {
     name: 'artifact',

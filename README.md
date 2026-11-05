@@ -575,7 +575,13 @@ no `--title` or `--content`, and each of the template's variables comes as
 takes `--yes`. After a timeout, send again with the same `--idempotency-key`:
 the API answers the first records instead of sending twice.
 
+`message channel list` gives the ids `--channel` takes, `--type` narrowing
+them, and `message channel get <id>` shows one. Email needs no channel: without
+one it goes from Jinshuju's address and uses email quota; with one, through its
+SMTP account.
+
 ```bash
+jinshuju message channel list --type wxwork
 jinshuju message send --type wxwork --channel 6729f1c2a1b2c3d4e5f60718 --content '今天是星期三，该吃午饭啦！' --mention 13800000000 --yes
 jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes
 jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 --variable var_2=9:00 --yes
