@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.22.0](https://github.com/jinshuju/cli/compare/v0.21.0...v0.22.0) (2026-11-05)
+
+
+### Features
+
+* **message:** find the channel message send needs with message channel list and get ([fc7b6e7](https://github.com/jinshuju/cli/commit/fc7b6e714fd0c08dc3f4d4d4ed37b4b86f40fa21))
+* **message:** give an SMS template's variables to message send with --variable ([9445bfe](https://github.com/jinshuju/cli/commit/9445bfe61becb094c2b0c520cf4086719890e79a))
+* **message:** send one message through a registered channel with message send ([4ae0b3a](https://github.com/jinshuju/cli/commit/4ae0b3ad88b57c320455e3ede99af375e543b0ab))
+
 ## [0.21.0](https://github.com/jinshuju/cli/compare/v0.20.0...v0.21.0) (2026-11-05)
 
 
