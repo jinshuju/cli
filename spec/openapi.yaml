@@ -66,7 +66,7 @@ info:
 
     ## Input validation
     The server validates the path parameters, query parameters and JSON request body of every request against this document (except the multipart body of upload endpoints).
-    - An invalid request returns `400` directly, with the response body `{ error_description, errors: [{ pointer, message, code }] }`; a request body that is not `application/json` returns `415`.
+    - An invalid request returns `400` directly, with the response body `{ error_description, errors: [{ pointers, message, code }] }`, one entry per reason naming every place it occurs; a request body that is not `application/json` returns `415`.
     - Keys not listed in a request body schema are errors, except where the schema says they are ignored (the routines body) and the field values of entry writes, which the form's field definitions decide.
 servers:
 - url: https://jinshuju.net/api/v1
@@ -3531,7 +3531,7 @@ paths:
         - `description` returns a `url` for an `<img src>` in the form `description` or a field's `notes`, at most 30 per form; every other type returns an `attachment_id` for the property that names that `image_type`.
         - An `attachment_id` is taken only where its `image_type` goes, and only while the image is unused or already that form's; an image nothing uses within 7 days is deleted.
 
-        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, opensearch_header or description; form_setting otherwise
+        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, reservation_item, opensearch_header or description; form_setting otherwise
       requestBody:
         required: true
         content:
@@ -3553,6 +3553,7 @@ paths:
                   - description
                   - goods_item
                   - contact_widget
+                  - reservation_item
                   description: What the image is for
                 file:
                   type: string
@@ -3587,7 +3588,7 @@ paths:
         - With a shell that can read the file and reach the network, run `curl -F file=@<path> <upload_url>`, then use the returned `attachment_id` (or `url`) where its `image_type` goes.
         - Without one, or when curl fails (for example under a sandbox's network limits), give a public image URL or a small Base64 image where the image goes.
 
-        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, opensearch_header or description; form_setting otherwise
+        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, reservation_item, opensearch_header or description; form_setting otherwise
       requestBody:
         required: true
         content:
@@ -3608,6 +3609,7 @@ paths:
                   - description
                   - goods_item
                   - contact_widget
+                  - reservation_item
                   description: What the image is for
               additionalProperties: false
       responses:
@@ -6665,6 +6667,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: A routine still sends to the channel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
   "/messages":
@@ -6779,7 +6787,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: SMS is turned off for the account, a template with variables used up its daily allowance without content review, or the OAuth scope is insufficient
+          description: SMS is turned off for the account, a template with variables used up its daily allowance without content review, the OAuth scope is insufficient, or Jiri sends other than once a run what a routine's message rule names, with the rule's content as confirmed and only its `$(…)` filled in, or sends from a conversation other than once the message the user confirmed on a card
           content:
             application/json:
               schema:
@@ -8653,7 +8661,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error_description: "Form not found: the token does not exist or the form is not shared with you. Do not retry it as a table or a query; confirm the token with the user, or ask the form's owner to add you as a cooperator."
+            error_description: 'Form not found: the token does not exist or the form is not shared with you. Do not retry it as a table or a query; confirm the token with the user, or ask the form''s owner to add you as a cooperator.'
     TooManyRequests:
       description: Rate limit exceeded
       headers:
@@ -9171,6 +9179,13 @@ components:
         allow_other:
           type: boolean
           description: Whether there is an "Other" choice (choice fields)
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Whether fillers stop seeing a choice once its places run out, instead of seeing it as full. Only on form and table reads of a choice field with a limit on some choice
+        random_choices:
+          type: boolean
+          default: false
+          description: Whether the choices show in a new random order each time the form opens (single choice / multiple choice / drop-down / cascading drop-down / image choice / ranking)
         statements:
           type: array
           description: Statements (matrix single choice / matrix fill-in / matrix scale)
@@ -9244,6 +9259,11 @@ components:
           description: 'Reservation field: reservation items'
           items:
             $ref: '#/components/schemas/ReservationItem'
+        buttons:
+          type: array
+          description: 'Button bar: the buttons, in the shape fields.update takes back'
+          items:
+            $ref: '#/components/schemas/WidgetButtonItemInput'
         associated_form_token:
           type:
           - string
@@ -9381,7 +9401,7 @@ components:
           type:
           - integer
           - 'null'
-          description: 'Limit on the choice''s places, the value a write sends as `quota`, so the places used in the current cycle are `quota_setting - quota`. Only on form and table reads, and not on matrix choices'
+          description: Limit on the choice's places, the value a write sends as `quota`, so the places used in the current cycle are `quota_setting - quota`. Only on form and table reads, and not on matrix choices
         operand_value:
           type: number
           description: Value assigned to the choice
@@ -9474,6 +9494,7 @@ components:
           - 'null'
     ReservationItem:
       type: object
+      description: Form and table reads also give the item's settings, in the shape `ReservationItemInput` takes. A write replaces the whole list; an item matched to a current one (by `api_code`, else by name) keeps whether deleted entries give their places back, which a read does not give, and keeps its images when the write leaves `images` out. Time slot tables set up in the editor are not kept
       required:
       - name
       - value
@@ -9483,9 +9504,35 @@ components:
           type: string
         value:
           type: string
-          description: Reservation item api_code
+          description: Reservation item api_code, written back as `api_code`
         hidden:
           type: boolean
+        description:
+          type: string
+        selected:
+          type: boolean
+        payable:
+          type: boolean
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        quota_setting:
+          $ref: '#/components/schemas/ReservationQuotaSettingInput'
+        images:
+          type: array
+          description: Item images in display order, written back by `attachment_id`
+          items:
+            type: object
+            required:
+            - attachment_id
+            properties:
+              attachment_id:
+                type: string
+              image_url:
+                type: string
     DisplayFieldSetting:
       type: object
       properties:
@@ -10327,34 +10374,30 @@ components:
           description: Requires payment (depends on the plan and the price of each time slot)
         start_date:
           type: string
-          format: date
+          anyOf:
+          - format: date
+          - format: date-time
+          description: Bookable from this moment on. Reads give an ISO 8601 date-time; a YYYY-MM-DD date means the start of that day
         end_date:
           type: string
-          format: date
+          anyOf:
+          - format: date
+          - format: date-time
+          description: Bookable until the end of this day. Reads give an ISO 8601 date-time; a YYYY-MM-DD date is taken as that day
         quota_setting:
-          type: object
-          description: Quota settings, branched on type
-          required:
-          - type
-          properties:
-            type:
-              type: string
-              enum:
-              - by_day_repeat_weekly
-              - by_time_range_repeat_daily
-          discriminator:
-            propertyName: type
-            mapping:
-              by_day_repeat_weekly: "#/components/schemas/ReservationByDayQuotaInput"
-              by_time_range_repeat_daily: "#/components/schemas/ReservationByTimeRangeQuotaInput"
-          oneOf:
-          - $ref: '#/components/schemas/ReservationByDayQuotaInput'
-          - $ref: '#/components/schemas/ReservationByTimeRangeQuotaInput'
+          $ref: '#/components/schemas/ReservationQuotaSettingInput'
+        images:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ReservationItemImageInput'
+          description: Replaces the images of the item, in display order; leave out to keep them, [] removes them
     FormSettingWriteInput:
       type: object
       description: |
         The `setting` used when creating / editing a form. Only the keys below are accepted; other keys are ignored. A write describes the resulting state: omitted keys keep their current values, and `null` clears a key.
         - Passing only `success_message` automatically sets `success_message_style` to `text`; passing only `success_message_rich_text` sets it to `rich_text`.
+        - Changing `success_message_rich_text` requires a plan that includes "Success page rich text". Writing `success_message_style` as `rich_text` (passed, written back as read, or implied by passing only `success_message_rich_text`) also needs "Distribution poster" and "Certificate"; on other plans with "Success page rich text" pass `text`. Otherwise the request is refused with 400. A plan without "Success page rich text" may still write back the `rich_text` style it read; it is saved as `text`.
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
         - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically and `payment_expirable` turns on unless passed or already `false`.
         - `notification_rules` replaces all notification rules created through the API as a whole (`[]` clears them); rules created in the desktop UI are not affected.
@@ -10391,6 +10434,15 @@ components:
           type: string
         open_entry_cancel_reservation:
           type: boolean
+        show_entry_on_success:
+          type: boolean
+          description: Show the success page button that opens the entry just submitted; a new form turns it on unless you pass false
+        show_entry_on_success_button_text:
+          type: string
+          description: Text of that button; blank shows the scene's default text
+        edit_entry_on_success:
+          type: boolean
+          description: Let the submitter edit that entry from the button; applies while show_entry_on_success is on. Turning it on needs a plan that includes `填写者修改已填数据`, otherwise 400
         show_serial_number_on_success:
           type: boolean
         show_submit_again:
@@ -10604,7 +10656,7 @@ components:
           - 'null'
           enum:
           - date_time
-          - null
+          -
           description: 'Only for a reservation field tested by its date: `date_time`; leave it out otherwise. `GET /forms/{form_token}/condition_triggerable_fields` gives it for each field that needs it'
       additionalProperties: false
     NotificationRuleScheduleTimeRule:
@@ -10785,6 +10837,9 @@ components:
           type: string
           format: uri
           description: Bot webhook URL
+        address_id:
+          type: string
+          description: In place of `url`, the id of a robot address the user entered in this Jiri conversation; Jiri always uses it
         content:
           type: string
           description: The message; `$(api_code)` inserts a field value
@@ -10818,6 +10873,9 @@ components:
           type: string
           format: uri
           description: Bot webhook URL
+        address_id:
+          type: string
+          description: In place of `url`, the id of a robot address the user entered in this Jiri conversation; Jiri always uses it
         content:
           type: string
           description: The message; `$(api_code)` inserts a field value
@@ -10906,6 +10964,9 @@ components:
         notifications_count:
           type: integer
           description: How many have been sent
+        page_url:
+          type: string
+          description: The form's notification settings page
         sendable:
           type: boolean
           description: Whether the rule can send right now
@@ -11089,6 +11150,12 @@ components:
           items:
             $ref: '#/components/schemas/ReservationItemInput'
           description: Replaces the whole list; carry api_code to keep the identity of an item
+        buttons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WidgetButtonItemInput'
+          description: Replaces the whole list; a button at the position of an existing one keeps its style and qrcode images
         display_field_api_codes:
           type: array
           maxItems: 20
@@ -11117,6 +11184,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         minimum_length:
           type: integer
           minimum: 0
@@ -15083,6 +15153,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15153,6 +15226,9 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15212,6 +15288,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15847,6 +15926,9 @@ components:
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
     LikertFieldInput:
       type: object
       title: LikertFieldInput
@@ -16328,6 +16410,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16395,6 +16480,9 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16723,6 +16811,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -16823,6 +16914,9 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -16932,6 +17026,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -17029,6 +17126,9 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -17141,6 +17241,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -17230,6 +17333,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -17707,6 +17813,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17769,6 +17878,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17898,6 +18010,10 @@ components:
         api_code:
           type: string
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
+        quota:
+          type: integer
+          minimum: 1
+          description: Maximum number of places; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -17974,7 +18090,6 @@ components:
           const: by_day_repeat_weekly
         available_days_of_week:
           type: array
-          minItems: 1
           items:
             type: string
             enum:
@@ -18057,6 +18172,31 @@ components:
               end_time:
                 type: string
           description: Time ranges that cannot be booked
+        special_time_range_quotas:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - special_dates
+            - quota
+            properties:
+              special_dates:
+                type: array
+                minItems: 1
+                items:
+                  type: string
+                  format: date
+                description: Dates this entry applies to, as YYYY-MM-DD
+              quota:
+                type: integer
+                minimum: 0
+                description: Places
+              price:
+                type: number
+                minimum: 0
+                description: Price when payable
+          description: 'Special dates: they can be booked even when their day of the week is not in available_days_of_week, and their quota and price replace the day-of-week ones. Left out on a write, the current special dates are kept; [] clears them'
     ReservationByTimeRangeQuotaInput:
       type: object
       title: ReservationByTimeRangeQuotaInput
@@ -18069,7 +18209,6 @@ components:
           const: by_time_range_repeat_daily
         available_days_of_week:
           type: array
-          minItems: 1
           items:
             type: string
             enum:
@@ -18081,6 +18220,7 @@ components:
             - friday
             - saturday
           description: Days of the week that can be booked, as lowercase English day names
+          minItems: 1
         show_left_quota:
           type: boolean
           description: Show the places left
@@ -19272,7 +19412,7 @@ components:
                 type: string
         fields:
           type: array
-          description: Fields on the fill page, in fill order; for a form view, labels, descriptions and required flags follow the view
+          description: Fields on the fill page, in fill order; for a form view, labels, descriptions and required flags follow the view; an exam that draws questions at random lists one draw per call, as each opening of the page does
           items:
             $ref: '#/components/schemas/FieldMap'
         manageable:
@@ -21826,7 +21966,7 @@ components:
           description: See `GET /smtp_accounts`
     SMSMessageChannelInput:
       type: object
-      description: Sends with an SMS template whose variables are declared, once the template is approved
+      description: Sends with an SMS template once the template is approved
       additionalProperties: false
       required:
       - type
@@ -22027,7 +22167,7 @@ components:
           additionalProperties:
             type: string
             maxLength: 100
-          description: Value of every variable the channel's template declares, keyed as in the template (`var_1`...)
+          description: Value of every `$(...)` variable in the channel's template, keyed by its name (`key` in `GET /sms/templates`)
         idempotency_key:
           type: string
           maxLength: 255
@@ -22936,6 +23076,13 @@ components:
           - type: 'null'
         delete_authorized:
           description: Not accepted. A body that names it, whatever its value, returns `422` `delete_authorization_page_only`.
+        message_rules:
+          type:
+          - array
+          - 'null'
+          description: The messages a run may send; on update they replace the routine's. A new or changed one is saved only as the user confirmed it on a card in this Jiri conversation.
+          items:
+            $ref: '#/components/schemas/RoutineGroupMessageRuleInput'
     RoutineScheduleInput:
       type: object
       description: |
@@ -22964,6 +23111,114 @@ components:
           items:
             type: integer
           description: "`monthly`: 1–31, or -1 for the last day; a month without the day (the 31st, say) is skipped"
+    RoutineGroupMessageRuleInput:
+      type: object
+      description: A message sent to a WeCom or DingTalk group
+      properties:
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        address_id:
+          type: string
+          description: A robot address the user entered in this Jiri conversation
+        channel_id:
+          type: string
+          description: Keep sending to this group; left out with `id` keeps the rule's group
+        mentioned_mobile_list:
+          type: array
+          description: Mobiles to @ in the group, `@all` for everyone; a WeCom message that mentions anyone is sent as plain text, not Markdown
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+        mentioned_fields:
+          type: array
+          description: Mobile fields a run may pick people from to @ as well, each run the ones the instruction names; each one picked must be in the field, at most 50 people are mentioned in all
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - form_token
+            - field_code
+            properties:
+              form_token:
+                type: string
+                description: A form or table you can see
+              field_code:
+                type: string
+                description: A mobile field of it, such as `field_3`
+        content:
+          type: string
+          description: The message as the group receives it, at most 2000 characters; Jiri fills in what changes from run to run
+    RoutineGroupMessageRule:
+      type: object
+      description: A message sent to a WeCom or DingTalk group
+      required:
+      - id
+      - approach
+      - channel_id
+      - masked_address
+      - mentioned_mobile_list
+      - mentioned_fields
+      - content
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - wxwork
+          - ding_talk
+          -
+          description: null when the group was deleted
+        channel_id:
+          type: string
+        masked_address:
+          type:
+          - string
+          - 'null'
+          description: The robot address with its key hidden; null when the group was deleted
+        mentioned_mobile_list:
+          type: array
+          items:
+            type: string
+        mentioned_fields:
+          type: array
+          items:
+            type: object
+            required:
+            - form_token
+            - field_code
+            - form_name
+            - field_label
+            properties:
+              form_token:
+                type:
+                - string
+                - 'null'
+                description: null when the form or table was deleted
+              field_code:
+                type: string
+              form_name:
+                type:
+                - string
+                - 'null'
+              field_label:
+                type:
+                - string
+                - 'null'
+                description: null when the field was deleted
+        content:
+          type: string
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
     RoutineEventInput:
       type: object
       description: When data changes. The source must be a form or table you created, or whose data you can read; it is added to the objects on save.
@@ -23047,6 +23302,7 @@ components:
       - data_condition
       - objects
       - delete_authorized
+      - message_rules
       - runs_count
       - last_run
       - url
@@ -23232,6 +23488,11 @@ components:
         delete_authorized:
           type: boolean
           description: Whether runs may delete data in the linked forms and tables
+        message_rules:
+          type: array
+          description: The messages a run may send
+          items:
+            $ref: '#/components/schemas/RoutineGroupMessageRule'
         runs_count:
           type: integer
           description: How many times it has run
@@ -24133,3 +24394,43 @@ components:
       - $ref: '#/components/schemas/RatingInput'
       - $ref: '#/components/schemas/NpsInput'
       title: EvaluationFieldInput
+    ReservationQuotaSettingInput:
+      type: object
+      title: ReservationQuotaSettingInput
+      description: Bookable days, time slots and places per slot, branched on type
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - by_day_repeat_weekly
+          - by_time_range_repeat_daily
+      discriminator:
+        propertyName: type
+        mapping:
+          by_day_repeat_weekly: "#/components/schemas/ReservationByDayQuotaInput"
+          by_time_range_repeat_daily: "#/components/schemas/ReservationByTimeRangeQuotaInput"
+      oneOf:
+      - $ref: '#/components/schemas/ReservationByDayQuotaInput'
+      - $ref: '#/components/schemas/ReservationByTimeRangeQuotaInput'
+    ReservationItemImageInput:
+      type: object
+      title: ReservationItemImageInput
+      additionalProperties: false
+      anyOf:
+      - required:
+        - image_url
+      - required:
+        - image_base64
+      - required:
+        - attachment_id
+      properties:
+        image_url:
+          type: string
+          format: uri
+        image_base64:
+          type: string
+        attachment_id:
+          type: string
+          description: The `attachment_id` of an image_type=reservation_item upload, or of an image the reservation items already have

@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-05';
+export const SPEC_DATE: string | undefined = '2026-11-07';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -1659,7 +1659,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
                 'opensearch_header',
                 'description',
                 'goods_item',
-                'contact_widget'
+                'contact_widget',
+                'reservation_item'
               ]
             }
           },
@@ -2117,7 +2118,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
                 'opensearch_header',
                 'description',
                 'goods_item',
-                'contact_widget'
+                'contact_widget',
+                'reservation_item'
               ]
             },
             file: { type: 'string' }
@@ -2315,7 +2317,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       levels: { type: 'integer', minimum: 2 },
       choice_filterable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
-      calculable: { type: 'boolean' }
+      calculable: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     }
   },
   CheckBoxInput: {
@@ -2336,7 +2339,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 }
+      maximum_length: { type: 'integer', minimum: 0 },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -2513,7 +2517,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -2569,6 +2574,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
       schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
       url: { type: 'string' },
+      address_id: { type: 'string' },
       content: { type: 'string' },
       mentioned_mobile_list: { type: 'array', items: { type: 'string' } }
     },
@@ -2589,7 +2595,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -2614,6 +2621,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -3448,6 +3456,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       statements: { type: 'array', items: { $ref: 'StatementInput' } },
       goods_items: { type: 'array', items: { $ref: 'GoodsItemUpdateInput' } },
       reservation_items: { type: 'array', items: { $ref: 'ReservationItemInput' } },
+      buttons: { type: 'array', minItems: 1, items: { $ref: 'WidgetButtonItemInput' } },
       display_field_api_codes: { type: 'array', maxItems: 20, items: { type: 'string' } },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
@@ -3455,6 +3464,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
       maximum_length: { type: 'integer', minimum: 0 },
       predefined_value: {},
@@ -3857,6 +3867,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       open_entry_action: { type: 'string', enum: ['hide', 'view', 'edit'] },
       open_entry_message: { type: 'string' },
       open_entry_cancel_reservation: { type: 'boolean' },
+      show_entry_on_success: { type: 'boolean' },
+      show_entry_on_success_button_text: { type: 'string' },
+      edit_entry_on_success: { type: 'boolean' },
       show_serial_number_on_success: { type: 'boolean' },
       show_submit_again: { type: 'boolean' },
       hide_login_and_signup: { type: 'boolean' },
@@ -4269,7 +4282,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -4310,7 +4324,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 }
+      maximum_length: { type: 'integer', minimum: 0 },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -4330,6 +4345,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
+      quota: { type: 'integer', minimum: 1 },
       operand_value: { type: 'number' },
       selected: { type: 'boolean' },
       image_url: { type: 'string' },
@@ -4355,6 +4371,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
       maximum_length: { type: 'integer', minimum: 0 },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -4403,7 +4420,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -4428,6 +4446,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -4673,6 +4692,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
       maximum_length: { type: 'integer', minimum: 0 },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -4994,7 +5014,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
       {
@@ -5072,7 +5093,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       type: { const: 'by_day_repeat_weekly' },
       available_days_of_week: {
         type: 'array',
-        minItems: 1,
         items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] }
       },
       show_left_quota: { type: 'boolean' },
@@ -5110,6 +5130,19 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           additionalProperties: false,
           properties: { start_time: { type: 'string' }, end_time: { type: 'string' } }
         }
+      },
+      special_time_range_quotas: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['special_dates', 'quota'],
+          properties: {
+            special_dates: { type: 'array', minItems: 1, items: { type: 'string' } },
+            quota: { type: 'integer', minimum: 0 },
+            price: { type: 'number', minimum: 0 }
+          }
+        }
       }
     }
   },
@@ -5121,8 +5154,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       type: { const: 'by_time_range_repeat_daily' },
       available_days_of_week: {
         type: 'array',
-        minItems: 1,
-        items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] }
+        items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] },
+        minItems: 1
       },
       show_left_quota: { type: 'boolean' },
       start_time_offset: {
@@ -5201,6 +5234,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       use_daily_time_range: { type: 'boolean' }
     }
   },
+  ReservationItemImageInput: {
+    type: 'object',
+    additionalProperties: false,
+    anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['attachment_id'] }],
+    properties: { image_url: { type: 'string' }, image_base64: { type: 'string' }, attachment_id: { type: 'string' } }
+  },
   ReservationItemInput: {
     type: 'object',
     additionalProperties: false,
@@ -5213,22 +5252,24 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       hidden: { type: 'boolean' },
       selected: { type: 'boolean' },
       payable: { type: 'boolean' },
-      start_date: { type: 'string' },
-      end_date: { type: 'string' },
-      quota_setting: {
-        type: 'object',
-        required: ['type'],
-        properties: { type: { type: 'string', enum: ['by_day_repeat_weekly', 'by_time_range_repeat_daily'] } },
-        discriminator: {
-          propertyName: 'type',
-          mapping: {
-            by_day_repeat_weekly: 'ReservationByDayQuotaInput',
-            by_time_range_repeat_daily: 'ReservationByTimeRangeQuotaInput'
-          }
-        },
-        oneOf: [{ $ref: 'ReservationByDayQuotaInput' }, { $ref: 'ReservationByTimeRangeQuotaInput' }]
-      }
+      start_date: { type: 'string', anyOf: [{}, {}] },
+      end_date: { type: 'string', anyOf: [{}, {}] },
+      quota_setting: { $ref: 'ReservationQuotaSettingInput' },
+      images: { type: 'array', maxItems: 5, items: { $ref: 'ReservationItemImageInput' } }
     }
+  },
+  ReservationQuotaSettingInput: {
+    type: 'object',
+    required: ['type'],
+    properties: { type: { type: 'string', enum: ['by_day_repeat_weekly', 'by_time_range_repeat_daily'] } },
+    discriminator: {
+      propertyName: 'type',
+      mapping: {
+        by_day_repeat_weekly: 'ReservationByDayQuotaInput',
+        by_time_range_repeat_daily: 'ReservationByTimeRangeQuotaInput'
+      }
+    },
+    oneOf: [{ $ref: 'ReservationByDayQuotaInput' }, { $ref: 'ReservationByTimeRangeQuotaInput' }]
   },
   RobotMessageInput: {
     type: 'object',
@@ -5263,6 +5304,25 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       include_bulk: { type: 'boolean' }
     }
   },
+  RoutineGroupMessageRuleInput: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      address_id: { type: 'string' },
+      channel_id: { type: 'string' },
+      mentioned_mobile_list: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'string' } },
+      mentioned_fields: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['form_token', 'field_code'],
+          properties: { form_token: { type: 'string' }, field_code: { type: 'string' } }
+        }
+      },
+      content: { type: 'string' }
+    }
+  },
   RoutineInput: {
     type: 'object',
     properties: {
@@ -5278,7 +5338,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       schedule: { oneOf: [{ $ref: 'RoutineScheduleInput' }, { type: 'null' }] },
       event: { oneOf: [{ $ref: 'RoutineEventInput' }, { type: 'null' }] },
       data_condition: { oneOf: [{ $ref: 'RoutineDataConditionInput' }, { type: 'null' }] },
-      delete_authorized: {}
+      delete_authorized: {},
+      message_rules: { type: ['array', 'null'], items: { $ref: 'RoutineGroupMessageRuleInput' } }
     }
   },
   RoutineScheduleInput: {
@@ -5573,6 +5634,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -5901,6 +5963,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -6086,6 +6149,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       scope_conditions: { type: 'array', items: { $ref: 'NotificationRuleScopeCondition' } },
       schedule_time_rule: { $ref: 'NotificationRuleScheduleTimeRule' },
       url: { type: 'string' },
+      address_id: { type: 'string' },
       content: { type: 'string' },
       mentioned_mobile_list: { type: 'array', items: { type: 'string' } }
     },
