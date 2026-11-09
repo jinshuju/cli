@@ -18,12 +18,14 @@ import {
   paging,
   payload,
   refuseWithMine,
+  requiredOption,
   sort
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
 import { bodyChoices, call, type OperationId } from '../spec.js';
-import { upload, uploadFormImage } from './upload.js';
+import { readableSize, upload, uploadFormImage } from './upload.js';
+import { isRecord } from '../values.js';
 
 /**
  * The shape behind `--json` on a form, shown rather than described: `fields` is
@@ -112,6 +114,142 @@ function includes(input: CommandInput): Record<string, boolean> {
     query[parameter] = true;
   }
   return query;
+}
+
+/**
+ * What `form wheel-fortune edit --json` takes, shown rather than described: a
+ * gift and a voucher prize side by side carry most of what the shape asks.
+ */
+const WHEEL_FORTUNE_PAYLOAD: readonly string[] = [
+  '{',
+  '  "enabled": true,',
+  '  "prizes": [',
+  '    { "title": "一等奖", "prize_name": "蓝牙耳机", "probability": 5, "prize_amount": 10 },',
+  '    { "title": "二等奖", "prize_name": "咖啡券", "probability": 20, "prize_type": "voucher",',
+  '      "vouchers": [ { "code": "00123" }, { "code": "00124", "password": "p1" } ] }',
+  '  ],',
+  '  "lottery": { "limit_times": 1, "show_casher": false },',
+  '  "cash": { "cash_style": "code" },',
+  '  "text": { "win_text": "恭喜抽中 $(奖品名称)", "lose_text": "谢谢参与",',
+  '            "cash_text": "凭兑奖码到前台领取" }',
+  '}',
+  '',
+  'Only the keys present are written, but "prizes" replaces the list as a whole:',
+  'pass each prize to keep back with its "id" from `form wheel-fortune get`, or it',
+  'goes with its winners. A voucher prize hands each winner one of its codes, and',
+  'takes them only when it is added. "cash" cannot be changed once saved.',
+  '',
+  'The lucky wheel is a paid add-on. "confirm_form_app_trial": true starts the',
+  "account's free trial, once per account, so ask its owner first. Turning the",
+  'wheel on while the form ends with something else — a redirect, an exam score,',
+  'a red envelope — is refused until "confirm_ending_conflicts": true, which',
+  'switches the ending to a message as the editor does.',
+  '',
+  'A "phone" cash and "send_sms" name a mobile field by its api_code:',
+  'jinshuju field list --form <token>'
+];
+
+const PRIZE_IMAGE_OPTION: OptionSpec = {
+  name: '--prize-image',
+  type: 'string',
+  repeatable: true,
+  placeholder: '<title>=<file>',
+  description: 'Upload an image for the prize of this title in the payload, repeatable'
+};
+
+/** How a flag ties files to the items of a payload list, each given as `<name>=<file>`. */
+interface NamedFiles {
+  flag: string;
+  values: readonly string[];
+  items: readonly unknown[];
+  key: string;
+  noun: string;
+}
+
+interface NamedFile {
+  item: Record<string, unknown>;
+  file: string;
+}
+
+/**
+ * The files a flag ties to items of a payload list by one of their keys: a
+ * lucky wheel's prizes by title, which a caller can read off what they wrote.
+ * Every name is matched and every file found readable before the first goes
+ * up: once one is uploaded, a failure on the next leaves it behind, and running
+ * the command again sends it a second time.
+ */
+function namedFiles({ flag, values, items, key, noun }: NamedFiles): NamedFile[] {
+  const names = items.filter(isRecord).map((candidate) => candidate[key]);
+  const named = new Set<string>();
+  return values.map((value) => {
+    const at = nameEnd(flag, value, names);
+    const name = value.slice(0, at);
+    const file = value.slice(at + 1);
+    if (at <= 0 || !file) throw new UsageError(`${flag} must be '<${key}>=<file>', got ${JSON.stringify(value)}`);
+    if (named.has(name)) throw new UsageError(`${flag} names ${JSON.stringify(name)} twice`);
+    named.add(name);
+    const matching = items.filter((candidate) => isRecord(candidate) && candidate[key] === name);
+    if (matching.length === 0) {
+      throw new UsageError(`${flag} names ${JSON.stringify(name)}, but no ${noun} in the payload has that ${key}`);
+    }
+    if (matching.length > 1) {
+      throw new UsageError(`${flag} names ${JSON.stringify(name)}, which ${matching.length} ${noun}s share`);
+    }
+    readableSize(file);
+    return { item: matching[0] as Record<string, unknown>, file };
+  });
+}
+
+/**
+ * Where `<name>=<file>` splits. A name and a path may each hold a `=`, so it is
+ * at the `=` whose left side is one of the names, or the first when none is.
+ */
+function nameEnd(flag: string, value: string, names: readonly unknown[]): number {
+  const ends: number[] = [];
+  for (let at = value.indexOf('='); at !== -1; at = value.indexOf('=', at + 1)) {
+    if (names.includes(value.slice(0, at))) ends.push(at);
+  }
+  if (ends.length > 1) {
+    const which = ends.map((at) => JSON.stringify(value.slice(0, at))).join(' or ');
+    throw new UsageError(`${flag} ${JSON.stringify(value)} could name ${which}`);
+  }
+  return ends[0] ?? value.indexOf('=');
+}
+
+/** Files to upload onto items under `key`, and the save that sends the items after. */
+interface UploadThenSave<T> {
+  targets: readonly NamedFile[];
+  key: string;
+  upload: (file: string) => Promise<string>;
+  what: string;
+  save: () => Promise<T>;
+}
+
+/**
+ * Uploads each file and sets its id on its item, then saves. A failure after a
+ * file went up says which did and the id each went up as: an uploaded file
+ * stays, and a second run that puts its id in the payload need not upload it
+ * again.
+ */
+async function uploadThenSave<T>({ targets, key, upload, what, save }: UploadThenSave<T>): Promise<T> {
+  const uploaded: string[] = [];
+  let step = '';
+  try {
+    for (const { item, file } of targets) {
+      step = `uploading ${file}`;
+      item[key] = await upload(file);
+      uploaded.push(`${file} as ${key} ${item[key] as string}`);
+    }
+    step = `saving ${what}`;
+    return await save();
+  } catch (error) {
+    if (uploaded.length === 0) throw error;
+    throw new Error(
+      `uploaded ${uploaded.join(', ')}, but ${step} failed: ${(error as Error).message}. ` +
+        'Put each id in the payload to run again without uploading its file again.',
+      { cause: error }
+    );
+  }
 }
 
 function themeBody(input: CommandInput): Record<string, unknown> {
@@ -450,6 +588,82 @@ export const FORM: readonly Command[] = [
     options: [JSON_OPTION],
     request: (input) =>
       call('updateForm', { path: { form_token: input.args.form }, body: { field_rules: payload(input) } })
+  },
+  {
+    path: ['form', 'wheel-fortune', 'get'],
+    summary: "Show a form's lucky wheel: prizes, draws, how winners redeem",
+    description:
+      'The prize ids are what `form wheel-fortune edit` passes back to keep a prize and its ' +
+      'winners, and what `form wheel-fortune export-vouchers --prize` takes. An account that has ' +
+      'neither bought nor tried the lucky wheel is answered 402, saying how to start its trial.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    request: (input) => call('getWheelFortune', { path: { form_token: input.args.form } }),
+    examples: ['jinshuju form wheel-fortune get Kp7mQ2']
+  },
+  {
+    path: ['form', 'wheel-fortune', 'edit'],
+    summary: "Set up a form's lucky wheel and turn it on or off",
+    description:
+      'Respondents go to the wheel after submitting once it is on. --prize-image uploads an image ' +
+      "and sets it on the payload's prize of that title in one command.",
+    payload: WHEEL_FORTUNE_PAYLOAD,
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [
+      JSON_OPTION,
+      { name: '--enable', type: 'boolean', description: 'Turn the lucky wheel on' },
+      { name: '--disable', type: 'boolean', description: 'Turn the lucky wheel off' },
+      PRIZE_IMAGE_OPTION
+    ],
+    run: async (input, client) => {
+      if (input.options.enable && input.options.disable) {
+        throw new UsageError('--enable and --disable are opposites, pass one');
+      }
+      const json = input.options.json;
+      if (json !== undefined && !isRecord(json)) throw new UsageError('--json must be a JSON object');
+      const path = { form_token: input.args.form as string };
+      const enabled = input.options.enable ? true : input.options.disable ? false : undefined;
+      const body = overriding(json ?? {}, { enabled });
+      const images = (input.options.prize_image as string[] | undefined) ?? [];
+      if (images.length === 0) return client.request(call('updateWheelFortune', { path, body }));
+
+      const prizes = Array.isArray(body.prizes)
+        ? body.prizes.map((prize: unknown) => (isRecord(prize) ? { ...prize } : prize))
+        : [];
+      const targets = namedFiles({ flag: '--prize-image', values: images, items: prizes, key: 'title', noun: 'prize' });
+      // What the setup would be refused for is said before an image goes up for it.
+      client.check?.(call('updateWheelFortune', { path, body: { ...body, prizes } }));
+      return uploadThenSave({
+        targets,
+        key: 'prize_image_id',
+        upload: (file) => uploadFormImage(client, file, 'wheel_fortune_prize'),
+        what: 'the lucky wheel',
+        save: () => client.request(call('updateWheelFortune', { path, body: { ...body, prizes } }))
+      });
+    },
+    examples: [
+      'jinshuju form wheel-fortune edit Kp7mQ2 --json @wheel.json --prize-image 一等奖=./earbuds.png',
+      'jinshuju form wheel-fortune edit Kp7mQ2 --disable',
+      'jinshuju form wheel-fortune edit Kp7mQ2 --json \'{"confirm_form_app_trial":true,"lottery":{"limit_times":3,"show_casher":false}}\''
+    ]
+  },
+  {
+    path: ['form', 'wheel-fortune', 'export-vouchers'],
+    summary: 'Export the vouchers a prize has not handed out yet',
+    description: 'Answers with a link to an Excel file of the codes, and how many there are.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [
+      {
+        name: '--prize',
+        type: 'string',
+        placeholder: '<id>',
+        description: 'Voucher prize id, from `form wheel-fortune get`'
+      }
+    ],
+    request: (input) =>
+      call('exportRemainingVouchers', {
+        path: { form_token: input.args.form, prize_id: requiredOption(input, 'prize') }
+      }),
+    examples: ['jinshuju form wheel-fortune export-vouchers Kp7mQ2 --prize 6af1381d114fae12e40e44ea']
   },
   {
     path: ['form', 'cooperator', 'list'],

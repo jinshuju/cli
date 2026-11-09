@@ -1,6 +1,5 @@
 import type { HttpClient } from '../http.js';
 import { PAGINATION_OPTIONS, UsageError, type OptionSpec } from '../options.js';
-import { progress } from '../progress.js';
 import { bodyChoices, call, choices } from '../spec.js';
 import {
   confirmed,
@@ -23,9 +22,8 @@ import {
   YES_OPTION
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
-import { upload } from './upload.js';
-import { statSync } from 'node:fs';
-import { basename, extname } from 'node:path';
+import { readableSize, uploadedId } from './upload.js';
+import { extname } from 'node:path';
 
 /**
  * A signature is applied for with license images, which go up first as the
@@ -124,25 +122,12 @@ function checkLicenseFiles(files: readonly string[]): void {
     if (!LICENSE_EXTENSIONS.includes(extname(file).toLowerCase())) {
       throw new UsageError(`${file} is not a jpg, jpeg, png or bmp image`);
     }
-    let size: number;
-    try {
-      size = statSync(file).size;
-    } catch (error) {
-      throw new UsageError(`could not read ${file}: ${(error as Error).message}`);
-    }
-    if (size > LICENSE_MAX_BYTES) throw new UsageError(`${file} is over 5 MB`);
+    if (readableSize(file) > LICENSE_MAX_BYTES) throw new UsageError(`${file} is over 5 MB`);
   }
 }
 
-async function uploadLicense(client: HttpClient, file: string): Promise<string> {
-  const watching = progress();
-  watching.step(`uploading ${basename(file)}…`);
-  try {
-    const uploaded = await client.request<{ attachment_id: string }>(upload('uploadUserLicenseAttachment', {}, file));
-    return uploaded.attachment_id;
-  } finally {
-    watching.done();
-  }
+function uploadLicense(client: HttpClient, file: string): Promise<string> {
+  return uploadedId(client, { id: 'uploadUserLicenseAttachment', file, key: 'attachment_id' });
 }
 
 /**
