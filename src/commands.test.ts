@@ -2446,6 +2446,187 @@ test('form theme set uploads an image and hands the theme its id', async () => {
   });
 });
 
+const WHEEL = {
+  prizes: [
+    { title: '一等奖', prize_name: '蓝牙耳机', probability: 5, prize_amount: 10 },
+    { title: '二等奖', prize_name: '咖啡券', probability: 20, prize_amount: 30 }
+  ]
+};
+
+test('form wheel-fortune get and export-vouchers read the wheel and a prize of it', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'wheel-fortune', 'get', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'wheel-fortune', 'export-vouchers', 'Kp7mQ2', '--prize', 'pz_1'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/wheel_fortune');
+  assert.equal(mock.requests[1].method, 'POST');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/wheel_fortune/prizes/pz_1/remaining_vouchers');
+});
+
+test('form wheel-fortune edit without --prize-image sends the payload as one PATCH, --disable over it', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--json', JSON.stringify({ enabled: true, ...WHEEL })], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--disable'], { env: WRITE_ENV, client: mock.client });
+  const both = await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--enable', '--disable'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].method, 'PATCH');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/wheel_fortune');
+  assert.deepEqual(mock.requests[0].body, { enabled: true, ...WHEEL });
+  assert.deepEqual(mock.requests[1].body, { enabled: false });
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /--enable and --disable are opposites/);
+});
+
+test('form wheel-fortune edit --prize-image uploads the image and sets it on the prize of that title', async () => {
+  const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'wf_1' } });
+
+  await cli(
+    [
+      'form',
+      'wheel-fortune',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(WHEEL),
+      '--prize-image',
+      '二等奖=package.json'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].form?.get('image_type'), 'wheel_fortune_prize');
+  assert.deepEqual(mock.requests[1].body, {
+    prizes: [WHEEL.prizes[0], { ...WHEEL.prizes[1], prize_image_id: 'wf_1' }]
+  });
+});
+
+test('form wheel-fortune edit uploads nothing when --prize-image names no prize of the payload', async () => {
+  const mock = uploadingClient({});
+
+  const result = await cli(
+    [
+      'form',
+      'wheel-fortune',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(WHEEL),
+      '--prize-image',
+      '三等奖=package.json'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /no prize in the payload has that title/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('form wheel-fortune edit uploads nothing when one --prize-image file cannot be read', async () => {
+  for (const [file, reason] of [
+    ['missing.png', /could not read missing\.png/],
+    ['src', /could not read src: not a file/]
+  ] as const) {
+    const mock = uploadingClient({});
+    const result = await cli(
+      [
+        'form',
+        'wheel-fortune',
+        'edit',
+        'Kp7mQ2',
+        '--json',
+        JSON.stringify(WHEEL),
+        '--prize-image',
+        '一等奖=package.json',
+        '--prize-image',
+        `二等奖=${file}`
+      ],
+      { env: WRITE_ENV, client: mock.client }
+    );
+
+    assert.equal(result.exitCode, 2);
+    assert.match(result.stderr, reason);
+    assert.equal(mock.requests.length, 0);
+  }
+});
+
+test('form wheel-fortune edit --prize-image finds a title holding an =, and refuses one it cannot tell', async () => {
+  const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'wf_1' } });
+  const prizes = [{ ...WHEEL.prizes[0], title: '满100=减10' }, WHEEL.prizes[1]];
+  const edit = (json: unknown, image: string) =>
+    cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--json', JSON.stringify(json), '--prize-image', image], {
+      env: WRITE_ENV,
+      client: mock.client
+    });
+
+  await edit({ prizes }, '满100=减10=package.json');
+  const unclear = await edit({ prizes: [{ ...prizes[0], title: '满100' }, prizes[0]] }, '满100=减10=package.json');
+
+  assert.equal(mock.requests.length, 2);
+  assert.deepEqual(mock.requests[1].body, { prizes: [{ ...prizes[0], prize_image_id: 'wf_1' }, prizes[1]] });
+  assert.equal(unclear.exitCode, 2);
+  assert.match(unclear.stderr, /could name "满100" or "满100=减10"/);
+});
+
+test('form wheel-fortune edit says which image went up when the setup is then refused', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      if (request.method === 'PATCH') throw new HttpError('Bad Request', 400, {});
+      return { attachment_id: 'wf_1' } as T;
+    }
+  };
+
+  const result = await cli(
+    [
+      'form',
+      'wheel-fortune',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(WHEEL),
+      '--prize-image',
+      '二等奖=package.json'
+    ],
+    { env: WRITE_ENV, client }
+  );
+
+  assert.equal(requests.length, 2);
+  assert.equal(result.exitCode, 5);
+  assert.match(
+    result.stderr,
+    /uploaded package\.json as prize_image_id wf_1, but saving the lucky wheel failed: Bad Request\. Put each id in the payload/
+  );
+});
+
+test('form wheel-fortune edit takes only a JSON object as --json', async () => {
+  const mock = createMockClient();
+
+  const result = await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--json', '[1,2]'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /--json must be a JSON object/);
+  assert.equal(mock.requests.length, 0);
+});
+
 test('form image upload sends the image as a description image and answers with its url', async () => {
   const mock = uploadingClient({
     '/api/v1/form_image_attachments': { attachment_id: 'di_1', url: 'https://cdn.example/di/1.png' }

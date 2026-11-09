@@ -2,7 +2,7 @@ import { UsageError } from '../options.js';
 import type { HttpClient, HttpRequest } from '../http.js';
 import { progress } from '../progress.js';
 import { call, type OperationId } from '../spec.js';
-import { readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 
 /**
@@ -28,7 +28,13 @@ const UPLOAD_TYPES: Record<string, string> = {
  * What the CLI uploads a form image as. A test holds the list to the spec's
  * `image_type`, which is where it would otherwise drift.
  */
-export const FORM_IMAGE_TYPES = ['description', 'header', 'wallpaper', 'opensearch_header'] as const;
+export const FORM_IMAGE_TYPES = [
+  'description',
+  'header',
+  'wallpaper',
+  'opensearch_header',
+  'wheel_fortune_prize'
+] as const;
 export type FormImageType = (typeof FORM_IMAGE_TYPES)[number];
 
 /**
@@ -56,18 +62,46 @@ export function upload(
 }
 
 /**
- * An image that a form's theme or one of its public queries refers to by id, uploaded
- * with `imageType` saying which (header, wallpaper, opensearch_header).
+ * The size of a file about to go up, once it is found to be a file this
+ * process may read. A bare stat passes a directory and an unreadable file, and
+ * a command uploading several would then fail only after the first went up.
  */
-export async function uploadFormImage(client: HttpClient, file: string, imageType: FormImageType): Promise<string> {
+export function readableSize(file: string): number {
+  try {
+    accessSync(file, constants.R_OK);
+    const stats = statSync(file);
+    if (stats.isFile()) return stats.size;
+  } catch (error) {
+    throw new UsageError(`could not read ${file}: ${(error as Error).message}`);
+  }
+  throw new UsageError(`could not read ${file}: not a file`);
+}
+
+/** One file to upload, and the key of the id the answer gives it. */
+interface Upload {
+  id: OperationId;
+  path?: Record<string, string>;
+  file: string;
+  extra?: Record<string, string>;
+  key: string;
+}
+
+/** A file uploaded with a progress line while it goes, answered by its id. */
+export async function uploadedId(client: HttpClient, { id, path = {}, file, extra, key }: Upload): Promise<string> {
   const watching = progress();
   watching.step(`uploading ${basename(file)}…`);
   try {
-    const uploaded = await client.request<{ attachment_id: string }>(
-      upload('uploadFormImage', {}, file, { image_type: imageType })
-    );
-    return uploaded.attachment_id;
+    const answer = await client.request<Record<string, string>>(upload(id, path, file, extra));
+    return answer[key];
   } finally {
     watching.done();
   }
+}
+
+/**
+ * An image that a form's theme, one of its public queries or a prize of its lucky wheel
+ * refers to by id, uploaded with `imageType` saying which.
+ */
+export function uploadFormImage(client: HttpClient, file: string, imageType: FormImageType): Promise<string> {
+  return uploadedId(client, { id: 'uploadFormImage', file, extra: { image_type: imageType }, key: 'attachment_id' });
 }
