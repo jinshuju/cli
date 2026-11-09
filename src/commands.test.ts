@@ -964,6 +964,20 @@ test('message send wants --yes, and sends what the flags give', async () => {
     'var_2=a=b',
     '--yes'
   ]);
+  await run([
+    '--type',
+    'webhook',
+    '--channel',
+    'ch_3',
+    '--form',
+    'Kp7mQ2',
+    '--entry',
+    '1282',
+    '--entry',
+    '1283',
+    '--yes'
+  ]);
+  await run(['--type', 'webhook', '--channel', 'ch_3', '--body', '{"report": "orders",  "order_count":1 }', '--yes']);
   const malformed = await run([
     '--type',
     'sms',
@@ -979,7 +993,13 @@ test('message send wants --yes, and sends what the flags give', async () => {
 
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${request.path}`),
-    ['POST /api/v1/messages', 'POST /api/v1/messages', 'POST /api/v1/messages']
+    [
+      'POST /api/v1/messages',
+      'POST /api/v1/messages',
+      'POST /api/v1/messages',
+      'POST /api/v1/messages',
+      'POST /api/v1/messages'
+    ]
   );
   assert.deepEqual(mock.requests[0].body, {
     type: 'wxwork',
@@ -1000,6 +1020,44 @@ test('message send wants --yes, and sends what the flags give', async () => {
     to: ['13800000000'],
     variables: { var_1: '张三', var_2: 'a=b' }
   });
+  assert.deepEqual(mock.requests[3].body, {
+    type: 'webhook',
+    channel_id: 'ch_3',
+    form_token: 'Kp7mQ2',
+    entries: [1282, 1283]
+  });
+  assert.deepEqual(mock.requests[4].body, {
+    type: 'webhook',
+    channel_id: 'ch_3',
+    body: '{"report": "orders",  "order_count":1 }'
+  });
+});
+
+test('message send --body is the whole request of a webhook, so it takes no title, content or entries', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) =>
+    cli(['message', 'send', '--channel', 'ch_3', '--body', '{"order_count":1}', ...args, '--yes'], {
+      env: WRITE_ENV,
+      client: mock.client
+    });
+
+  const wxwork = await run(['--type', 'wxwork']);
+  const titled = await run(['--type', 'webhook', '--title', '订单日报']);
+  const withContent = await run(['--type', 'webhook', '--content', '今日订单 1 笔']);
+  const withForm = await run(['--type', 'webhook', '--form', 'Kp7mQ2']);
+  const withEntry = await run(['--type', 'webhook', '--entry', '1282']);
+
+  assert.equal(wxwork.exitCode, 2);
+  assert.match(wxwork.stderr, /--body is for --type webhook only, not wxwork/);
+  assert.equal(titled.exitCode, 2);
+  assert.match(titled.stderr, /--title cannot be combined with --body/);
+  assert.equal(withContent.exitCode, 2);
+  assert.match(withContent.stderr, /--content cannot be combined with --body/);
+  assert.equal(withForm.exitCode, 2);
+  assert.match(withForm.stderr, /--form cannot be combined with --body/);
+  assert.equal(withEntry.exitCode, 2);
+  assert.match(withEntry.stderr, /--entry cannot be combined with --body/);
+  assert.equal(mock.requests.length, 0);
 });
 
 test('message channel list filters by type and pages by row offset, and get shows one channel', async () => {

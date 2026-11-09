@@ -21883,7 +21883,7 @@ components:
           description: "`https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...`"
     WebhookMessageChannelInput:
       type: object
-      description: An https address of your own server, which must resolve to a public address. Each message is a POST of JSON `{id, request_id, title, content, created_at}`; on 5xx or 429 the same `id` is posted again, up to 6 attempts in all, so deduplicate by `id`.
+      description: 'An https address of your own server, which must resolve to a public address. Each message is a POST of JSON: `{id, request_id, title, content, created_at}` for a title and content, the `body` given as it is, or from Jiri an entry shaped as a form''s webhook notification pushes it. Every request carries the headers `X-Jinshuju-Timestamp`, `X-Jinshuju-Signature` and `X-Jinshuju-Message-Id`; on 5xx or 429 the same request is posted again, up to 6 attempts in all, so deduplicate by `X-Jinshuju-Message-Id`.'
       additionalProperties: false
       required:
       - type
@@ -22068,12 +22068,13 @@ components:
           description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
     WebhookMessageInput:
       type: object
-      description: A webhook message; the channel is the recipient
+      description: 'A webhook message; the channel is the recipient. It pushes `{id, request_id, title, content, created_at}`, the `body` given as it is, or from Jiri the entries named, each in a request of its own. Each request names its message in the header `X-Jinshuju-Message-Id`, the same on every attempt.
+
+        '
       additionalProperties: false
       required:
       - type
       - channel_id
-      - content
       properties:
         type:
           type: string
@@ -22086,7 +22087,22 @@ components:
           maxLength: 200
         content:
           type: string
-          description: Title and content take at most 65536 bytes
+          description: Required unless pushing a body or entries. Title and content take at most 65536 bytes
+        body:
+          type: string
+          description: 'Without `title` or `content`: the whole request body to post, as the text of a JSON object or array, at most 65536 bytes. Serialize your JSON into this string; it is posted as it is'
+          example: '{"report":"orders","order_count":1}'
+        form_token:
+          type: string
+          description: 'Only from Jiri: the form or table of `entries`'
+        entries:
+          type: array
+          description: 'Only from Jiri, with `form_token` and without `title` or `content`: the serial numbers of the entries to push, each in a request of its own, shaped as a form''s webhook notification pushes it'
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: integer
         idempotency_key:
           type: string
           maxLength: 255

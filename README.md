@@ -571,9 +571,14 @@ SMS go to each `--to`, at most 50. `--mention` @s group members by mobile number
 or everyone with `@all`; WeCom sends a message that mentions anyone as plain
 text, so leave Markdown out of it. SMS sends the channel's template: it takes
 no `--title` or `--content`, and each of the template's variables comes as
-`--variable <name>=<value>`. A sent message cannot be recalled, so it
-takes `--yes`. After a timeout, send again with the same `--idempotency-key`:
-the API answers the first records instead of sending twice.
+`--variable <name>=<value>`. From Jiri, a webhook can push entries of a form or
+table instead of a title and content: `--form` names it and each `--entry` a
+serial number, at most 50, each entry in a request of its own shaped as a form
+webhook notification pushes it. A webhook can also push JSON of your own
+instead: `--body` is the whole request body, the text of a JSON object or
+array, posted as it is. A sent message cannot be recalled, so it takes
+`--yes`. After a timeout, send again with the same `--idempotency-key`: the
+API answers the first records instead of sending twice.
 
 `message channel list` gives the ids `--channel` takes, `--type` narrowing
 them, and `message channel get <id>` shows one. Email needs no channel: without
@@ -585,6 +590,7 @@ jinshuju message channel list --type wxwork
 jinshuju message send --type wxwork --channel 6729f1c2a1b2c3d4e5f60718 --content '今天是星期三，该吃午饭啦！' --mention 13800000000 --yes
 jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes
 jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 --variable var_2=9:00 --yes
+jinshuju message send --type webhook --channel 6729f1c2a1b2c3d4e5f6071a --body '{"report":"orders","order_count":1}' --yes
 ```
 
 ## Artifacts

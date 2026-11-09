@@ -5935,12 +5935,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   WebhookMessageInput: {
     type: 'object',
     additionalProperties: false,
-    required: ['type', 'channel_id', 'content'],
+    required: ['type', 'channel_id'],
     properties: {
       type: { type: 'string', enum: ['webhook'] },
       channel_id: { type: 'string' },
       title: { type: 'string', maxLength: 200 },
       content: { type: 'string' },
+      body: { type: 'string' },
+      form_token: { type: 'string' },
+      entries: { type: 'array', minItems: 1, maxItems: 50, uniqueItems: true, items: { type: 'integer' } },
       idempotency_key: { type: 'string', maxLength: 255 }
     }
   },
