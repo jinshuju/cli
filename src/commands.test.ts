@@ -2388,6 +2388,120 @@ test('form theme set uploads an image and hands the theme its id', async () => {
   });
 });
 
+const WHEEL = {
+  prizes: [
+    { title: '一等奖', prize_name: '蓝牙耳机', probability: 5, prize_amount: 10 },
+    { title: '二等奖', prize_name: '咖啡券', probability: 20, prize_amount: 30 }
+  ]
+};
+
+test('form wheel-fortune get and export-vouchers read the wheel and a prize of it', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'wheel-fortune', 'get', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'wheel-fortune', 'export-vouchers', 'Kp7mQ2', '--prize', 'pz_1'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/wheel_fortune');
+  assert.equal(mock.requests[1].method, 'POST');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/wheel_fortune/prizes/pz_1/remaining_vouchers');
+});
+
+test('form wheel-fortune edit without --prize-image sends the payload as one PATCH, --disable over it', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--json', JSON.stringify({ enabled: true, ...WHEEL })], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--disable'], { env: WRITE_ENV, client: mock.client });
+  const both = await cli(['form', 'wheel-fortune', 'edit', 'Kp7mQ2', '--enable', '--disable'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].method, 'PATCH');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/wheel_fortune');
+  assert.deepEqual(mock.requests[0].body, { enabled: true, ...WHEEL });
+  assert.deepEqual(mock.requests[1].body, { enabled: false });
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /--enable and --disable are opposites/);
+});
+
+test('form wheel-fortune edit --prize-image uploads the image and sets it on the prize of that title', async () => {
+  const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'wf_1' } });
+
+  await cli(
+    [
+      'form',
+      'wheel-fortune',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(WHEEL),
+      '--prize-image',
+      '二等奖=package.json'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].form?.get('image_type'), 'wheel_fortune_prize');
+  assert.deepEqual(mock.requests[1].body, {
+    prizes: [WHEEL.prizes[0], { ...WHEEL.prizes[1], prize_image_id: 'wf_1' }]
+  });
+});
+
+test('form wheel-fortune edit uploads nothing when --prize-image names no prize of the payload', async () => {
+  const mock = uploadingClient({});
+
+  const result = await cli(
+    [
+      'form',
+      'wheel-fortune',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(WHEEL),
+      '--prize-image',
+      '三等奖=package.json'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /no prize in the payload has that title/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('form wheel-fortune edit uploads nothing when one --prize-image file cannot be read', async () => {
+  const mock = uploadingClient({});
+
+  const result = await cli(
+    [
+      'form',
+      'wheel-fortune',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(WHEEL),
+      '--prize-image',
+      '一等奖=package.json',
+      '--prize-image',
+      '二等奖=missing.png'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /could not read missing\.png/);
+  assert.equal(mock.requests.length, 0);
+});
+
 test('form image upload sends the image as a description image and answers with its url', async () => {
   const mock = uploadingClient({
     '/api/v1/form_image_attachments': { attachment_id: 'di_1', url: 'https://cdn.example/di/1.png' }

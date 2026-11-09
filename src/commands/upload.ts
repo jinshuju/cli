@@ -28,7 +28,13 @@ const UPLOAD_TYPES: Record<string, string> = {
  * What the CLI uploads a form image as. A test holds the list to the spec's
  * `image_type`, which is where it would otherwise drift.
  */
-export const FORM_IMAGE_TYPES = ['description', 'header', 'wallpaper', 'opensearch_header'] as const;
+export const FORM_IMAGE_TYPES = [
+  'description',
+  'header',
+  'wallpaper',
+  'opensearch_header',
+  'wheel_fortune_prize'
+] as const;
 export type FormImageType = (typeof FORM_IMAGE_TYPES)[number];
 
 /**
@@ -56,8 +62,8 @@ export function upload(
 }
 
 /**
- * An image that a form's theme or one of its public queries refers to by id, uploaded
- * with `imageType` saying which (header, wallpaper, opensearch_header).
+ * An image that a form's theme, one of its public queries or a prize of its lucky wheel
+ * refers to by id, uploaded with `imageType` saying which.
  */
 export async function uploadFormImage(client: HttpClient, file: string, imageType: FormImageType): Promise<string> {
   const watching = progress();
