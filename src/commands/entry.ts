@@ -18,6 +18,7 @@ import {
   type OptionSpec
 } from '../options.js';
 import {
+  FORM_OPTION,
   LISTING,
   YES_OPTION,
   confirmed,
@@ -34,7 +35,7 @@ import type { Command, CommandInput } from './types.js';
 import { RefusedError } from '../errors.js';
 import { progress } from '../progress.js';
 import { TransportError, type HttpClient, type HttpRequest } from '../http.js';
-import { call, choices, type CallParts, type OperationId } from '../spec.js';
+import { bodyChoices, call, choices, type CallParts, type OperationId } from '../spec.js';
 import { isRecord } from '../values.js';
 import { basename } from 'node:path';
 import { upload } from './upload.js';
@@ -62,6 +63,32 @@ const LABELS_OPTION: OptionSpec = {
   type: 'boolean',
   description: "Pair each value with its field's label, saving a second read of the form"
 };
+
+/** The flows an entry's state moves through, and the events that move it, as the API names them. */
+const STATE_FLOWS = choices('getEntryStateFlow', 'flow');
+const STATE_FLOW_EVENTS = bodyChoices('updateEntryStateFlow', 'event');
+
+const STATE_FLOW_OPTION: OptionSpec = {
+  name: '--flow',
+  type: 'string',
+  choices: STATE_FLOWS,
+  placeholder: '<flow>',
+  description: STATE_FLOWS ? `Which flow: ${STATE_FLOWS.join(', ')}` : 'Which flow'
+};
+
+const TRIGGER_OPTION: OptionSpec = {
+  name: '--yes',
+  type: 'boolean',
+  description: 'Confirm the event, which cannot be undone'
+};
+
+function stateFlowPath(input: CommandInput): Record<string, string> {
+  return {
+    form_token: requiredOption(input, 'form'),
+    serial_number: input.args.serial as string,
+    flow: requiredOption(input, 'flow')
+  };
+}
 
 /**
  * `entry aggregate` answers a table taken apart: `columns` says what each
@@ -888,5 +915,63 @@ export const ENTRY: readonly Command[] = [
         path: { serial_number: input.args.serial },
         query: { fields: list(input.options.fields), include_labels: labels(input) }
       })
+  },
+  {
+    path: ['entry', 'state-flow', 'get'],
+    summary: "Show an entry's state in a flow, and the events it can take now",
+    description:
+      "red_envelope_audit_state is the review of an entry's red envelope, reservation_status its " +
+      "reservation, and wheel_fortune_prize_audit_state the lucky wheel's winners, each with the id " +
+      '`entry state-flow trigger --target` takes. Forms only; takes the form creator, admin or data maintainer role.',
+    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    options: [FORM_OPTION, STATE_FLOW_OPTION],
+    request: (input) => call('getEntryStateFlow', { path: stateFlowPath(input) }),
+    examples: [
+      'jinshuju entry state-flow get --form Kp7mQ2 12 --flow red_envelope_audit_state',
+      'jinshuju entry state-flow get --form Kp7mQ2 12 --flow wheel_fortune_prize_audit_state'
+    ]
+  },
+  {
+    path: ['entry', 'state-flow', 'trigger'],
+    summary: 'Approve a red envelope, cancel a reservation or redeem a prize',
+    description:
+      'The event must be one `entry state-flow get` lists on the target now, and answers with the flow ' +
+      "afterwards. None can be undone: reda_confirm pays the red envelope out of the form's balance " +
+      'and reda_refuse rejects it, cancel_all frees the reserved slots without refunding a paid entry, ' +
+      'winner_confirm redeems a winner, and delete_winner removes one for good: its prize and voucher ' +
+      'code do not go back to the pool. A winner is named by --target.',
+    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    options: [
+      FORM_OPTION,
+      STATE_FLOW_OPTION,
+      {
+        name: '--event',
+        type: 'string',
+        choices: STATE_FLOW_EVENTS,
+        placeholder: '<event>',
+        description: STATE_FLOW_EVENTS ? `Event to trigger: ${STATE_FLOW_EVENTS.join(', ')}` : 'Event to trigger'
+      },
+      {
+        name: '--target',
+        type: 'string',
+        placeholder: '<id>',
+        description: 'Winner id, from `entry state-flow get`; wheel_fortune_prize_audit_state only'
+      },
+      TRIGGER_OPTION
+    ],
+    request: (input) => {
+      const path = stateFlowPath(input);
+      const event = requiredOption(input, 'event');
+      confirmed(input, `Triggering ${event} on entry ${input.args.serial}`);
+      return call('updateEntryStateFlow', {
+        path,
+        body: given({ event, target_id: input.options.target as string | undefined })
+      });
+    },
+    examples: [
+      'jinshuju entry state-flow trigger --form Kp7mQ2 12 --flow red_envelope_audit_state --event reda_confirm --yes',
+      'jinshuju entry state-flow trigger --form Kp7mQ2 12 --flow reservation_status --event cancel_all --yes',
+      'jinshuju entry state-flow trigger --form Kp7mQ2 12 --flow wheel_fortune_prize_audit_state --event winner_confirm --target 6af1381d114fae12e40e44eb --yes'
+    ]
   }
 ];
