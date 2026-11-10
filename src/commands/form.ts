@@ -24,7 +24,7 @@ import {
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
 import { bodyChoices, call, type OperationId } from '../spec.js';
-import { readableSize, upload, uploadFormImage } from './upload.js';
+import { readableSize, upload, uploadedId, uploadFormImage } from './upload.js';
 import { isRecord } from '../values.js';
 
 /**
@@ -164,6 +164,7 @@ interface NamedFiles {
   items: readonly unknown[];
   key: string;
   noun: string;
+  maxMegabytes?: number;
 }
 
 interface NamedFile {
@@ -173,12 +174,13 @@ interface NamedFile {
 
 /**
  * The files a flag ties to items of a payload list by one of their keys: a
- * lucky wheel's prizes by title, which a caller can read off what they wrote.
- * Every name is matched and every file found readable before the first goes
- * up: once one is uploaded, a failure on the next leaves it behind, and running
- * the command again sends it a second time.
+ * lucky wheel's prizes by title, a quick payment form's deliverables by name,
+ * which a caller can read off what they wrote. Every name is matched and every
+ * file found readable, and within `maxMegabytes` when given, before the first
+ * goes up: once one is uploaded, a failure on the next leaves it behind, and
+ * running the command again sends it a second time.
  */
-function namedFiles({ flag, values, items, key, noun }: NamedFiles): NamedFile[] {
+function namedFiles({ flag, values, items, key, noun, maxMegabytes }: NamedFiles): NamedFile[] {
   const names = items.filter(isRecord).map((candidate) => candidate[key]);
   const named = new Set<string>();
   return values.map((value) => {
@@ -195,7 +197,10 @@ function namedFiles({ flag, values, items, key, noun }: NamedFiles): NamedFile[]
     if (matching.length > 1) {
       throw new UsageError(`${flag} names ${JSON.stringify(name)}, which ${matching.length} ${noun}s share`);
     }
-    readableSize(file);
+    const size = readableSize(file);
+    if (maxMegabytes !== undefined && size > maxMegabytes * 1024 * 1024) {
+      throw new UsageError(`${file} is over ${maxMegabytes} MB`);
+    }
     return { item: matching[0] as Record<string, unknown>, file };
   });
 }
@@ -251,6 +256,42 @@ async function uploadThenSave<T>({ targets, key, upload, what, save }: UploadThe
     );
   }
 }
+
+/**
+ * What `form quickpay edit --json` takes, shown rather than described: a link
+ * and a file deliverable side by side carry most of what the shape asks.
+ */
+const QUICKPAY_PAYLOAD: readonly string[] = [
+  '{',
+  '  "mode": "choice",',
+  '  "auto_delivery_enabled": true,',
+  '  "deliverables": [',
+  '    { "kind": "link", "name": "下载地址", "url": "https://example.com/book",',
+  '      "goods_item_api_codes": ["early"] },',
+  '    { "kind": "file", "name": "电子书", "goods_item_api_codes": ["early", "full"] }',
+  '  ]',
+  '}',
+  '',
+  'Only the keys present are written, but "deliverables" replaces those of the',
+  'goods field buyers see under the mode as a whole: pass each one to keep back',
+  'with its "token" from `form quickpay get`. A file or image deliverable takes',
+  'an "attachment_id"; --deliverable-file uploads a file and sets it on the',
+  'deliverable of that name. While auto_delivery_enabled is on, buyers get the',
+  'deliverables of the tier they paid for once they pay.',
+  '',
+  'mode is fixed for one price, choice for buyers to pick a tier, custom for them',
+  'to enter the amount, and the goods field has to fit it. A tier is named by the',
+  '"value" of one of the goods field\'s goods_items:',
+  'jinshuju field list --form <token>'
+];
+
+const DELIVERABLE_FILE_OPTION: OptionSpec = {
+  name: '--deliverable-file',
+  type: 'string',
+  repeatable: true,
+  placeholder: '<name>=<file>',
+  description: 'Upload a file for the deliverable of this name in the payload, repeatable'
+};
 
 function themeBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
@@ -664,6 +705,62 @@ export const FORM: readonly Command[] = [
         path: { form_token: input.args.form, prize_id: requiredOption(input, 'prize') }
       }),
     examples: ['jinshuju form wheel-fortune export-vouchers Kp7mQ2 --prize 6af1381d114fae12e40e44ea']
+  },
+  {
+    path: ['form', 'quickpay', 'get'],
+    summary: "Show a quick payment form's payment mode, and what buyers get once they pay",
+    description:
+      'goods_field_api_code is the goods field buyers see under the mode, and only its deliverables are ' +
+      "handed out. A deliverable's token is what `form quickpay edit` passes back to keep it. Quick " +
+      'payment forms only.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    request: (input) => call('getQuickpaySetting', { path: { form_token: input.args.form } }),
+    examples: ['jinshuju form quickpay get Kp7mQ2']
+  },
+  {
+    path: ['form', 'quickpay', 'edit'],
+    summary: "Set a quick payment form's payment mode, and what buyers get once they pay",
+    description:
+      "--deliverable-file uploads a file of up to 200 MB and sets it on the payload's deliverable of " +
+      'that name in one command. An upload has the one-minute deadline of every request; give a large ' +
+      'file on a slow line longer with JINSHUJU_TIMEOUT_MS.',
+    payload: QUICKPAY_PAYLOAD,
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [JSON_OPTION, DELIVERABLE_FILE_OPTION],
+    run: async (input, client) => {
+      const json = payload(input);
+      if (!isRecord(json)) throw new UsageError('--json must be a JSON object');
+      const path = { form_token: input.args.form as string };
+      const body = { ...json };
+      const files = (input.options.deliverable_file as string[] | undefined) ?? [];
+      if (files.length === 0) return client.request(call('updateQuickpaySetting', { path, body }));
+
+      const deliverables = Array.isArray(body.deliverables)
+        ? body.deliverables.map((deliverable: unknown) => (isRecord(deliverable) ? { ...deliverable } : deliverable))
+        : [];
+      const targets = namedFiles({
+        flag: '--deliverable-file',
+        values: files,
+        items: deliverables,
+        key: 'name',
+        noun: 'deliverable',
+        maxMegabytes: 200
+      });
+      // What the settings would be refused for is said before a file goes up for them.
+      client.check?.(call('updateQuickpaySetting', { path, body: { ...body, deliverables } }));
+      return uploadThenSave({
+        targets,
+        key: 'attachment_id',
+        upload: (file) => uploadedId(client, { id: 'uploadGoodsDeliverableAttachment', path, file, key: 'id' }),
+        what: 'the quick payment settings',
+        save: () => client.request(call('updateQuickpaySetting', { path, body: { ...body, deliverables } }))
+      });
+    },
+    examples: [
+      'jinshuju form quickpay edit Kp7mQ2 --json @quickpay.json --deliverable-file 电子书=./book.pdf',
+      'jinshuju form quickpay edit Kp7mQ2 --json \'{"auto_delivery_enabled":false}\'',
+      'jinshuju form quickpay edit Kp7mQ2 --json \'{"mode":"fixed"}\''
+    ]
   },
   {
     path: ['form', 'cooperator', 'list'],
