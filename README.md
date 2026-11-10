@@ -261,6 +261,8 @@ jinshuju entry update --form Kp7mQ2 12 --json '{"field_2":99}'                 #
 jinshuju entry update --form Kp7mQ2 12 --replace --json '{"field_1":"Bob"}'    # replace; omitted fields are cleared
 jinshuju entry update --form Kp7mQ2 --batch @rows.json                         # [{serial_number, entry}]
 jinshuju entry delete --form Kp7mQ2 12 --yes
+jinshuju entry state-flow get --form Kp7mQ2 12 --flow reservation_status       # the state, and the events it can take now
+jinshuju entry state-flow trigger --form Kp7mQ2 12 --flow reservation_status --event cancel_all --yes
 
 jinshuju view create --form Kp7mQ2 "High scores" --filter 'field_3 gte 80' --sort created_at:desc
 jinshuju comment create --form Kp7mQ2 --entry 12 "Contacted, awaiting reply"
@@ -272,7 +274,8 @@ jinshuju notification list --form Kp7mQ2             # each rule says whether it
 jinshuju notification log 6650b2 --form Kp7mQ2 --from 2026-10-01   # what the rule sent: how many succeeded, failed, and why
 ```
 
-Deletion always requires `--yes`. This CLI is non-interactive — stdin belongs to
+Deletion always requires `--yes`, and so does a state flow event, which cannot
+be undone either. This CLI is non-interactive — stdin belongs to
 `--json -` — so confirmation is a flag: without it nothing is deleted, rather
 than a prompt nobody is there to answer.
 

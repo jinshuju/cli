@@ -1689,6 +1689,65 @@ test('a delete refuses until it is confirmed', async () => {
   assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12');
 });
 
+test('entry state-flow get reads one flow of an entry', async () => {
+  const mock = createMockClient();
+
+  await cli(['entry', 'state-flow', 'get', '--form', 'Kp7mQ2', '12', '--flow', 'reservation_status'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12/state_flows/reservation_status');
+});
+
+test('entry state-flow trigger sends nothing until confirmed, then the event and the winner it acts on', async () => {
+  const mock = createMockClient();
+  const trigger = ['entry', 'state-flow', 'trigger', '--form', 'Kp7mQ2', '12', '--flow'];
+
+  const guarded = await cli([...trigger, 'reservation_status', '--event', 'cancel_all'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const cancelled = await cli([...trigger, 'reservation_status', '--event', 'cancel_all', '--yes'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const redeemed = await cli(
+    [...trigger, 'wheel_fortune_prize_audit_state', '--event', 'winner_confirm', '--target', 'w_1', '--yes'],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(guarded.exitCode, 2);
+  assert.match(guarded.stderr, /cancel_all on entry 12 is permanent; pass --yes/);
+  assert.equal(cancelled.exitCode, 0);
+  assert.equal(redeemed.exitCode, 0);
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].method, 'PATCH');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/entries/12/state_flows/reservation_status');
+  assert.deepEqual(mock.requests[0].body, { event: 'cancel_all' });
+  assert.deepEqual(mock.requests[1].body, { event: 'winner_confirm', target_id: 'w_1' });
+});
+
+test('entry state-flow takes only the flows and events the spec lists', async () => {
+  const mock = createMockClient();
+
+  const flow = await cli(['entry', 'state-flow', 'get', '--form', 'Kp7mQ2', '12', '--flow', 'red_envelope'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const event = await cli(
+    ['entry', 'state-flow', 'trigger', '--form', 'Kp7mQ2', '12', '--flow', 'reservation_status', '--event', 'cancel'],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(flow.exitCode, 2);
+  assert.match(flow.stderr, /--flow must be one of red_envelope_audit_state, reservation_status/);
+  assert.equal(event.exitCode, 2);
+  assert.match(event.stderr, /--event must be one of reda_confirm/);
+  assert.equal(mock.requests.length, 0);
+});
+
 test('entry update merges, --replace writes the whole entry, --batch does neither alone', async () => {
   const patch = createMockClient();
   const put = createMockClient();
