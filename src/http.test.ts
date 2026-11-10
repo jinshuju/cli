@@ -150,10 +150,11 @@ test('a refusal stating only the first of its reasons is reported with every one
   assert.equal(invalid.message, 'Request body invalid:\n  /name: name is required\n  /fields: fields must be an array');
 });
 
-test('a request body refused for many reasons is told every one of them, grouped by pointer', async () => {
-  // What API v1 answers: error_description repeats three of the reasons and
-  // counts the rest, a field that may be one of several shapes is told about
-  // its type once per shape, and a value may break two rules at once.
+test('a request body refused for many reasons is told every one of them, a line each', async () => {
+  // What a server giving each place its own `pointer` answered: error_description
+  // repeats three of the reasons and counts the rest, a field that may be one of
+  // several shapes is told about its type once per shape, and a value may break
+  // two rules at once.
   const reasons = [
     {
       pointer: '/fields/add/0/validation',
@@ -219,11 +220,13 @@ test('a request body refused for many reasons is told every one of them, grouped
     [
       'Request body invalid:',
       `  ${reasons[0]?.message}`,
-      `  ${reasons[1]?.message}; ${reasons[3]?.message}`,
+      `  ${reasons[1]?.message}`,
       `  ${reasons[2]?.message}`,
+      `  ${reasons[3]?.message}`,
       `  ${reasons[4]?.message}`,
       `  ${reasons[5]?.message}`,
-      '  /name: is shorter than 2 characters; does not match ^[^/]+$'
+      '  /name: is shorter than 2 characters',
+      '  /name: does not match ^[^/]+$'
     ].join('\n')
   );
   assert.equal(refused.status, 400);
@@ -237,6 +240,47 @@ test('a request body refused for many reasons is told every one of them, grouped
   assert.equal(lines[0], 'Request body invalid:');
   assert.equal(lines[20], `  ${many[19]?.message}`);
   assert.equal(lines[21], '  … and 5 more; --output json carries them all');
+});
+
+test('a reason API v1 says once for several places is one line, with the places in front only when it names none', async () => {
+  // What API v1 answers since it merged a reason repeated per place: one entry,
+  // `pointers` naming every place and the message the first five.
+  const at = (key: string) => Array.from({ length: 7 }, (_, i) => `/fields/update/${i}/${key}`);
+  const named = at('description')
+    .slice(0, 5)
+    .map((place) => `\`${place}\``);
+  const merged = {
+    pointers: at('description'),
+    message: `FieldUpdateInput does not take \`description\` (at ${named.join(', ')} and 2 more); it takes: api_code, label, notes.`,
+    code: 'schema'
+  };
+  const unnamed = { pointers: at('label'), message: 'is shorter than 1 character', code: 'minLength' };
+  const server = await serve({
+    '/api/v1/forms/Kp7mQ2': {
+      status: 400,
+      body: JSON.stringify({
+        error_description: `Request body invalid: ${merged.message} ${unnamed.message}`,
+        errors: [merged, unnamed]
+      })
+    },
+    '/api/v1/forms/Vn4xR8': {
+      status: 400,
+      body: JSON.stringify({ error_description: `Request body invalid: ${merged.message}`, errors: [merged] })
+    }
+  });
+  const both = await failure(server.url, '/api/v1/forms/Kp7mQ2');
+  const one = await failure(server.url, '/api/v1/forms/Vn4xR8');
+  await server.close();
+
+  assert.equal(
+    both.message,
+    [
+      'Request body invalid:',
+      `  ${merged.message}`,
+      `  ${at('label').slice(0, 5).join(', ')} and 2 more: ${unnamed.message}`
+    ].join('\n')
+  );
+  assert.equal(one.message, `Request body invalid: ${merged.message}`, 'a reason the description says is said once');
 });
 
 test('an HTML error page is reported as the status it is, not as broken JSON', async () => {
