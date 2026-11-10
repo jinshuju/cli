@@ -19,7 +19,10 @@ export const MESSAGE: readonly Command[] = [
       'Queues the message and answers at once with one record per recipient; a group robot or webhook is the ' +
       'recipient itself. --mention is for DingTalk and WeCom robots only, at most 50; WeCom sends a message that ' +
       "mentions anyone as plain text, so leave Markdown out of it. SMS sends the channel's template, so it takes no " +
-      '--title or --content: give each of its variables with --variable. Sent messages cannot be recalled: after a timeout ' +
+      '--title or --content: give each of its variables with --variable. From Jiri, a webhook can push entries of a ' +
+      'form or table instead of --title and --content: --form names it and --entry each serial number, each entry in a ' +
+      'request of its own, shaped as a form webhook notification pushes it. A webhook can also push JSON of your own ' +
+      'instead: --body is the whole request body, posted as it is. Sent messages cannot be recalled: after a timeout ' +
       'or a dropped connection, send again with the same --idempotency-key, which answers the first records instead ' +
       'of sending twice. --yes sends.',
     options: [
@@ -70,6 +73,28 @@ export const MESSAGE: readonly Command[] = [
           'characters; repeatable'
       },
       {
+        name: '--body',
+        type: 'string',
+        placeholder: '<json>',
+        description:
+          'For a webhook, in place of --title and --content: the whole request body, the text of a JSON object or ' +
+          'array, at most 65536 bytes, posted as it is'
+      },
+      {
+        name: '--form',
+        type: 'string',
+        placeholder: '<token>',
+        description: 'Only from Jiri, for a webhook: the form or table whose entries --entry names'
+      },
+      {
+        name: '--entry',
+        type: 'integer',
+        repeatable: true,
+        placeholder: '<serial_number>',
+        description:
+          'Only from Jiri, for a webhook with --form: the serial number of an entry to push, repeatable, at most 50'
+      },
+      {
         name: '--mention',
         type: 'string',
         repeatable: true,
@@ -86,6 +111,16 @@ export const MESSAGE: readonly Command[] = [
     ],
     request: (input) => {
       const type = requiredOption(input, 'type');
+      const body = input.options.body as string | undefined;
+      if (body !== undefined) {
+        if (type !== 'webhook') throw new UsageError(`--body is for --type webhook only, not ${type}`);
+        for (const flag of ['title', 'content', 'form', 'entry'] as const) {
+          const value = input.options[flag];
+          if (Array.isArray(value) ? value.length > 0 : value !== undefined) {
+            throw new UsageError(`--${flag} cannot be combined with --body: the body is the whole request`);
+          }
+        }
+      }
       if (!input.options.yes) throw new UsageError('A sent message cannot be recalled; pass --yes to send');
       const variables = input.options.variable as string[] | undefined;
       return call('sendMessage', {
@@ -97,6 +132,9 @@ export const MESSAGE: readonly Command[] = [
           content: input.options.content as string | undefined,
           variables: variables && Object.fromEntries(variables.map(parseVariable)),
           mentioned_mobile_list: input.options.mention as string[] | undefined,
+          body,
+          form_token: input.options.form as string | undefined,
+          entries: input.options.entry as number[] | undefined,
           idempotency_key: input.options.idempotency_key as string | undefined
         })
       });
@@ -106,7 +144,10 @@ export const MESSAGE: readonly Command[] = [
         '--mention 13800000000 --yes',
       "jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes",
       'jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 ' +
-        '--variable var_2=9:00 --yes'
+        '--variable var_2=9:00 --yes',
+      'jinshuju message send --type webhook --channel 6729f1c2a1b2c3d4e5f6071a --form Kp7mQ2 --entry 1282 --entry 1283 --yes',
+      'jinshuju message send --type webhook --channel 6729f1c2a1b2c3d4e5f6071a ' +
+        '--body \'{"report":"orders","order_count":1}\' --yes'
     ]
   },
   {
