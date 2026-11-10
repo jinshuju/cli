@@ -15,12 +15,11 @@ import { isRecord } from './values.js';
  * value the API learns: an old client would be stricter than the API it
  * talks to. So the look is a narrow one. It refuses what no newer spec could
  * have made right — a key that is required, a value of the wrong type, null
- * where nothing may be null, a field read back and written back as it came —
- * and sends everything else for the API to judge: a key or a value this copy
- * does not list may be one the API has learned since. What the CLI's callers
- * were most often refused for was the first kind: a field's `validation`
- * written back as `form get` returned it, `null` for every key left unset, a
- * choice to update named by its value rather than its api_code.
+ * where nothing may be null — and sends everything else for the API to judge:
+ * a key or a value this copy does not list may be one the API has learned
+ * since. What the CLI's callers were most often refused for was the first
+ * kind: `null` for every key left unset, a choice to update named by its value
+ * rather than its api_code.
  *
  * What the look finds is said at once, every reason at its pointer, and the
  * request is not sent. `--as-is` sends the body anyway, for when the API has
@@ -87,26 +86,7 @@ function refusalOf(issue: Issue, method: string): Refusal | undefined {
     }
     return { pointer, message: `${issue.message}, got ${JSON.stringify(value)}` };
   }
-  if (kind === 'unknown_key' && lastSegment(pointer) === 'validation' && isRecord(value)) {
-    return { pointer, message: flattened(value, issue.takes ?? []) };
-  }
   return undefined;
-}
-
-/**
- * `validation` is how a field reads: `form get` and `field list` answer
- * `{validation: {required, unique, minimum_length, …}}`, and a field written
- * back as it came carries it. The write takes the same keys flat on the
- * field, so the message says the payload that would do, worked out from the
- * keys the write does take rather than from a list kept here.
- */
-function flattened(validation: Record<string, unknown>, takes: readonly string[]): string {
-  const flat = Object.fromEntries(Object.entries(validation).filter(([key]) => takes.includes(key)));
-  const dropped = Object.keys(validation).filter((key) => !takes.includes(key));
-  const parts = ['validation is how a field reads, not how it is written'];
-  if (Object.keys(flat).length > 0) parts.push(`write its keys flat on the field: ${JSON.stringify(flat)}`);
-  if (dropped.length > 0) parts.push(`leave out ${dropped.join(', ')}, which a write does not take`);
-  return parts.join('; ');
 }
 
 /** What to add to a refusal at this pointer, when the spec's own words would leave the caller guessing. */
@@ -146,11 +126,4 @@ function describe(refusals: readonly Refusal[]): string {
     ...refusals.map(({ pointer, message }) => `  ${pointer || '/'}: ${message}`),
     'The request was not sent. --as-is sends it anyway, for the API to judge by the spec it runs.'
   ].join('\n');
-}
-
-function lastSegment(pointer: string): string {
-  return pointer
-    .slice(pointer.lastIndexOf('/') + 1)
-    .replace(/~1/g, '/')
-    .replace(/~0/g, '~');
 }

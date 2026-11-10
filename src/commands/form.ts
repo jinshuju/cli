@@ -36,7 +36,7 @@ const FORM_PAYLOAD: readonly string[] = [
   '  "name": "Event signup",',
   '  "description": "optional",',
   '  "fields": [',
-  '    { "type": "TextField",   "label": "Name",   "required": true },',
+  '    { "type": "TextField",   "label": "Name",   "validation": { "required": true } },',
   '    { "type": "RadioButton", "label": "Ticket", "choices": [',
   '        { "name": "Standard" }, { "name": "VIP" } ] }',
   '  ],',
