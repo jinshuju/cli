@@ -2190,7 +2190,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       predefined_value: { type: 'object' },
       changeable: { type: 'object', additionalProperties: { type: 'boolean' } },
-      enable_auto_position: { type: 'boolean' }
+      enable_auto_position: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   AggregateDimension: {
@@ -2253,7 +2254,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         if: { properties: { type: { const: 'custom' } }, required: ['type'] },
         then: { required: ['value'], properties: { value: { minItems: 1 } } }
       },
-      mobile_camera_only: { type: 'boolean' }
+      mobile_camera_only: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   AudioFieldInput: {
@@ -2268,7 +2270,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      max_duration: { type: 'integer', minimum: 1, maximum: 5 }
+      max_duration: { type: 'integer', minimum: 1, maximum: 5 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   BooleanFieldInput: {
@@ -2282,7 +2285,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       notes: { type: 'string' },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
-      position: { type: 'integer', minimum: 0 }
+      position: { type: 'integer', minimum: 0 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   CascadeChoiceInput: {
@@ -2315,7 +2319,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       levels: { type: 'integer', minimum: 2 },
       choice_filterable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
-      calculable: { type: 'boolean' }
+      calculable: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   CheckBoxInput: {
@@ -2336,7 +2341,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 }
+      maximum_length: { type: 'integer', minimum: 0 },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          min_selected: { type: 'integer', minimum: 0 },
+          max_selected: { type: 'integer', minimum: 0 }
+        }
+      }
     },
     allOf: [
       {
@@ -2494,7 +2508,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       predefined_value: { type: 'string' },
-      precision: { type: 'string', enum: ['month', 'day', 'minute', 'second'] }
+      precision: { type: 'string', enum: ['month', 'day', 'minute', 'second'] },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   DepartmentInput: {
@@ -2513,7 +2528,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -2589,7 +2605,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -2616,7 +2633,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -2645,7 +2663,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       notes: { type: 'string' },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
-      position: { type: 'integer', minimum: 0 }
+      position: { type: 'integer', minimum: 0 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   EmailFieldInput: {
@@ -2661,7 +2680,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      placeholder: { type: 'string' }
+      placeholder: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   EmailMessageChannelInput: {
@@ -3546,7 +3570,19 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       lines: { type: 'integer', minimum: 1 },
       entries_init_number: { type: 'integer', minimum: 0 },
       entries_number_visible: { type: 'boolean' },
-      marquee_data_type: { type: 'string', enum: ['fake', 'real'] }
+      marquee_data_type: { type: 'string', enum: ['fake', 'real'] },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          unique: { type: 'boolean' },
+          min: { type: 'number' },
+          max: { type: 'number' },
+          min_selected: { type: 'integer', minimum: 0 },
+          max_selected: { type: 'integer', minimum: 0 }
+        }
+      }
     },
     allOf: [
       {
@@ -3583,7 +3619,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       placeholder: { type: 'string' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     },
     allOf: [
       {
@@ -3623,7 +3664,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       icon_type: { type: 'string', enum: ['none', 'number-2', 'dollar1', 'cny1'] },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          unique: { type: 'boolean' },
+          min: { type: 'number' },
+          max: { type: 'number' }
+        }
+      }
     },
     allOf: [
       {
@@ -3670,7 +3721,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       associated_field_api_codes: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string' } },
       privacy_safe: { type: 'boolean' },
       allow_reverse_association: { type: 'boolean' },
-      reverse_display_field_api_codes: { type: 'array', items: { type: 'string' } }
+      reverse_display_field_api_codes: { type: 'array', items: { type: 'string' } },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   FormCreateConstraints: {
@@ -4043,7 +4099,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       icon_type: {
         type: 'string',
         enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text', 'text2']
-      }
+      },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -4065,7 +4122,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       notes: { type: 'string' },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
-      position: { type: 'integer', minimum: 0 }
+      position: { type: 'integer', minimum: 0 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   GoodsFieldInput: {
@@ -4083,7 +4141,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       goods_items: { type: 'array', minItems: 1, items: { $ref: 'GoodsItemInput' } },
       unit: { type: 'string', maxLength: 2 },
       collapse_on_mobile: { type: 'boolean' },
-      columns_on_mobile: { type: 'integer', minimum: 1 }
+      columns_on_mobile: { type: 'integer', minimum: 1 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   GoodsItemInput: {
@@ -4269,7 +4328,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -4290,7 +4350,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      unique: { type: 'boolean' }
+      unique: { type: 'boolean' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   ImageCheckBoxInput: {
@@ -4310,7 +4375,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: 'string' },
       random_choices: { type: 'boolean' },
       minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 }
+      maximum_length: { type: 'integer', minimum: 0 },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          min_selected: { type: 'integer', minimum: 0 },
+          max_selected: { type: 'integer', minimum: 0 }
+        }
+      }
     },
     allOf: [
       {
@@ -4357,7 +4431,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       maximum_length: { type: 'integer', minimum: 0 },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          min_selected: { type: 'integer', minimum: 0 },
+          max_selected: { type: 'integer', minimum: 0 }
+        }
+      }
     },
     allOf: [
       {
@@ -4403,7 +4486,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -4430,7 +4514,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -4466,7 +4551,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       likert_choice_style: { type: 'string', enum: ['single', 'multiple'] },
       minimum_length: { type: 'integer', minimum: 0 },
       maximum_length: { type: 'integer', minimum: 0 },
-      calculable: { type: 'boolean' }
+      calculable: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -4493,7 +4579,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
       predefined_value: { type: 'string' },
-      placeholder: { type: 'string' }
+      placeholder: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   MatrixFieldInput: {
@@ -4511,7 +4602,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       dimensions: { type: 'array', minItems: 1, items: { $ref: 'DimensionInput' } },
       statements: { type: 'array', minItems: 1, items: { $ref: 'StatementInput' } },
       horizontal_on_mobile: { type: 'boolean' },
-      advanced_feature: { type: 'boolean' }
+      advanced_feature: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   MatrixScaleFieldInput: {
@@ -4528,7 +4620,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       rating_max: { type: 'integer', minimum: 1 },
       statements: { type: 'array', minItems: 1, items: { $ref: 'StatementInput' } },
-      horizontal_on_mobile: { type: 'boolean' }
+      horizontal_on_mobile: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   MemoryCallId: { type: 'string', minLength: 1, maxLength: 100 },
@@ -4651,7 +4744,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       predefined_value: { type: 'string' },
       placeholder: { type: 'string' },
-      sms_verification: { type: 'boolean' }
+      sms_verification: { type: 'boolean' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   MultiSelectInput: {
@@ -4675,7 +4773,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       maximum_length: { type: 'integer', minimum: 0 },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          min_selected: { type: 'integer', minimum: 0 },
+          max_selected: { type: 'integer', minimum: 0 }
+        }
+      }
     },
     allOf: [
       {
@@ -4718,7 +4825,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      unique: { type: 'boolean' }
+      unique: { type: 'boolean' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   NotificationRuleInput: {
@@ -4796,7 +4908,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       minimum_ratings_display_text: { type: 'string' },
-      maximum_ratings_display_text: { type: 'string' }
+      maximum_ratings_display_text: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   NpsInput: {
@@ -4815,7 +4928,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       maximum_ratings_display_text: { type: 'string' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -4852,7 +4966,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       thousands_separator: { type: 'boolean' },
       currency_symbol: { type: 'string' },
       currency_symbol_position: { type: 'string', enum: ['prefix', 'suffix'] },
-      icon_type: { type: 'string', enum: ['none', 'number-2', 'dollar1', 'cny1'] }
+      icon_type: { type: 'string', enum: ['none', 'number-2', 'dollar1', 'cny1'] },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          required: { type: 'boolean' },
+          unique: { type: 'boolean' },
+          min: { type: 'number' },
+          max: { type: 'number' }
+        }
+      }
     },
     allOf: [
       {
@@ -4967,7 +5091,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       disable_previous_page: { type: 'boolean' },
       previous_page_text: { type: 'string' },
       next_page_text: { type: 'string' },
-      count_down: { type: 'integer', minimum: 0 }
+      count_down: { type: 'integer', minimum: 0 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   PublishedArtifactInput: {
@@ -4994,7 +5119,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
       choices_layout: { type: 'string' },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -5015,7 +5141,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      rating_max: { type: 'integer', minimum: 1 }
+      rating_max: { type: 'integer', minimum: 1 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   RatingInput: {
@@ -5033,7 +5160,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       rating_max: { type: 'integer', minimum: 1 },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -5061,7 +5189,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       related_form_token: { type: 'string' },
       paired: { type: 'boolean' },
-      related_label: { type: 'string' }
+      related_label: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   ReservationByDayQuotaInput: {
@@ -5198,7 +5327,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       allow_multiple_items: { type: 'boolean' },
       item_allow_multiple_reservations: { type: 'boolean' },
       allow_multiple_number: { type: 'boolean' },
-      use_daily_time_range: { type: 'boolean' }
+      use_daily_time_range: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   ReservationItemInput: {
@@ -5487,7 +5617,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       show_split_line: { type: 'boolean' },
-      show_part_description: { type: 'boolean' }
+      show_part_description: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   SequenceFieldInput: {
@@ -5502,7 +5633,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      segments: { type: 'array', minItems: 1, items: { $ref: 'SequenceSegmentInput' } }
+      segments: { type: 'array', minItems: 1, items: { $ref: 'SequenceSegmentInput' } },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   SequenceSegmentInput: {
@@ -5542,7 +5674,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       placeholder: { type: 'string' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     },
     allOf: [
       {
@@ -5575,7 +5712,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -5606,7 +5744,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
-      random_choices: { type: 'boolean' }
+      random_choices: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   SortRule: {
@@ -5719,7 +5858,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       dimensions: { type: 'array', minItems: 1, items: { $ref: 'DimensionInput' } },
-      init_row_length: { type: 'integer', minimum: 1 }
+      init_row_length: { type: 'integer', minimum: 1 },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   TelephoneFieldInput: {
@@ -5736,7 +5876,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
       predefined_value: { type: 'string' },
-      placeholder: { type: 'string' }
+      placeholder: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   TemplateUsageInput: {
@@ -5771,7 +5916,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
       predefined_value: { type: 'string' },
-      placeholder: { type: 'string' }
+      placeholder: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   TextFieldInput: {
@@ -5788,7 +5938,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
       predefined_value: { type: 'string' },
-      placeholder: { type: 'string' }
+      placeholder: { type: 'string' },
+      validation: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { required: { type: 'boolean' }, unique: { type: 'boolean' } }
+      }
     }
   },
   ThemeInput: {
@@ -5872,7 +6027,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         type: 'object',
         properties: { hour: { type: 'integer' }, minute: { type: 'integer' }, second: { type: 'integer' } }
       },
-      include_second: { type: 'boolean' }
+      include_second: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   TimeOfDay: {
@@ -5903,7 +6059,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
-      answer_explanation: { type: 'string' }
+      answer_explanation: { type: 'string' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     },
     allOf: [
       {
@@ -5984,7 +6141,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       buttons: { type: 'array', minItems: 1, items: { $ref: 'WidgetButtonItemInput' } },
       buttons_number: { type: 'integer', minimum: 1 },
-      fixed_to_bottom: { type: 'boolean' }
+      fixed_to_bottom: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   WidgetButtonItemInput: {
@@ -6021,7 +6179,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           additionalProperties: false,
           properties: { phone: { type: 'string' } }
         }
-      }
+      },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   WidgetImageInput: {
@@ -6046,7 +6205,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       longitude: { type: 'number' },
       latitude: { type: 'number' },
       value: { type: 'string' },
-      localizable_on_mobile: { type: 'boolean' }
+      localizable_on_mobile: { type: 'boolean' },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   WidgetMarqueeInput: {
@@ -6064,7 +6224,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       lines: { type: 'integer', minimum: 1 },
       entries_init_number: { type: 'integer', minimum: 0 },
       entries_number_visible: { type: 'boolean' },
-      marquee_data_type: { type: 'string', enum: ['fake', 'real'] }
+      marquee_data_type: { type: 'string', enum: ['fake', 'real'] },
+      validation: { type: 'object', additionalProperties: false, properties: { required: { type: 'boolean' } } }
     }
   },
   WxworkMessageChannelInput: {

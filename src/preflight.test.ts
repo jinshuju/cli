@@ -33,23 +33,17 @@ function field(json: string, verb = 'update') {
   return [...words, '--json', json, '--config', NO_CONFIG];
 }
 
-test('a field written back as it was read is refused before it is sent, with the payload that would do', async () => {
+test("a field's rules are sent in validation, keyed as the field reads them back", async () => {
   const mock = recording();
-  const result = await runCli(field('{"validation":{"required":true,"unique":false,"white_list_values":["a"]}}'), {
+  const result = await runCli(field('{"validation":{"required":true,"unique":false}}'), {
     env: ENV,
     client: mock.client
   });
 
-  assert.equal(result.exitCode, 2);
-  assert.equal(mock.requests.length, 0);
-  assert.match(result.stderr, new RegExp(`by the openapi.yaml of ${SPEC_DATE} this CLI shipped with:`));
-  assert.match(
-    result.stderr,
-    /\/fields\/update\/0\/validation: validation is how a field reads, not how it is written/
-  );
-  assert.match(result.stderr, /write its keys flat on the field: \{"required":true,"unique":false\}/);
-  assert.match(result.stderr, /leave out white_list_values, which a write does not take/);
-  assert.match(result.stderr, /The request was not sent\. --as-is sends it anyway/);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(mock.requests[0]?.body, {
+    fields: { update: [{ validation: { required: true, unique: false }, api_code: 'field_3' }] }
+  });
 });
 
 test('null for a key the spec does not let be null is refused, and the key read as null is named', async () => {
@@ -59,6 +53,9 @@ test('null for a key the spec does not let be null is refused, and the key read 
     client: mock.client
   });
   assert.equal(patched.exitCode, 2);
+  assert.equal(mock.requests.length, 0);
+  assert.match(patched.stderr, new RegExp(`by the openapi.yaml of ${SPEC_DATE} this CLI shipped with:`));
+  assert.match(patched.stderr, /The request was not sent\. --as-is sends it anyway/);
   assert.match(patched.stderr, /\/fields\/update\/0\/range_min: is null; leave the key out to leave it unchanged/);
   assert.match(patched.stderr, /\/fields\/update\/0\/placeholder: is null; leave the key out to leave it unchanged/);
 
@@ -127,21 +124,15 @@ test('what a newer spec may take is sent: an unknown key, an unknown value, an u
 });
 
 test('a field of a known type is held to that type alone, as its own `type` names it', () => {
-  // The server's validation told a LikertField with a stray key about the
+  // The server's validation told a LikertField with a wrong value about the
   // table's field types as well, and the caller went off to change a type
-  // that was right. Here the discriminator picks the shape, and the stray
-  // key is the only thing said — and, being a key, not refused.
+  // that was right. Here the discriminator picks the shape, and the wrong
+  // value is the only thing said.
   const likert = call('updateForm', {
     path: { form_token: 'Kp7mQ2' },
-    body: { fields: { add: [{ type: 'LikertField', label: 'x', validation: { required: true } }] } }
+    body: { fields: { add: [{ type: 'LikertField', label: 5 }] } }
   });
-  assert.deepEqual(preflight(likert), [
-    {
-      pointer: '/fields/add/0/validation',
-      message:
-        'validation is how a field reads, not how it is written; write its keys flat on the field: {"required":true}'
-    }
-  ]);
+  assert.deepEqual(preflight(likert), [{ pointer: '/fields/add/0/label', message: 'must be string, got 5' }]);
 
   // A required key of the shape the type names is refused; the same key under a type this copy does not know is not.
   const noLabel = call('updateForm', {
@@ -208,7 +199,7 @@ test('--as-is sends the body anyway, and --output json carries each refusal at i
   assert.equal(mock.requests.length, 1);
   assert.deepEqual(mock.requests[0]?.body, { fields: { update: [{ range_min: null, api_code: 'field_3' }] } });
 
-  const json = await runCli([...field('{"range_min":null,"validation":{"required":true}}'), '--output', 'json'], {
+  const json = await runCli([...field('{"range_min":null,"placeholder":null}'), '--output', 'json'], {
     env: ENV,
     client: mock.client
   });
@@ -219,6 +210,6 @@ test('--as-is sends the body anyway, and --output json carries each refusal at i
   assert.equal(envelope.error.kind, 'usage');
   assert.deepEqual(
     envelope.error.errors.map((refusal) => refusal.pointer),
-    ['/fields/update/0/range_min', '/fields/update/0/validation']
+    ['/fields/update/0/range_min', '/fields/update/0/placeholder']
   );
 });

@@ -90,8 +90,8 @@ jinshuju form get Kp7mQ2 --include exam_setting          # reads it back with th
 jinshuju form create --json '{
   "name": "Event signup",
   "fields": [
-    { "type": "TextField", "label": "Name", "required": true },
-    { "type": "MobileField", "label": "Mobile", "required": true }
+    { "type": "TextField", "label": "Name", "validation": { "required": true } },
+    { "type": "MobileField", "label": "Mobile", "validation": { "required": true } }
   ]
 }'
 ```
@@ -240,7 +240,7 @@ container:
 
 ```bash
 jinshuju field add --form Kp7mQ2 --json '{"type":"TextField","label":"Notes"}'
-jinshuju field update --form Kp7mQ2 field_3 --json '{"required":true}'
+jinshuju field update --form Kp7mQ2 field_3 --json '{"validation":{"required":true}}'
 jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"Third"}]}'
 jinshuju field remove --form Kp7mQ2 field_9 --yes
 ```

@@ -9,10 +9,10 @@ import type { Command, CommandInput } from './types.js';
  * refused for was a field written back as `form get` returned it.
  */
 const FIELD_PAYLOAD: readonly string[] = [
-  '{ "type": "TextField", "label": "Notes", "required": false }',
+  '{ "type": "TextField", "label": "Notes", "validation": { "required": false } }',
   '',
   'A field as `form get` or `field list` returns it is not a field to write back:',
-  '  validation: {required, unique, minimum_length, …} is written flat on the field',
+  '  validation keeps only the keys `field types <type>` lists in validation_spec',
   '  choices are changed with `field update-choices`; `field update` takes them only on a',
   '    CascadeDropDown, or with a `type` that turns a text field into a choice field',
   '  a key read as null is left out, not written as null',
@@ -274,7 +274,7 @@ export const FIELD: readonly Command[] = [
         }
       }),
     select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code']),
-    examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
+    examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"validation":{"required":true}}\'']
   },
   {
     path: ['field', 'update-choices'],
