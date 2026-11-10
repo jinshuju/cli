@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/jinshuju/cli/compare/v0.22.0...v0.23.0) (2026-11-10)
+
+
+### Features
+
+* **message:** push entries or JSON of your own to a webhook with --form/--entry and --body ([db07ce8](https://github.com/jinshuju/cli/commit/db07ce8994d3211cf5c59a24302a3925106897d8))
+
 ## [0.22.0](https://github.com/jinshuju/cli/compare/v0.21.0...v0.22.0) (2026-11-05)
 
 
