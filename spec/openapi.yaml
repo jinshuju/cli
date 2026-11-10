@@ -11050,10 +11050,12 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         unique:
           type: boolean
-          description: Refuse duplicate values; takes effect only on TextField / NameField / EmailField / MobileField / TelephoneField / IdCardField / LinkField / FormAssociation / TextArea / NumberField
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         other_choice_required:
           type: boolean
           description: Choosing the "Other" choice requires the extra text; takes effect only on RadioButton / CheckBox / DropDown
@@ -11135,10 +11137,12 @@ components:
           description: Verify the number by SMS (this also turns on the image captcha)
         range_min:
           type: number
-          description: Minimum value, inclusive
+          description: 'Deprecated: use validation.min'
+          deprecated: true
         range_max:
           type: number
-          description: Maximum value, inclusive
+          description: 'Deprecated: use validation.max'
+          deprecated: true
         precision:
           anyOf:
           - type: integer
@@ -11464,6 +11468,31 @@ components:
           - fake
           - real
           description: 'Data source: fake for generated data, real for real entries'
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key. unique takes effect only on TextField / NameField / EmailField / MobileField / TelephoneField / IdCardField / LinkField / FormAssociation / TextArea / NumberField, and the others only on NumberField (min / max), CheckBox (min_selected / max_selected), ImageCheckBox (min_selected / max_selected)
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
+            min:
+              type: number
+              description: Minimum value, inclusive
+            max:
+              type: number
+              description: Maximum value, inclusive
+            min_selected:
+              type: integer
+              minimum: 0
+              description: Minimum number of choices
+            max_selected:
+              type: integer
+              minimum: 0
+              description: Maximum number of choices
       allOf:
       - description: display_as_percentage and thousands_separator cannot both be true
         not:
@@ -14748,20 +14777,33 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
         placeholder:
           type: string
           description: Placeholder text
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     TextAreaInput:
       type: object
       title: TextAreaInput
@@ -14787,20 +14829,33 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
         placeholder:
           type: string
           description: Placeholder text
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     NumberFieldInput:
       type: object
       title: NumberFieldInput
@@ -14826,14 +14881,16 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type:
           - number
@@ -14844,10 +14901,12 @@ components:
           description: Placeholder text
         range_min:
           type: number
-          description: Minimum value, inclusive
+          description: 'Deprecated: use validation.min'
+          deprecated: true
         range_max:
           type: number
-          description: Maximum value, inclusive
+          description: 'Deprecated: use validation.max'
+          deprecated: true
         precision:
           type: integer
           minimum: 0
@@ -14880,6 +14939,23 @@ components:
           - dollar1
           - cny1
           description: Field icon
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
+            min:
+              type: number
+              description: Minimum value, inclusive
+            max:
+              type: number
+              description: Maximum value, inclusive
       allOf:
       - description: display_as_percentage and thousands_separator cannot both be true
         not:
@@ -14916,17 +14992,30 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         placeholder:
           type: string
           description: Placeholder text
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     MobileFieldInput:
       type: object
       title: MobileFieldInput
@@ -14952,14 +15041,16 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
@@ -14969,6 +15060,17 @@ components:
         sms_verification:
           type: boolean
           description: Verify the number by SMS (this also turns on the image captcha)
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     IdCardFieldInput:
       type: object
       title: IdCardFieldInput
@@ -14994,14 +15096,27 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     NameFieldInput:
       type: object
       title: NameFieldInput
@@ -15027,14 +15142,27 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     RadioButtonInput:
       type: object
       title: RadioButtonInput
@@ -15060,7 +15188,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15083,6 +15212,14 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15122,7 +15259,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15148,11 +15286,29 @@ components:
         minimum_length:
           type: integer
           minimum: 0
-          description: Minimum number of choices; for a LikertField with likert_choice_style=multiple, the minimum per statement
+          description: 'Deprecated: use validation.min_selected'
+          deprecated: true
         maximum_length:
           type: integer
           minimum: 0
-          description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+          description: 'Deprecated: use validation.max_selected'
+          deprecated: true
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            min_selected:
+              type: integer
+              minimum: 0
+              description: Minimum number of choices
+            max_selected:
+              type: integer
+              minimum: 0
+              description: Maximum number of choices
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15192,7 +15348,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15212,6 +15369,14 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15251,7 +15416,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15267,6 +15433,14 @@ components:
           - minute
           - second
           description: Date precision; day by default
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     RatingFieldInput:
       type: object
       title: RatingFieldInput
@@ -15292,7 +15466,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15301,6 +15476,14 @@ components:
           type: integer
           minimum: 1
           description: Rating scale, such as 3 / 5 / 10; 5 by default
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     TableFieldInput:
       type: object
       title: TableFieldInput
@@ -15326,7 +15509,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15341,6 +15525,14 @@ components:
           type: integer
           minimum: 1
           description: Initial number of rows; 3 by default
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     TelephoneFieldInput:
       type: object
       title: TelephoneFieldInput
@@ -15366,20 +15558,33 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
         placeholder:
           type: string
           description: Placeholder text
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     AddressFieldInput:
       type: object
       title: AddressFieldInput
@@ -15405,7 +15610,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15421,6 +15627,14 @@ components:
         enable_auto_position:
           type: boolean
           description: Fill in the address from the device location when the form first opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     AttachmentFieldInput:
       type: object
       title: AttachmentFieldInput
@@ -15446,7 +15660,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15546,6 +15761,14 @@ components:
         mobile_camera_only:
           type: boolean
           description: On mobile, only a photo taken with the camera; picking from the photo library is not allowed
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     GeoFieldInput:
       type: object
       title: GeoFieldInput
@@ -15571,11 +15794,20 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     LinkFieldInput:
       type: object
       title: LinkFieldInput
@@ -15601,20 +15833,33 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
         placeholder:
           type: string
           description: Placeholder text
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     NpsFieldInput:
       type: object
       title: NpsFieldInput
@@ -15640,7 +15885,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15651,6 +15897,14 @@ components:
         maximum_ratings_display_text:
           type: string
           description: Text shown at the highest rating
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     TimeFieldInput:
       type: object
       title: TimeFieldInput
@@ -15676,7 +15930,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15694,6 +15949,14 @@ components:
         include_second:
           type: boolean
           description: Include seconds
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     SortFieldInput:
       type: object
       title: SortFieldInput
@@ -15719,7 +15982,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15733,6 +15997,14 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     ESignatureFieldInput:
       type: object
       title: ESignatureFieldInput
@@ -15758,11 +16030,20 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     AudioFieldInput:
       type: object
       title: AudioFieldInput
@@ -15788,7 +16069,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15798,6 +16080,14 @@ components:
           minimum: 1
           maximum: 5
           description: Maximum recording length, in minutes
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     CascadeDropDownInput:
       type: object
       title: CascadeDropDownInput
@@ -15823,7 +16113,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15847,6 +16138,14 @@ components:
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     LikertFieldInput:
       type: object
       title: LikertFieldInput
@@ -15872,7 +16171,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15909,6 +16209,14 @@ components:
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: minimum_length / maximum_length apply only when likert_choice_style=multiple
         if:
@@ -15963,7 +16271,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -15986,6 +16295,14 @@ components:
         advanced_feature:
           type: boolean
           description: Turn on the advanced features
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     MatrixScaleFieldInput:
       type: object
       title: MatrixScaleFieldInput
@@ -16011,7 +16328,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16029,6 +16347,14 @@ components:
         horizontal_on_mobile:
           type: boolean
           description: Lay out horizontally on mobile
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     GoodsFieldInput:
       type: object
       title: GoodsFieldInput
@@ -16054,7 +16380,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16076,6 +16403,14 @@ components:
           type: integer
           minimum: 1
           description: Goods per row on mobile
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     FormulaFieldInput:
       type: object
       title: FormulaFieldInput
@@ -16101,7 +16436,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16162,6 +16498,14 @@ components:
           - text
           - text2
           description: Field icon
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: display_as_percentage and thousands_separator cannot both be true
         not:
@@ -16198,7 +16542,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16221,6 +16566,14 @@ components:
         use_daily_time_range:
           type: boolean
           description: Use a daily time slot table
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     FormAssociationInput:
       type: object
       title: FormAssociationInput
@@ -16248,14 +16601,16 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         display_field_api_codes:
           type: array
           maxItems: 20
@@ -16283,6 +16638,17 @@ components:
           items:
             type: string
           description: api_code of the fields the reverse association shows
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
     ImageRadioButtonInput:
       type: object
       title: ImageRadioButtonInput
@@ -16308,7 +16674,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16328,6 +16695,14 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16367,7 +16742,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16390,11 +16766,29 @@ components:
         minimum_length:
           type: integer
           minimum: 0
-          description: Minimum number of choices; for a LikertField with likert_choice_style=multiple, the minimum per statement
+          description: 'Deprecated: use validation.min_selected'
+          deprecated: true
         maximum_length:
           type: integer
           minimum: 0
-          description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+          description: 'Deprecated: use validation.max_selected'
+          deprecated: true
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            min_selected:
+              type: integer
+              minimum: 0
+              description: Minimum number of choices
+            max_selected:
+              type: integer
+              minimum: 0
+              description: Maximum number of choices
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16434,7 +16828,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16445,6 +16840,14 @@ components:
         show_part_description:
           type: boolean
           description: Collapse the description when it is long
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     PageBreakInput:
       type: object
       title: PageBreakInput
@@ -16470,7 +16873,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16488,6 +16892,14 @@ components:
           type: integer
           minimum: 0
           description: Seconds the "Next" button stays locked; 0 means not locked
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     WidgetButtonInput:
       type: object
       title: WidgetButtonInput
@@ -16513,7 +16925,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16531,6 +16944,14 @@ components:
         fixed_to_bottom:
           type: boolean
           description: Pin the button bar to the bottom of the page
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     WidgetContactInput:
       type: object
       title: WidgetContactInput
@@ -16556,7 +16977,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16581,6 +17003,14 @@ components:
             properties:
               phone:
                 type: string
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     WidgetMapInput:
       type: object
       title: WidgetMapInput
@@ -16606,7 +17036,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16626,6 +17057,14 @@ components:
         localizable_on_mobile:
           type: boolean
           description: On mobile, allow opening the location in a map
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     WidgetMarqueeInput:
       type: object
       title: WidgetMarqueeInput
@@ -16651,7 +17090,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16673,6 +17113,14 @@ components:
           - fake
           - real
           description: 'Data source: fake for generated data, real for real entries'
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     SingleSelectInput:
       type: object
       title: SingleSelectInput
@@ -16700,7 +17148,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16738,6 +17187,14 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16792,7 +17249,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16818,11 +17276,13 @@ components:
         minimum_length:
           type: integer
           minimum: 0
-          description: Minimum number of choices; for a LikertField with likert_choice_style=multiple, the minimum per statement
+          description: 'Deprecated: use validation.min_selected'
+          deprecated: true
         maximum_length:
           type: integer
           minimum: 0
-          description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+          description: 'Deprecated: use validation.max_selected'
+          deprecated: true
         answers:
           type: array
           minItems: 1
@@ -16839,6 +17299,22 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            min_selected:
+              type: integer
+              minimum: 0
+              description: Minimum number of choices
+            max_selected:
+              type: integer
+              minimum: 0
+              description: Maximum number of choices
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16912,7 +17388,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -16947,6 +17424,14 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17001,7 +17486,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17024,11 +17510,13 @@ components:
         minimum_length:
           type: integer
           minimum: 0
-          description: Minimum number of choices; for a LikertField with likert_choice_style=multiple, the minimum per statement
+          description: 'Deprecated: use validation.min_selected'
+          deprecated: true
         maximum_length:
           type: integer
           minimum: 0
-          description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+          description: 'Deprecated: use validation.max_selected'
+          deprecated: true
         answers:
           type: array
           minItems: 1
@@ -17045,6 +17533,22 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            min_selected:
+              type: integer
+              minimum: 0
+              description: Minimum number of choices
+            max_selected:
+              type: integer
+              minimum: 0
+              description: Maximum number of choices
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17118,7 +17622,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17156,6 +17661,14 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17210,7 +17723,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17245,6 +17759,14 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17298,14 +17820,16 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
@@ -17327,6 +17851,17 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
       allOf:
       - description: absolute mode takes a single answer
         if:
@@ -17367,14 +17902,16 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type: string
           description: Default value
@@ -17396,6 +17933,17 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
       allOf:
       - description: absolute mode takes a single answer
         if:
@@ -17436,14 +17984,16 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
         unique:
           type: boolean
-          description: Refuse a value an existing entry already has
+          deprecated: true
+          description: 'Deprecated: use validation.unique'
         predefined_value:
           type:
           - number
@@ -17454,10 +18004,12 @@ components:
           description: Placeholder text
         range_min:
           type: number
-          description: Minimum value, inclusive
+          description: 'Deprecated: use validation.min'
+          deprecated: true
         range_max:
           type: number
-          description: Maximum value, inclusive
+          description: 'Deprecated: use validation.max'
+          deprecated: true
         precision:
           type: integer
           minimum: 0
@@ -17505,6 +18057,23 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
+            unique:
+              type: boolean
+              description: Refuse a value an existing entry already has
+            min:
+              type: number
+              description: Minimum value, inclusive
+            max:
+              type: number
+              description: Maximum value, inclusive
       allOf:
       - description: display_as_percentage and thousands_separator cannot both be true
         not:
@@ -17555,7 +18124,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17579,6 +18149,14 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: absolute mode takes a single answer
         if:
@@ -17619,7 +18197,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17645,6 +18224,14 @@ components:
         answer_explanation:
           type: string
           description: Explanation of the answer
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: absolute mode takes a single answer
         if:
@@ -17684,7 +18271,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17707,6 +18295,14 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17746,7 +18342,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -17769,6 +18366,14 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17808,11 +18413,20 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
           description: Target position of the field in the form, from 0; appended at the end by default
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     TableColumnInput:
       type: object
       description: A table column definition; type is limited to the column types a table supports
@@ -18498,6 +19112,7 @@ components:
       - takes_choices
       - flags
       - settings
+      - validation_spec
       properties:
         type:
           type: string
@@ -18518,7 +19133,7 @@ components:
           description: Whether it takes `choices`
         flags:
           type: array
-          description: Supported validation flags, i.e. the boolean keys usable in `fields[]`
+          description: Supported validation flags; write `required` / `unique` in `validation` (see `validation_spec`) and `other_choice_required` on `fields[]`
           items:
             type: string
             enum:
@@ -18533,6 +19148,9 @@ components:
           examples:
           - - calculable
             - choices_layout
+        validation_spec:
+          type: object
+          description: The JSON Schema of the `validation` object this type takes on `fields[]`, the same keys the field reads back under `validation`
         setting_specs:
           type: object
           description: What each key of `settings` may hold, keyed by setting, as the JSON Schema the create request validates it against (the setting's schema in `<Type>Input`). An attachment's `media_type` also carries `x-groups`, the extensions of each preset group. Omitted when the type has no settings
@@ -22559,7 +23177,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -22573,6 +23192,14 @@ components:
         related_label:
           type: string
           description: Name of the reverse column, used only when the reverse column is created; defaults to the name of this table
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     GoodsItemUpdateInput:
       type: object
       title: GoodsItemUpdateInput
@@ -22778,7 +23405,8 @@ components:
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
         required:
           type: boolean
-          description: Required
+          deprecated: true
+          description: 'Deprecated: use validation.required'
         position:
           type: integer
           minimum: 0
@@ -22789,6 +23417,14 @@ components:
           items:
             $ref: '#/components/schemas/SequenceSegmentInput'
           description: Numbering rule, joined in order; exactly one sequence_number part. Defaults to a single 4-digit sequence number
+        validation:
+          type: object
+          additionalProperties: false
+          description: Rules checked on submit, keyed as the field reads them back under validation; a rule given here cannot also be given in its deprecated top-level key
+          properties:
+            required:
+              type: boolean
+              description: Must be answered
     SequenceSegmentInput:
       type: object
       title: SequenceSegmentInput
