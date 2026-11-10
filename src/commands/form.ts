@@ -63,6 +63,11 @@ const FORM_PAYLOAD: readonly string[] = [
   'time-range, daily or entries rule. {"closed": false} reopens the form, and',
   'changing "closed" either way deletes the other three rules.',
   '',
+  'setting.wording renames what the fill page says: "submit" is the submit',
+  "button's text, and its other keys the start button and the password, closed,",
+  'not-open and fill-limit messages. A key left out keeps its text, and ""',
+  'puts the default back.',
+  '',
   'Reading a form back does not give you something you can send again: a field',
   'written as "TextField" reads as "single_line_text". `field types` lists the',
   'names to write, and `field types <Type>` describes one.',
@@ -345,6 +350,7 @@ export const FORM: readonly Command[] = [
     examples: [
       'jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"setting":{"daily_repeat_close_rule":{"time_periods":[{"start_time":{"hour":11,"minute":0},"end_time":{"hour":12,"minute":40}}]}}}\'',
+      'jinshuju form edit Kp7mQ2 --json \'{"setting":{"wording":{"submit":"立即报名"}}}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"exam_setting":{"limited_time":30}}\''
     ]
   },
