@@ -201,7 +201,7 @@ test('a command with two requests to make is refused for the second before the f
   assert.equal(mock.requests.length, 0);
 });
 
-test('--as-is sends the body anyway, and --output json carries each refusal at its pointer', async () => {
+test('--as-is sends the body anyway, and --output json carries each refusal the way API v1 gives its errors', async () => {
   const mock = recording();
   const asIs = await runCli([...field('{"range_min":null}'), '--as-is'], { env: ENV, client: mock.client });
   assert.equal(asIs.exitCode, 0, asIs.stderr);
@@ -214,11 +214,18 @@ test('--as-is sends the body anyway, and --output json carries each refusal at i
   });
   assert.equal(json.exitCode, 2);
   const envelope = JSON.parse(json.stderr) as {
-    error: { kind: string; errors: { pointer: string; message: string }[] };
+    error: { kind: string; errors: Record<string, unknown>[] };
   };
   assert.equal(envelope.error.kind, 'usage');
   assert.deepEqual(
-    envelope.error.errors.map((refusal) => refusal.pointer),
-    ['/fields/update/0/range_min', '/fields/update/0/validation']
+    envelope.error.errors.map((refusal) => Object.keys(refusal).sort()),
+    [
+      ['message', 'pointers'],
+      ['message', 'pointers']
+    ]
+  );
+  assert.deepEqual(
+    envelope.error.errors.map((refusal) => refusal.pointers),
+    [['/fields/update/0/range_min'], ['/fields/update/0/validation']]
   );
 });
