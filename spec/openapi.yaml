@@ -29,6 +29,7 @@ info:
     - Writing a field the role cannot fill in (create) or change (update) returns `403` naming the field; a `PUT` leaves such fields as they were.
     - A missing permission returns `403` saying which one is missing.
     - Changing a form or table itself (its fields, settings, access policy, webhook, theme, close rules, exam or evaluation settings, deleting a form or table, and the field data checks and type change previews made before editing fields) needs the admin role on it.
+    - Reading or changing a form's notification rules (and copying a form with them), and creating a public query on a form or reading its public query field suggestions, also need the admin role on it.
 
     ## Rate limiting
     Requests are counted per account per hour: every token of the account (its members' personal access tokens, account access tokens and OAuth tokens) draws on one shared quota.
@@ -66,7 +67,7 @@ info:
 
     ## Input validation
     The server validates the path parameters, query parameters and JSON request body of every request against this document (except the multipart body of upload endpoints).
-    - An invalid request returns `400` directly, with the response body `{ error_description, errors: [{ pointer, message, code }] }`; a request body that is not `application/json` returns `415`.
+    - An invalid request returns `400` directly, with the response body `{ error_description, errors: [{ pointers, message, code }] }`, one entry per reason naming every place it occurs; a request body that is not `application/json` returns `415`.
     - Keys not listed in a request body schema are errors, except where the schema says they are ignored (the routines body) and the field values of entry writes, which the form's field definitions decide.
 servers:
 - url: https://jinshuju.net/api/v1
@@ -268,7 +269,8 @@ paths:
       description: |
         Edits a form partially; also accepts `PUT`. The request body must contain at least one of `name` / `description` / `fields` / `setting` / `field_rules`, otherwise returns 400.
         - `fields` is changed incrementally through four kinds of operation, `add` / `remove` / `update` / `update_choices`; fields, choices and api_codes not mentioned are all kept;
-          `update[].type` changes a field's type in place, and a change that clears entry data must carry `confirm_data_loss: true`.
+          `update[].type` changes a field's type in place, and a change that clears entry data must carry `confirm_data_loss: true`;
+          exam questions and customized fields (Department / Grade) cannot change type in place — remove the field and add a new one instead.
         - `field_rules` does `add` / `remove` / `update` on rules located by the `index` that `GET /forms/{form_token}/field_rules` returns.
         - `setting`, as on create, accepts only whitelisted keys.
         Returns the full updated form structure.
@@ -414,6 +416,7 @@ paths:
         Use before changing a field's type (the field's `type` in PATCH /forms/{form_token}): changes no data, and counts, from the field's current entries, how many would be kept and how many cleared after the conversion; matches the preview the web editor shows before converting.
         - Put every conversion of one edit in the `checks` of a single call.
         - `supported: false`, or `choice_limit_exceeded: true` when multi-line text becomes a choice field, means the edit itself would be refused.
+        - An exam question or customized field (Department / Grade) comes back as `unavailable`: its type cannot change in place, remove the field and add a new one instead.
 
         OAuth scope: forms
       operationId: previewFormFieldTypeChange
@@ -1248,6 +1251,80 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/entries/{serial_number}/state_flows/{flow}":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - $ref: '#/components/parameters/SerialNumber'
+    - $ref: '#/components/parameters/StateFlowName'
+    get:
+      tags:
+      - Entries
+      summary: Show an entry's state flow
+      description: |
+        Returns the entry's state in a flow and the targets its events act on, each with the events it can take now. Takes the form creator, admin or data maintainer role, and the entry must be within the caller's data scope.
+        OAuth scope: read_entries
+      operationId: getEntryStateFlow
+      responses:
+        '200':
+          description: The entry's state flow
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryStateFlow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Entries
+      summary: Trigger an event in an entry's state flow
+      description: |
+        Triggers an event that GET lists on a target and returns the flow afterwards. Same role and data scope as GET.
+        OAuth scope: write_entries
+        - `reda_confirm` approves the red envelope and pays it out of the form's red envelope balance; `reda_refuse` rejects it
+        - `cancel_all` cancels the reservation and frees the reserved slots; a paid entry is not refunded
+        - `winner_confirm` redeems a winner; `delete_winner` removes the winner for good, and its prize and voucher code do not go back to the pool
+      operationId: updateEntryStateFlow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - event
+              properties:
+                event:
+                  $ref: '#/components/schemas/StateFlowEvent'
+                  description: Event to trigger; must be one the target lists in `events`
+                target_id:
+                  type: string
+                  description: Id of the winner to act on, from GET; required for wheel_fortune_prize_audit_state and not accepted for the other flows
+              additionalProperties: false
+      responses:
+        '200':
+          description: Triggered; returns the entry's state flow afterwards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryStateFlow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   "/forms/{form_token}/setting":
     get:
       tags:
@@ -1504,7 +1581,11 @@ paths:
         '402':
           $ref: '#/components/responses/PaymentRequired'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: 'Forbidden: the OAuth token lacks the required scope, or the caller is not a manager of the form'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
         '429':
@@ -1616,7 +1697,11 @@ paths:
         '402':
           $ref: '#/components/responses/PaymentRequired'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: 'Forbidden: the OAuth token lacks the required scope, or the caller is not a manager of the form'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
         '429':
@@ -1914,7 +1999,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
-          $ref: '#/components/responses/PaymentRequired'
+          description: The current plan does not include API v1, or `anti_cheating.enabled` is true and the plan does not include `防作弊`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -1975,6 +2064,200 @@ paths:
                 $ref: '#/components/schemas/EvaluationSetting'
         '400':
           description: 'Invalid parameters, including: the form is not an evaluation, a comment written as conditions is left out or changed, or a dimension binds a field that is not a visible scorable question'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The current plan does not include API v1, or `anti_cheating.enabled` is true and the plan does not include `防作弊`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/wheel_fortune":
+    get:
+      tags:
+      - Form Settings
+      summary: Show a form's lucky wheel
+      description: |
+        Returns the lucky wheel shown after the form is submitted: prizes, draws per entry, how winners redeem and its messages.
+        OAuth scope: form_setting
+      operationId: getWheelFortune
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      responses:
+        '200':
+          description: The lucky wheel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WheelFortune'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The form's account has neither bought nor tried the lucky wheel; the message says how to start the trial with `confirm_form_app_trial` or buy it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Form Settings
+      summary: Set up a form's lucky wheel
+      description: |
+        Sets up the lucky wheel and turns it on or off; only the keys present are written.
+        - The lucky wheel is a paid add-on: the form's account must have bought or be trying it; `confirm_form_app_trial` starts the trial. Once its trial has ended, starting the trial again or turning the wheel on answers 402, while the setup can still be saved.
+        - Only members of the form's own account can set it up; members who are not the owner or an admin can only when the account has it with the enterprise plan.
+        - While on, respondents go to the wheel after submitting instead of the success page or the redirect. Turning it on while the form shows something else after submitting is refused until `confirm_ending_conflicts`, which also switches the ending to a message, clears the redirect and turns the red envelope off, as choosing the wheel in the editor does.
+        OAuth scope: form_setting
+      operationId: updateWheelFortune
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WheelFortuneInput'
+      responses:
+        '200':
+          description: The saved lucky wheel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WheelFortune'
+        '400':
+          description: 'Invalid parameters, including: probabilities add up to more than 100, a prize id not on this wheel, a change to a saved prize''s type or vouchers or to cash, a prize image that is neither a new upload nor that prize''s own, a phone cash whose field is not a mobile field, a score range on a form that is not an exam or evaluation, turning it on without prizes / lottery / cash / text, or turning it on over what the form shows after submitting without confirm_ending_conflicts'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: The form's account has neither bought nor tried the lucky wheel, or can no longer use it while the request starts the trial or turns the wheel on; the message says what to do
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/wheel_fortune/prizes/{prize_id}/remaining_vouchers":
+    post:
+      tags:
+      - Form Settings
+      summary: Export the vouchers a prize has left
+      description: |
+        Writes the codes a voucher prize has not handed out yet into an Excel file, as the editor's export does. Takes the same members as setting up the lucky wheel.
+        OAuth scope: form_setting
+      operationId: exportRemainingVouchers
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      - name: prize_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: id of a voucher prize from GET /forms/{form_token}/wheel_fortune
+      responses:
+        '201':
+          description: The file written
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - download_url
+                - remaining_count
+                properties:
+                  download_url:
+                    type: string
+                    description: Download link of the Excel file
+                  remaining_count:
+                    type: integer
+                    description: Vouchers not handed out yet
+        '400':
+          description: The prize is not a voucher prize
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/quickpay_setting":
+    get:
+      tags:
+      - Form Settings
+      summary: Show a quick payment form's settings
+      description: |
+        Returns a quick payment form's payment mode, whether it hands buyers what they bought once they pay, and the deliverables it hands out.
+        Only for quick payment forms (scene = quickpay); otherwise returns 400.
+        OAuth scope: form_setting
+      operationId: getQuickpaySetting
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      responses:
+        '200':
+          description: Quick payment settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuickpaySetting'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Form Settings
+      summary: Update a quick payment form's settings
+      description: |
+        Partially updates a quick payment form's settings (schema `QuickpaySettingInput`).
+        OAuth scope: form_setting
+        - `deliverables` replaces the deliverables of the goods field buyers see under the resulting `mode` (`goods_field_api_code` in the response); pass `token` back to keep one.
+        - A file or image deliverable takes an `attachment_id` from "Upload a deliverable file" or "Prepare a deliverable file upload", or one the form already hands out.
+      operationId: updateQuickpaySetting
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickpaySettingInput'
+      responses:
+        '200':
+          description: The saved quick payment settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuickpaySetting'
+        '400':
+          description: 'Invalid parameters, including: the form is not a quick payment form, `mode` does not fit the goods field, a tier is not an item of that goods field, a link without `url`, a file without `attachment_id`, or an attachment the caller did not upload'
           content:
             application/json:
               schema:
@@ -2637,6 +2920,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PreparedUpload'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  "/forms/{form_token}/goods_deliverable_attachments":
+    post:
+      tags:
+      - Uploads
+      summary: Upload a deliverable file
+      operationId: uploadGoodsDeliverableAttachment
+      description: |
+        Uploads a file (up to 200 MB) that a quick payment form hands buyers once they pay; pass the returned `id` as a deliverable's `attachment_id`.
+
+        OAuth scope: form_setting
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  description: The file to hand buyers
+                  contentMediaType: application/octet-stream
+              additionalProperties: false
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoodsDeliverableAttachment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: The file failed validation (it is over 200 MB or of a blocked type)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/forms/{form_token}/goods_deliverable_attachment_upload_urls":
+    post:
+      tags:
+      - Uploads
+      summary: Prepare a deliverable file upload
+      operationId: prepareGoodsDeliverableAttachmentUpload
+      description: |
+        Issues a one-time link for uploading a local file (up to 200 MB) that a quick payment form hands buyers once they pay, without sending its bytes in a request body.
+        - With a shell that can read the file and reach the network, run `curl -F file=@<path> <upload_url>`, then pass the returned `attachment_id` as a deliverable's `attachment_id`.
+
+        OAuth scope: form_setting
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      responses:
+        '201':
+          description: Upload link issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedUpload'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -3531,7 +3893,7 @@ paths:
         - `description` returns a `url` for an `<img src>` in the form `description` or a field's `notes`, at most 30 per form; every other type returns an `attachment_id` for the property that names that `image_type`.
         - An `attachment_id` is taken only where its `image_type` goes, and only while the image is unused or already that form's; an image nothing uses within 7 days is deleted.
 
-        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, opensearch_header or description; form_setting otherwise
+        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, reservation_item, opensearch_header or description; form_setting otherwise
       requestBody:
         required: true
         content:
@@ -3553,6 +3915,8 @@ paths:
                   - description
                   - goods_item
                   - contact_widget
+                  - reservation_item
+                  - wheel_fortune_prize
                   description: What the image is for
                 file:
                   type: string
@@ -3587,7 +3951,7 @@ paths:
         - With a shell that can read the file and reach the network, run `curl -F file=@<path> <upload_url>`, then use the returned `attachment_id` (or `url`) where its `image_type` goes.
         - Without one, or when curl fails (for example under a sandbox's network limits), give a public image URL or a small Base64 image where the image goes.
 
-        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, opensearch_header or description; form_setting otherwise
+        OAuth scope: forms when `image_type` is field_choice, goods_item, contact_widget, reservation_item, opensearch_header or description; form_setting otherwise
       requestBody:
         required: true
         content:
@@ -3608,6 +3972,8 @@ paths:
                   - description
                   - goods_item
                   - contact_widget
+                  - reservation_item
+                  - wheel_fortune_prize
                   description: What the image is for
               additionalProperties: false
       responses:
@@ -6665,6 +7031,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: A routine still sends to the channel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '429':
           $ref: '#/components/responses/TooManyRequests'
   "/messages":
@@ -6779,7 +7151,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: SMS is turned off for the account, a template with variables used up its daily allowance without content review, or the OAuth scope is insufficient
+          description: SMS is turned off for the account, a template with variables used up its daily allowance without content review, the OAuth scope is insufficient, or Jiri sends other than once a run what a routine's message rule names, with the rule's content as confirmed and only its `$(…)` filled in, or sends from a conversation other than once the message the user confirmed on a card
           content:
             application/json:
               schema:
@@ -8105,6 +8477,13 @@ components:
       description: Entry serial number
       schema:
         type: integer
+    StateFlowName:
+      name: flow
+      in: path
+      required: true
+      description: Flow name; the entry's state in it is also read as the `<flow>_fsf_field` field
+      schema:
+        $ref: '#/components/schemas/StateFlowName'
     FormsQ:
       name: q
       in: query
@@ -8653,7 +9032,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error_description: "Form not found: the token does not exist or the form is not shared with you. Do not retry it as a table or a query; confirm the token with the user, or ask the form's owner to add you as a cooperator."
+            error_description: 'Form not found: the token does not exist or the form is not shared with you. Do not retry it as a table or a query; confirm the token with the user, or ask the form''s owner to add you as a cooperator.'
     TooManyRequests:
       description: Rate limit exceeded
       headers:
@@ -9157,7 +9536,7 @@ components:
           type:
           - string
           - 'null'
-          description: Field notes (may be HTML rich text)
+          description: Text shown under the field label (may be HTML rich text)
         private:
           type: boolean
           description: Whether the field is hidden
@@ -9171,6 +9550,13 @@ components:
         allow_other:
           type: boolean
           description: Whether there is an "Other" choice (choice fields)
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Whether fillers stop seeing a choice once its places run out, instead of seeing it as full. Only on form and table reads of a choice field with a limit on some choice
+        random_choices:
+          type: boolean
+          default: false
+          description: Whether the choices show in a new random order each time the form opens (single choice / multiple choice / drop-down / cascading drop-down / image choice / ranking)
         statements:
           type: array
           description: Statements (matrix single choice / matrix fill-in / matrix scale)
@@ -9185,7 +9571,7 @@ components:
           type:
           - string
           - 'null'
-          description: Prompt of an inline-blanks field, with each blank marked by the placeholder `${field_x}$`
+          description: Grey hint inside the empty input box; for inline blanks, the prompt with each blank marked by `${field_x}$`
         max_file_quantity:
           type: integer
           description: 'Attachment field: maximum number of files to upload'
@@ -9244,6 +9630,11 @@ components:
           description: 'Reservation field: reservation items'
           items:
             $ref: '#/components/schemas/ReservationItem'
+        buttons:
+          type: array
+          description: 'Button bar: the buttons, in the shape fields.update takes back'
+          items:
+            $ref: '#/components/schemas/WidgetButtonItemInput'
         associated_form_token:
           type:
           - string
@@ -9298,6 +9689,17 @@ components:
         include_second:
           type: boolean
           description: 'Time field: whether it is precise to the second (present only when true)'
+        grids_to_occupy:
+          type: integer
+          description: Width in quarters of the row (2 = half); absent when the field takes the whole row
+        start_new_row:
+          type: boolean
+          description: Starts a new row instead of sitting beside the field before it (present only when true)
+        predefined_value:
+          type:
+          - string
+          - object
+          description: Default value, in the shape fields.update takes (present only when set)
         analytics:
           $ref: '#/components/schemas/FieldAnalytics'
       additionalProperties: true
@@ -9381,7 +9783,7 @@ components:
           type:
           - integer
           - 'null'
-          description: 'Limit on the choice''s places, the value a write sends as `quota`, so the places used in the current cycle are `quota_setting - quota`. Only on form and table reads, and not on matrix choices'
+          description: Limit on the choice's places, the value a write sends as `quota`, so the places used in the current cycle are `quota_setting - quota`. Only on form and table reads, and not on matrix choices
         operand_value:
           type: number
           description: Value assigned to the choice
@@ -9474,6 +9876,7 @@ components:
           - 'null'
     ReservationItem:
       type: object
+      description: Form and table reads also give the item's settings, in the shape `ReservationItemInput` takes. A write replaces the whole list; an item matched to a current one (by `api_code`, else by name) keeps whether deleted entries give their places back, which a read does not give, and keeps its images when the write leaves `images` out. Time slot tables set up in the editor are not kept
       required:
       - name
       - value
@@ -9483,9 +9886,35 @@ components:
           type: string
         value:
           type: string
-          description: Reservation item api_code
+          description: Reservation item api_code, written back as `api_code`
         hidden:
           type: boolean
+        description:
+          type: string
+        selected:
+          type: boolean
+        payable:
+          type: boolean
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        quota_setting:
+          $ref: '#/components/schemas/ReservationQuotaSettingInput'
+        images:
+          type: array
+          description: Item images in display order, written back by `attachment_id`
+          items:
+            type: object
+            required:
+            - attachment_id
+            properties:
+              attachment_id:
+                type: string
+              image_url:
+                type: string
     DisplayFieldSetting:
       type: object
       properties:
@@ -9861,7 +10290,7 @@ components:
           enum:
           - classic
           - card
-          description: Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout and cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo / WidgetButton
+          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo / WidgetButton and takes no grids_to_occupy / start_new_row'
       allOf:
       - $ref: '#/components/schemas/FormCreateConstraints'
     TableCreateInput:
@@ -10327,34 +10756,30 @@ components:
           description: Requires payment (depends on the plan and the price of each time slot)
         start_date:
           type: string
-          format: date
+          anyOf:
+          - format: date
+          - format: date-time
+          description: Bookable from this moment on. Reads give an ISO 8601 date-time; a YYYY-MM-DD date means the start of that day
         end_date:
           type: string
-          format: date
+          anyOf:
+          - format: date
+          - format: date-time
+          description: Bookable until the end of this day. Reads give an ISO 8601 date-time; a YYYY-MM-DD date is taken as that day
         quota_setting:
-          type: object
-          description: Quota settings, branched on type
-          required:
-          - type
-          properties:
-            type:
-              type: string
-              enum:
-              - by_day_repeat_weekly
-              - by_time_range_repeat_daily
-          discriminator:
-            propertyName: type
-            mapping:
-              by_day_repeat_weekly: "#/components/schemas/ReservationByDayQuotaInput"
-              by_time_range_repeat_daily: "#/components/schemas/ReservationByTimeRangeQuotaInput"
-          oneOf:
-          - $ref: '#/components/schemas/ReservationByDayQuotaInput'
-          - $ref: '#/components/schemas/ReservationByTimeRangeQuotaInput'
+          $ref: '#/components/schemas/ReservationQuotaSettingInput'
+        images:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ReservationItemImageInput'
+          description: Replaces the images of the item, in display order; leave out to keep them, [] removes them
     FormSettingWriteInput:
       type: object
       description: |
         The `setting` used when creating / editing a form. Only the keys below are accepted; other keys are ignored. A write describes the resulting state: omitted keys keep their current values, and `null` clears a key.
         - Passing only `success_message` automatically sets `success_message_style` to `text`; passing only `success_message_rich_text` sets it to `rich_text`.
+        - Changing `success_message_rich_text` requires a plan that includes "Success page rich text". Writing `success_message_style` as `rich_text` (passed, written back as read, or implied by passing only `success_message_rich_text`) also needs "Distribution poster" and "Certificate"; on other plans with "Success page rich text" pass `text`. Otherwise the request is refused with 400. A plan without "Success page rich text" may still write back the `rich_text` style it read; it is saved as `text`.
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
         - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically and `payment_expirable` turns on unless passed or already `false`.
         - `notification_rules` replaces all notification rules created through the API as a whole (`[]` clears them); rules created in the desktop UI are not affected.
@@ -10375,6 +10800,7 @@ components:
           - redirect
           - reports
           - exam_score
+          description: Only show_message while the lucky wheel is on
         success_redirect_url:
           type: string
         success_redirect_fields:
@@ -10391,6 +10817,15 @@ components:
           type: string
         open_entry_cancel_reservation:
           type: boolean
+        show_entry_on_success:
+          type: boolean
+          description: Show the success page button that opens the entry just submitted; a new form turns it on unless you pass false
+        show_entry_on_success_button_text:
+          type: string
+          description: Text of that button; blank shows the scene's default text
+        edit_entry_on_success:
+          type: boolean
+          description: Let the submitter edit that entry from the button; applies while show_entry_on_success is on. Turning it on needs a plan that includes `填写者修改已填数据`, otherwise 400
         show_serial_number_on_success:
           type: boolean
         show_submit_again:
@@ -10527,12 +10962,67 @@ components:
           minimum: 3
           maximum: 30
           description: Minutes an order may stay unpaid
+        wording:
+          $ref: '#/components/schemas/FormWordingInput'
         notification_rules:
           type: array
           items:
             $ref: '#/components/schemas/NotificationRuleInput'
         daily_repeat_close_rule:
           $ref: '#/components/schemas/DailyRepeatCloseRuleInput'
+      additionalProperties: false
+    FormWordingInput:
+      type: object
+      description: Texts the form shows its submitters; an empty string restores the default text, omitted keys keep theirs
+      properties:
+        submit:
+          type: string
+          maxLength: 10
+          description: Submit button
+        start:
+          type: string
+          maxLength: 10
+          description: Start button on the welcome page of a card-layout form
+        submit_by_password:
+          type: string
+          maxLength: 36
+          description: Prompt on the page asking for the access password
+        view_result_by_password:
+          type: string
+          maxLength: 36
+          description: Prompt on the page asking for the password of the published results
+        search_result_by_password:
+          type: string
+          maxLength: 36
+          description: Prompt on the page asking for the password of the public query page
+        region_limited:
+          type: string
+          maxLength: 40
+          description: Shown to a submitter outside the allowed regions
+        already_closed:
+          type: string
+          maxLength: 40
+          description: Shown when the form no longer accepts entries
+        not_open:
+          type: string
+          maxLength: 40
+          description: Shown before the form opens when the matching text below is empty
+        not_open_show_form:
+          type: string
+          description: Rich text shown before the form opens while `show_form_before_open` is on; embedded iframe domains must be on the allowlist
+        not_open_hide_form:
+          type: string
+          description: Rich text shown before the form opens while `show_form_before_open` is off; embedded iframe domains must be on the allowlist
+        fill_frequency_limited:
+          type: string
+          maxLength: 40
+          description: Shown once the submitter reaches the fill frequency limit when the matching text below is empty
+        fill_frequency_limited_show_form:
+          type: string
+          description: Rich text shown at the fill frequency limit when the form stays visible; embedded iframe domains must be on the allowlist
+        fill_frequency_limited_hide_form:
+          type: string
+          description: Rich text shown at the fill frequency limit when the form is hidden; embedded iframe domains must be on the allowlist
       additionalProperties: false
     NotificationRuleInput:
       type: object
@@ -10604,7 +11094,7 @@ components:
           - 'null'
           enum:
           - date_time
-          - null
+          -
           description: 'Only for a reservation field tested by its date: `date_time`; leave it out otherwise. `GET /forms/{form_token}/condition_triggerable_fields` gives it for each field that needs it'
       additionalProperties: false
     NotificationRuleScheduleTimeRule:
@@ -10785,6 +11275,9 @@ components:
           type: string
           format: uri
           description: Bot webhook URL
+        address_id:
+          type: string
+          description: In place of `url`, the id of a robot address the user entered in this Jiri conversation; Jiri always uses it
         content:
           type: string
           description: The message; `$(api_code)` inserts a field value
@@ -10818,6 +11311,9 @@ components:
           type: string
           format: uri
           description: Bot webhook URL
+        address_id:
+          type: string
+          description: In place of `url`, the id of a robot address the user entered in this Jiri conversation; Jiri always uses it
         content:
           type: string
           description: The message; `$(api_code)` inserts a field value
@@ -10895,6 +11391,7 @@ components:
           type:
           - string
           - 'null'
+          description: Email only, always present on an email rule; the account's SMTP account it is sent through, null when Jinshuju sends it
         weixin_onetime_url:
           type: string
         url:
@@ -10906,6 +11403,9 @@ components:
         notifications_count:
           type: integer
           description: How many have been sent
+        page_url:
+          type: string
+          description: The form's notification settings page
         sendable:
           type: boolean
           description: Whether the rule can send right now
@@ -11033,7 +11533,7 @@ components:
           - WidgetContact
           - WidgetMap
           - WidgetMarquee
-          description: Change the field to this type, keeping its api_code and entries and converting the values; a change that would clear data needs confirm_data_loss
+          description: Change the field to this type, keeping its api_code and entries and converting the values; a change that would clear data needs confirm_data_loss. Exam questions and customized fields (Department / Grade) cannot change type in place; remove the field and add a new one instead
         confirm_data_loss:
           type: boolean
           description: Accept that the type change clears data
@@ -11041,10 +11541,8 @@ components:
           type: string
           description: Field label
         notes:
-          type:
-          - string
-          - 'null'
-          description: Field notes
+          type: string
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -11089,6 +11587,18 @@ components:
           items:
             $ref: '#/components/schemas/ReservationItemInput'
           description: Replaces the whole list; carry api_code to keep the identity of an item
+        buttons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WidgetButtonItemInput'
+          description: Replaces the whole list; a button at the position of an existing one keeps its style and qrcode images
+        segments:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SequenceSegmentInput'
+          description: SequenceField numbering rule; replaces the whole rule. Only entries created later are numbered by it
         display_field_api_codes:
           type: array
           maxItems: 20
@@ -11117,6 +11627,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         minimum_length:
           type: integer
           minimum: 0
@@ -11129,7 +11652,7 @@ components:
           description: 'Default value: a string for text fields, a date string matching the precision or today / yesterday / tomorrow for DateTimeField, an {"hour", "minute"} object for TimeField, an address object for AddressField'
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
         sms_verification:
           type: boolean
           description: Verify the number by SMS (this also turns on the image captcha)
@@ -11793,6 +12316,7 @@ components:
       - payment_expirable
       - payment_expiration_time
       - daily_repeat_close_rule
+      - wording
       properties:
         success_message:
           type:
@@ -12020,6 +12544,54 @@ components:
               description: Third-party appid on the WeChat Open Platform; omitted when absent
         daily_repeat_close_rule:
           $ref: '#/components/schemas/DailyRepeatCloseRule'
+        wording:
+          type: object
+          description: Texts the form shows its submitters; one never set reads as its default text, or empty for the rich-text ones
+          required:
+          - submit
+          - start
+          - submit_by_password
+          - view_result_by_password
+          - search_result_by_password
+          - region_limited
+          - already_closed
+          - already_closed_rich_text
+          - not_open
+          - not_open_show_form
+          - not_open_hide_form
+          - fill_frequency_limited
+          - fill_frequency_limited_show_form
+          - fill_frequency_limited_hide_form
+          properties:
+            submit:
+              type: string
+            start:
+              type: string
+            submit_by_password:
+              type: string
+            view_result_by_password:
+              type: string
+            search_result_by_password:
+              type: string
+            region_limited:
+              type: string
+            already_closed:
+              type: string
+            already_closed_rich_text:
+              type: string
+              description: Rich-text closed message kept from an earlier editor; the fill page does not show it and it cannot be written
+            not_open:
+              type: string
+            not_open_show_form:
+              type: string
+            not_open_hide_form:
+              type: string
+            fill_frequency_limited:
+              type: string
+            fill_frequency_limited_show_form:
+              type: string
+            fill_frequency_limited_hide_form:
+              type: string
     FormSettingInput:
       type: object
       description: Request body of PATCH /forms/{form_token}/setting; only the keys present are written
@@ -12048,6 +12620,7 @@ components:
           - redirect
           - reports
           - exam_score
+          description: Only show_message while the lucky wheel is on
         success_redirect_url:
           type: string
           description: Must be a valid URL when entry_submit_mode is redirect
@@ -12139,6 +12712,8 @@ components:
           additionalProperties: false
         fill_frequency:
           $ref: '#/components/schemas/FormFillFrequencyInput'
+        wording:
+          $ref: '#/components/schemas/FormWordingInput'
       additionalProperties: false
     AccessPolicyInput:
       type: object
@@ -12267,6 +12842,62 @@ components:
           type: string
         retry:
           type: boolean
+    AntiCheatingSetting:
+      type: object
+      description: Anti-cheating while the form is being filled in
+      required:
+      - enabled
+      - copying_disabled
+      - paste_disabled
+      - switching_screen_disabled
+      - switching_screen_limit_time
+      - switching_screen_limit
+      properties:
+        enabled:
+          type: boolean
+          description: Whether anti-cheating is in effect; false once the plan no longer includes it, even if it was turned on
+        copying_disabled:
+          type: boolean
+          description: Questions cannot be copied
+        paste_disabled:
+          type: boolean
+          description: Answers cannot be pasted in
+        switching_screen_disabled:
+          type: boolean
+          description: Leaving the page is counted, and too many switches submit the answers automatically
+        switching_screen_limit_time:
+          type: integer
+          description: Seconds away from the page that count as one switch
+        switching_screen_limit:
+          type: integer
+          description: Switches allowed; one more submits the answers automatically
+    AntiCheatingSettingInput:
+      type: object
+      description: Anti-cheating while the form is being filled in; only the keys present are written
+      properties:
+        enabled:
+          type: boolean
+          description: Turns anti-cheating on; true needs a plan that includes `防作弊`
+        copying_disabled:
+          type: boolean
+          description: Questions cannot be copied
+        paste_disabled:
+          type: boolean
+          description: Answers cannot be pasted in
+        switching_screen_disabled:
+          type: boolean
+          description: Count leaving the page, and submit the answers automatically after too many switches
+        switching_screen_limit_time:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Seconds away from the page that count as one switch
+        switching_screen_limit:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Switches allowed; one more submits the answers automatically
+      additionalProperties: false
     ExamSetting:
       type: object
       description: Exam settings; an empty object when the form has no exam settings record yet. Keys whose value is null are omitted
@@ -12345,6 +12976,8 @@ components:
                   total:
                     type: integer
                     description: Questions of this type on the form
+        anti_cheating:
+          $ref: '#/components/schemas/AntiCheatingSetting'
     ExamSettingInput:
       type: object
       description: Request body of PATCH /forms/{form_token}/exam_setting; only the keys present are written
@@ -12449,6 +13082,8 @@ components:
             then:
               required:
               - count
+        anti_cheating:
+          $ref: '#/components/schemas/AntiCheatingSettingInput'
       additionalProperties: false
     CheckinDateSetting:
       type: object
@@ -12775,6 +13410,8 @@ components:
                     type: array
                     items:
                       $ref: '#/components/schemas/IntervalComment'
+        anti_cheating:
+          $ref: '#/components/schemas/AntiCheatingSetting'
     EvaluationSettingInput:
       type: object
       description: Request body of PATCH /forms/{form_token}/evaluation_setting; only the keys present are written
@@ -12860,6 +13497,369 @@ components:
                           type: string
                       additionalProperties: false
                 additionalProperties: false
+          additionalProperties: false
+        anti_cheating:
+          $ref: '#/components/schemas/AntiCheatingSettingInput'
+      additionalProperties: false
+    WheelFortune:
+      type: object
+      description: Lucky wheel shown after the form is submitted; lottery / cash / text are left out until set
+      required:
+      - enabled
+      - expired
+      - setting_finished
+      - prizes
+      properties:
+        enabled:
+          type: boolean
+        expired:
+          type: boolean
+          description: The trial is over or the plan no longer covers it; respondents do not see the wheel then
+        setting_finished:
+          type: boolean
+          description: Everything the wheel needs is set; respondents see it only then
+        prizes:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - title
+            - prize_name
+            - prize_type
+            - prize_amount
+            - probability
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+                description: Prize tier, such as `一等奖`
+              prize_name:
+                type: string
+              prize_type:
+                type: string
+                enum:
+                - gift
+                - voucher
+                description: voucher hands each winner a code from an uploaded list
+              prize_amount:
+                type: integer
+              winner_amount:
+                type:
+                - integer
+                - 'null'
+                description: How many have been won
+              probability:
+                type: number
+                description: Chance of winning it, in percent
+              prize_image_url:
+                type:
+                - string
+                - 'null'
+        lottery:
+          type: object
+          required:
+          - limit_times
+          - show_casher
+          properties:
+            limit_times:
+              type: integer
+              description: Draws per entry
+            show_casher:
+              type: boolean
+              description: Winners see who hands out the prizes
+            casher_name:
+              type:
+              - string
+              - 'null'
+            casher_phone:
+              type:
+              - string
+              - 'null'
+            send_sms:
+              type: boolean
+              description: Winners get a text right after the draw
+            mobile_field_api_code:
+              type: string
+              description: The mobile field winners are texted at; only with send_sms
+            lottery_scope_rule_enabled:
+              type: boolean
+              description: Only respondents whose score fits lottery_scope_rule draw
+            lottery_scope_rule:
+              $ref: '#/components/schemas/WheelFortuneLotteryScopeRule'
+        cash:
+          type: object
+          required:
+          - cash_style
+          properties:
+            cash_style:
+              type: string
+              enum:
+              - phone
+              - code
+              description: phone redeems by the mobile number filled in; code gives each winner an 8-character code
+            mobile_field_api_code:
+              type: string
+              description: The mobile field winners redeem with; only for phone
+        text:
+          type: object
+          required:
+          - win_text
+          - lose_text
+          - cash_text
+          properties:
+            win_text:
+              type: string
+              description: Shown on a win; `$(奖品名称)` stands for the prize name
+            lose_text:
+              type: string
+            cash_text:
+              type: string
+              description: How to redeem, shown to winners
+    WheelFortuneLotteryScopeRule:
+      type: object
+      description: Scores that may draw
+      required:
+      - predicate_type
+      properties:
+        predicate_type:
+          type: string
+          enum:
+          - greater_than_or_equal_to
+          - less_than_or_equal_to
+          - equal_to
+          - range
+          description: greater_than_or_equal_to and equal_to compare with left_boundary, less_than_or_equal_to with right_boundary, range takes both
+        left_boundary:
+          type: number
+        right_boundary:
+          type: number
+      additionalProperties: false
+      allOf:
+      - if:
+          properties:
+            predicate_type:
+              enum:
+              - greater_than_or_equal_to
+              - equal_to
+              - range
+        then:
+          required:
+          - left_boundary
+      - if:
+          properties:
+            predicate_type:
+              enum:
+              - less_than_or_equal_to
+              - range
+        then:
+          required:
+          - right_boundary
+    WheelFortuneInput:
+      type: object
+      title: WheelFortuneInput
+      description: Request body of PATCH /forms/{form_token}/wheel_fortune; only the keys present are written
+      properties:
+        confirm_form_app_trial:
+          type: boolean
+          description: When the form's account has neither bought nor tried the lucky wheel, start its free trial before saving; once per account, by its owner or an admin, counting from now, so ask the user first
+        confirm_ending_conflicts:
+          type: boolean
+          description: Turn the wheel on although the form shows something else after submitting (confirmation code, certificate, exam score, evaluation report, rich-text message, redirect or red envelope); respondents then see only the wheel, and the ending switches to a message, the redirect is cleared and the red envelope turned off
+        enabled:
+          type: boolean
+          description: Turning it on takes prizes, lottery, cash and text, passed now or set before
+        prizes:
+          type: array
+          minItems: 1
+          maxItems: 7
+          description: Replaces the prizes as a whole; pass `id` back to keep a prize and its winners. Probabilities add up to at most 100
+          items:
+            type: object
+            required:
+            - title
+            - prize_name
+            - probability
+            properties:
+              id:
+                type: string
+                description: id from GET; leave out to add a prize
+              title:
+                type: string
+                pattern: "\\S"
+                maxLength: 10
+                description: Prize tier, such as `一等奖`
+              prize_name:
+                type: string
+                pattern: "\\S"
+                maxLength: 20
+              prize_type:
+                type: string
+                enum:
+                - gift
+                - voucher
+                description: gift by default; cannot be changed once the prize is saved
+              prize_amount:
+                type: integer
+                minimum: 0
+                maximum: 100000
+                description: For a voucher prize it is the number of vouchers, so leave it out or pass that number
+              probability:
+                type: number
+                minimum: 0
+                maximum: 100
+                description: Chance of winning it, in percent
+              prize_image_id:
+                type: string
+                description: "`attachment_id` from an upload with image_type wheel_fortune_prize, or the image this prize already has"
+              vouchers:
+                type: array
+                minItems: 1
+                maxItems: 100000
+                description: Codes handed to winners, one each; taken only when adding a voucher prize
+                items:
+                  type: object
+                  required:
+                  - code
+                  properties:
+                    code:
+                      type: string
+                      pattern: "\\S"
+                    password:
+                      type: string
+                      pattern: "\\S"
+                  additionalProperties: false
+            additionalProperties: false
+            allOf:
+            - if:
+                properties:
+                  prize_type:
+                    const: voucher
+                required:
+                - prize_type
+              else:
+                required:
+                - prize_amount
+            - if:
+                required:
+                - vouchers
+              then:
+                properties:
+                  prize_type:
+                    const: voucher
+                required:
+                - prize_type
+        lottery:
+          type: object
+          required:
+          - limit_times
+          - show_casher
+          properties:
+            limit_times:
+              type: integer
+              minimum: 1
+              maximum: 20
+              description: Draws per entry
+            show_casher:
+              type: boolean
+              description: Show winners who hands out the prizes; true takes casher_name and casher_phone
+            casher_name:
+              type: string
+              pattern: "\\S"
+            casher_phone:
+              type: string
+              pattern: "^[0-9]+$"
+              description: Digits only
+            send_sms:
+              type: boolean
+              description: Text each winner right after the draw, using the account's SMS balance; true takes mobile_field_api_code
+            mobile_field_api_code:
+              type: string
+              description: The mobile field winners are texted at
+            lottery_scope_rule_enabled:
+              type: boolean
+              description: Only respondents whose score fits lottery_scope_rule draw; exam and evaluation forms only, and true takes lottery_scope_rule. Pass it along with lottery_scope_rule
+            lottery_scope_rule:
+              $ref: '#/components/schemas/WheelFortuneLotteryScopeRule'
+          additionalProperties: false
+          allOf:
+          - if:
+              properties:
+                show_casher:
+                  const: true
+            then:
+              required:
+              - casher_name
+              - casher_phone
+          - if:
+              properties:
+                lottery_scope_rule_enabled:
+                  const: true
+              required:
+              - lottery_scope_rule_enabled
+            then:
+              required:
+              - lottery_scope_rule
+          - if:
+              required:
+              - lottery_scope_rule
+            then:
+              required:
+              - lottery_scope_rule_enabled
+          - if:
+              properties:
+                send_sms:
+                  const: true
+              required:
+              - send_sms
+            then:
+              required:
+              - mobile_field_api_code
+        cash:
+          type: object
+          description: How winners redeem; cannot be changed once saved
+          required:
+          - cash_style
+          properties:
+            cash_style:
+              type: string
+              enum:
+              - phone
+              - code
+              description: phone redeems by the mobile number filled in and takes mobile_field_api_code; code gives each winner an 8-character code
+            mobile_field_api_code:
+              type: string
+              description: api_code of the mobile field to redeem with
+          additionalProperties: false
+          if:
+            properties:
+              cash_style:
+                const: phone
+          then:
+            required:
+            - mobile_field_api_code
+        text:
+          type: object
+          required:
+          - win_text
+          - lose_text
+          - cash_text
+          properties:
+            win_text:
+              type: string
+              pattern: "\\S"
+              maxLength: 400
+              description: Shown on a win; `$(奖品名称)` stands for the prize name
+            lose_text:
+              type: string
+              pattern: "\\S"
+              maxLength: 300
+            cash_text:
+              type: string
+              pattern: "\\S"
+              maxLength: 300
+              description: How to redeem, shown to winners
           additionalProperties: false
       additionalProperties: false
     Cooperator:
@@ -13038,7 +14038,7 @@ components:
           additionalProperties: false
         submit_button:
           type: object
-          description: Buttons; color and font size apply to every button on the form
+          description: Buttons; color and font size apply to every button on the form. The submit button's text is set through the form setting's `wording.submit`
           properties:
             background_color:
               type: string
@@ -13262,6 +14262,141 @@ components:
         url:
           type: string
           description: Image URL, returned only when `image_type=description`; put it in the `<img src>` of a form description or field description
+    QuickpaySetting:
+      type: object
+      required:
+      - mode
+      - auto_delivery_enabled
+      - goods_field_api_code
+      - deliverables
+      properties:
+        mode:
+          type: string
+          enum:
+          - fixed
+          - choice
+          - custom
+          description: 'How buyers pay: fixed shows one price, choice lets them pick a tier, custom lets them enter an amount; a new form starts in custom when the goods field''s first item is price_only with a SKU for the `customized` option, choice when it has several items, otherwise fixed'
+        auto_delivery_enabled:
+          type: boolean
+          description: Hand buyers the deliverables of the tier they bought once they pay
+        goods_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: The goods field buyers see under this mode; only its deliverables are handed out
+        deliverables:
+          type: array
+          description: Deliverables of every goods field
+          items:
+            $ref: '#/components/schemas/QuickpayDeliverable'
+    QuickpayDeliverable:
+      type: object
+      required:
+      - token
+      - kind
+      - name
+      - goods_field_api_code
+      - goods_item_api_codes
+      properties:
+        token:
+          type: string
+        kind:
+          type: string
+          enum:
+          - link
+          - file
+          - image
+        name:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+          description: The link; only for kind link
+        goods_field_api_code:
+          type: string
+          description: The goods field this deliverable belongs to
+        goods_item_api_codes:
+          type: array
+          description: The tiers (goods item api_code) whose buyers get it
+          items:
+            type: string
+        attachment:
+          $ref: '#/components/schemas/GoodsDeliverableAttachment'
+    QuickpaySettingInput:
+      type: object
+      description: Request body of PATCH /forms/{form_token}/quickpay_setting; only the keys present are written
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum:
+          - fixed
+          - choice
+          - custom
+          description: Checked when it changes; fixed takes a goods field with one item; custom takes one whose first item is price_only with a SKU for the `customized` option
+        auto_delivery_enabled:
+          type: boolean
+        deliverables:
+          type: array
+          maxItems: 10
+          description: Replaces the deliverables of the goods field buyers see; an empty array removes them
+          items:
+            $ref: '#/components/schemas/QuickpayDeliverableInput'
+    QuickpayDeliverableInput:
+      type: object
+      additionalProperties: false
+      required:
+      - kind
+      - goods_item_api_codes
+      properties:
+        token:
+          type: string
+          description: Token of a deliverable to keep; left out, a new one is added
+        kind:
+          type: string
+          enum:
+          - link
+          - file
+          - image
+        name:
+          type: string
+          maxLength: 100
+        url:
+          type: string
+          pattern: "^https?://"
+          description: The link; required for kind link
+        attachment_id:
+          type: string
+          description: Uploaded file id; required for kind file / image, and kind image takes an image
+        goods_item_api_codes:
+          type: array
+          minItems: 1
+          description: The tiers (goods item api_code of the goods field buyers see) whose buyers get it
+          items:
+            type: string
+    GoodsDeliverableAttachment:
+      type: object
+      required:
+      - id
+      - file_name
+      - content_type
+      - file_size
+      properties:
+        id:
+          type: string
+          description: Pass it as a deliverable's `attachment_id`
+        file_name:
+          type: string
+        content_type:
+          type:
+          - string
+          - 'null'
+          description: MIME type
+        file_size:
+          type: integer
+          description: File size in bytes
     PreparedUpload:
       type: object
       required:
@@ -14339,6 +15474,72 @@ components:
           type: string
           description: id of the parent comment being replied to; must belong to the same entry; read on create only
       additionalProperties: false
+    EntryStateFlow:
+      type: object
+      required:
+      - flow
+      - state
+      - targets
+      properties:
+        flow:
+          type: string
+          description: Flow name
+        state:
+          type: string
+          description: The entry's current state in the flow, e.g. `not_redeemed`; `fsfinit` means the flow has not started
+        targets:
+          type: array
+          description: What the events act on — the red envelope, the entry itself for a reservation, or each wheel fortune winner; empty when there is nothing
+          items:
+            $ref: '#/components/schemas/EntryStateFlowTarget'
+    EntryStateFlowTarget:
+      type: object
+      required:
+      - events
+      properties:
+        events:
+          type: array
+          description: Events the target can take now
+          items:
+            $ref: '#/components/schemas/StateFlowEvent'
+        amount:
+          type: number
+          description: Red envelope amount in yuan
+        balance:
+          type:
+          - number
+          - 'null'
+          description: Red envelope balance left on the form, in yuan; reda_confirm is not offered while it is below amount
+        id:
+          type: string
+          description: Winner id, passed as target_id
+        prize_title:
+          type: string
+          description: Prize tier the winner won, e.g. `一等奖`
+        prize_name:
+          type: string
+          description: Prize name
+        voucher_code:
+          type:
+          - string
+          - 'null'
+          description: Voucher code handed to the winner; null when the prize is not a voucher
+        voucher_password:
+          type:
+          - string
+          - 'null'
+          description: Password of the voucher code; null when the voucher has none
+        cash_token:
+          type: string
+          description: Redemption code handed to the winner
+        cash_phone:
+          type:
+          - string
+          - 'null'
+          description: Mobile number the winner left for redemption; null when the wheel does not ask for one
+        redeemed:
+          type: boolean
+          description: Whether the winner has been redeemed
     OpensearchSearchFieldSetting:
       type: object
       required:
@@ -14742,7 +15943,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -14761,7 +15962,17 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     TextAreaInput:
       type: object
       title: TextAreaInput
@@ -14781,7 +15992,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -14800,7 +16011,17 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     NumberFieldInput:
       type: object
       title: NumberFieldInput
@@ -14820,7 +16041,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -14841,7 +16062,7 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
         range_min:
           type: number
           description: Minimum value, inclusive
@@ -14880,6 +16101,16 @@ components:
           - dollar1
           - cny1
           description: Field icon
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: display_as_percentage and thousands_separator cannot both be true
         not:
@@ -14910,7 +16141,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -14926,7 +16157,17 @@ components:
           description: Refuse a value an existing entry already has
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     MobileFieldInput:
       type: object
       title: MobileFieldInput
@@ -14946,7 +16187,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -14965,10 +16206,20 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
         sms_verification:
           type: boolean
           description: Verify the number by SMS (this also turns on the image captcha)
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     IdCardFieldInput:
       type: object
       title: IdCardFieldInput
@@ -14988,7 +16239,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15002,6 +16253,16 @@ components:
         unique:
           type: boolean
           description: Refuse a value an existing entry already has
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     NameFieldInput:
       type: object
       title: NameFieldInput
@@ -15021,7 +16282,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15035,6 +16296,16 @@ components:
         unique:
           type: boolean
           description: Refuse a value an existing entry already has
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     RadioButtonInput:
       type: object
       title: RadioButtonInput
@@ -15054,7 +16325,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15083,6 +16354,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15116,7 +16400,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15153,6 +16437,19 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15186,7 +16483,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15212,6 +16509,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -15245,7 +16555,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15267,6 +16577,16 @@ components:
           - minute
           - second
           description: Date precision; day by default
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     RatingFieldInput:
       type: object
       title: RatingFieldInput
@@ -15286,7 +16606,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15320,7 +16640,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15360,7 +16680,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15379,7 +16699,17 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     AddressFieldInput:
       type: object
       title: AddressFieldInput
@@ -15399,7 +16729,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15421,6 +16751,16 @@ components:
         enable_auto_position:
           type: boolean
           description: Fill in the address from the device location when the form first opens
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 2
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     AttachmentFieldInput:
       type: object
       title: AttachmentFieldInput
@@ -15440,7 +16780,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15565,7 +16905,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15595,7 +16935,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15614,7 +16954,17 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     NpsFieldInput:
       type: object
       title: NpsFieldInput
@@ -15634,7 +16984,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15670,7 +17020,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15694,6 +17044,16 @@ components:
         include_second:
           type: boolean
           description: Include seconds
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     SortFieldInput:
       type: object
       title: SortFieldInput
@@ -15713,7 +17073,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15752,7 +17112,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15782,7 +17142,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15817,7 +17177,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15847,6 +17207,19 @@ components:
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     LikertFieldInput:
       type: object
       title: LikertFieldInput
@@ -15866,7 +17239,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -15957,7 +17330,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16005,7 +17378,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16048,7 +17421,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16095,7 +17468,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16162,6 +17535,16 @@ components:
           - text
           - text2
           description: Field icon
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: display_as_percentage and thousands_separator cannot both be true
         not:
@@ -16192,7 +17575,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16242,7 +17625,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16283,6 +17666,16 @@ components:
           items:
             type: string
           description: api_code of the fields the reverse association shows
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
     ImageRadioButtonInput:
       type: object
       title: ImageRadioButtonInput
@@ -16302,7 +17695,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16328,6 +17721,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16361,7 +17757,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16395,6 +17791,9 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -16428,7 +17827,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16464,7 +17863,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16507,7 +17906,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16550,7 +17949,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16600,7 +17999,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16645,7 +18044,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16694,7 +18093,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16723,6 +18122,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -16786,7 +18198,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16823,6 +18235,19 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -16906,7 +18331,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -16932,6 +18357,9 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -16995,7 +18423,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17029,6 +18457,9 @@ components:
           type: integer
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
         answers:
           type: array
           minItems: 1
@@ -17112,7 +18543,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17141,6 +18572,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -17204,7 +18648,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17230,6 +18674,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -17292,7 +18749,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17311,7 +18768,17 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -17361,7 +18828,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17380,7 +18847,17 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -17430,7 +18907,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17451,7 +18928,7 @@ components:
           description: Default value
         placeholder:
           type: string
-          description: Placeholder text
+          description: Grey hint inside the empty input box, gone once the filler types
         range_min:
           type: number
           description: Minimum value, inclusive
@@ -17490,6 +18967,16 @@ components:
           - dollar1
           - cny1
           description: Field icon
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
         answers:
           type: array
           minItems: 1
@@ -17549,7 +19036,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17613,7 +19100,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17678,7 +19165,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17707,6 +19194,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17740,7 +19240,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17769,6 +19269,19 @@ components:
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -17802,7 +19315,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -17898,6 +19411,10 @@ components:
         api_code:
           type: string
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
+        quota:
+          type: integer
+          minimum: 1
+          description: Maximum number of places; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -17974,7 +19491,6 @@ components:
           const: by_day_repeat_weekly
         available_days_of_week:
           type: array
-          minItems: 1
           items:
             type: string
             enum:
@@ -18057,6 +19573,31 @@ components:
               end_time:
                 type: string
           description: Time ranges that cannot be booked
+        special_time_range_quotas:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - special_dates
+            - quota
+            properties:
+              special_dates:
+                type: array
+                minItems: 1
+                items:
+                  type: string
+                  format: date
+                description: Dates this entry applies to, as YYYY-MM-DD
+              quota:
+                type: integer
+                minimum: 0
+                description: Places
+              price:
+                type: number
+                minimum: 0
+                description: Price when payable
+          description: 'Special dates: they can be booked even when their day of the week is not in available_days_of_week, and their quota and price replace the day-of-week ones. Left out on a write, the current special dates are kept; [] clears them'
     ReservationByTimeRangeQuotaInput:
       type: object
       title: ReservationByTimeRangeQuotaInput
@@ -18069,7 +19610,6 @@ components:
           const: by_time_range_repeat_daily
         available_days_of_week:
           type: array
-          minItems: 1
           items:
             type: string
             enum:
@@ -18081,6 +19621,7 @@ components:
             - friday
             - saturday
           description: Days of the week that can be booked, as lowercase English day names
+          minItems: 1
         show_left_quota:
           type: boolean
           description: Show the places left
@@ -18223,7 +19764,7 @@ components:
       title: FormCreateConstraints
       description: Constraints between fields and scene / layout when creating a form
       allOf:
-      - description: The card layout cannot hold field types the paged layout cannot render
+      - description: The card layout cannot hold field types the paged layout cannot render, nor a field width
         if:
           properties:
             layout:
@@ -18243,6 +19784,12 @@ components:
                       - WidgetContact
                       - WidgetVideo
                       - WidgetButton
+                not:
+                  anyOf:
+                  - required:
+                    - grids_to_occupy
+                  - required:
+                    - start_new_row
       - description: scene=exam takes ExamFieldInput
         if:
           properties:
@@ -19272,7 +20819,7 @@ components:
                 type: string
         fields:
           type: array
-          description: Fields on the fill page, in fill order; for a form view, labels, descriptions and required flags follow the view
+          description: Fields on the fill page, in fill order; for a form view, labels, descriptions and required flags follow the view; an exam that draws questions at random lists one draw per call, as each opening of the page does
           items:
             $ref: '#/components/schemas/FieldMap'
         manageable:
@@ -21826,7 +23373,7 @@ components:
           description: See `GET /smtp_accounts`
     SMSMessageChannelInput:
       type: object
-      description: Sends with an SMS template whose variables are declared, once the template is approved
+      description: Sends with an SMS template once the template is approved
       additionalProperties: false
       required:
       - type
@@ -22027,7 +23574,7 @@ components:
           additionalProperties:
             type: string
             maxLength: 100
-          description: Value of every variable the channel's template declares, keyed as in the template (`var_1`...)
+          description: Value of every `$(...)` variable in the channel's template, keyed by its name (`key` in `GET /sms/templates`)
         idempotency_key:
           type: string
           maxLength: 255
@@ -22285,17 +23832,22 @@ components:
       type: object
       required:
       - data
+      - page_url
       properties:
         data:
           type: array
           description: SMTP accounts the account can send email through
           items:
             $ref: '#/components/schemas/SMTPAccount'
+        page_url:
+          type: string
+          description: The settings page where the account's SMTP accounts are added and changed
       examples:
       - data:
         - id: 6512a3f0c1d2e3f4a5b6c7d9
           name: Jinshuju Events
           email: events@example.com
+        page_url: https://jinshuju.net/system/third_parties/smtp
     SMTPAccount:
       type: object
       required:
@@ -22569,7 +24121,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22788,7 +24340,7 @@ components:
           description: Temporary id within this request, for formulas and the like to refer to
         notes:
           type: string
-          description: Field notes
+          description: Text shown under the field label
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22952,6 +24504,15 @@ components:
           - type: 'null'
         delete_authorized:
           description: Not accepted. A body that names it, whatever its value, returns `422` `delete_authorization_page_only`.
+        message_rules:
+          type:
+          - array
+          - 'null'
+          description: The messages a run may send; on update they replace the routine's. A new or changed one is saved only as the user confirmed it on a card in this Jiri conversation.
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/RoutineGroupMessageRuleInput'
+            - $ref: '#/components/schemas/RoutineEmailMessageRuleInput'
     RoutineScheduleInput:
       type: object
       description: |
@@ -22980,6 +24541,97 @@ components:
           items:
             type: integer
           description: "`monthly`: 1–31, or -1 for the last day; a month without the day (the 31st, say) is skipped"
+    RoutineGroupMessageRuleInput:
+      type: object
+      description: A message sent to a WeCom or DingTalk group
+      properties:
+        approach:
+          type: string
+          enum:
+          - wxwork
+          - ding_talk
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        address_id:
+          type: string
+          description: A robot address the user entered in this Jiri conversation
+        channel_id:
+          type: string
+          description: Keep sending to this group; left out with `id` keeps the rule's group
+        mentioned_mobile_list:
+          type: array
+          description: Mobiles to @ in the group, `@all` for everyone; a WeCom message that mentions anyone is sent as plain text, not Markdown
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+        mentioned_fields:
+          type: array
+          description: Mobile fields a run may pick people from to @ as well, each run the ones the instruction names; each one picked must be in the field, at most 50 people are mentioned in all
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - form_token
+            - field_code
+            properties:
+              form_token:
+                type: string
+                description: A form or table you can see
+              field_code:
+                type: string
+                description: A mobile field of it, such as `field_3`
+        content:
+          type: string
+          description: The message as the group receives it, at most 2000 characters; Jiri fills in what changes from run to run
+    RoutineGroupMessageRule:
+      type: object
+      description: A message sent to a WeCom or DingTalk group
+      required:
+      - id
+      - approach
+      - channel_id
+      - masked_address
+      - mentioned_mobile_list
+      - mentioned_fields
+      - content
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - wxwork
+          - ding_talk
+          -
+          description: null when the group was deleted
+        channel_id:
+          type: string
+        masked_address:
+          type:
+          - string
+          - 'null'
+          description: The robot address with its key hidden; null when the group was deleted
+        mentioned_mobile_list:
+          type: array
+          items:
+            type: string
+        mentioned_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutineMessageRuleField'
+        content:
+          type: string
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
     RoutineEventInput:
       type: object
       description: When data changes. The source must be a form or table you created, or whose data you can read; it is added to the objects on save.
@@ -23063,6 +24715,7 @@ components:
       - data_condition
       - objects
       - delete_authorized
+      - message_rules
       - runs_count
       - last_run
       - url
@@ -23248,6 +24901,13 @@ components:
         delete_authorized:
           type: boolean
           description: Whether runs may delete data in the linked forms and tables
+        message_rules:
+          type: array
+          description: The messages a run may send
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/RoutineGroupMessageRule'
+            - $ref: '#/components/schemas/RoutineEmailMessageRule'
         runs_count:
           type: integer
           description: How many times it has run
@@ -24149,3 +25809,178 @@ components:
       - $ref: '#/components/schemas/RatingInput'
       - $ref: '#/components/schemas/NpsInput'
       title: EvaluationFieldInput
+    ReservationQuotaSettingInput:
+      type: object
+      title: ReservationQuotaSettingInput
+      description: Bookable days, time slots and places per slot, branched on type
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - by_day_repeat_weekly
+          - by_time_range_repeat_daily
+      discriminator:
+        propertyName: type
+        mapping:
+          by_day_repeat_weekly: "#/components/schemas/ReservationByDayQuotaInput"
+          by_time_range_repeat_daily: "#/components/schemas/ReservationByTimeRangeQuotaInput"
+      oneOf:
+      - $ref: '#/components/schemas/ReservationByDayQuotaInput'
+      - $ref: '#/components/schemas/ReservationByTimeRangeQuotaInput'
+    ReservationItemImageInput:
+      type: object
+      title: ReservationItemImageInput
+      additionalProperties: false
+      anyOf:
+      - required:
+        - image_url
+      - required:
+        - image_base64
+      - required:
+        - attachment_id
+      properties:
+        image_url:
+          type: string
+          format: uri
+        image_base64:
+          type: string
+        attachment_id:
+          type: string
+          description: The `attachment_id` of an image_type=reservation_item upload, or of an image the reservation items already have
+    RoutineMessageRuleField:
+      type: object
+      required:
+      - form_token
+      - field_code
+      - form_name
+      - field_label
+      properties:
+        form_token:
+          type:
+          - string
+          - 'null'
+          description: null when the form or table was deleted
+        field_code:
+          type: string
+        form_name:
+          type:
+          - string
+          - 'null'
+        field_label:
+          type:
+          - string
+          - 'null'
+          description: null when the field was deleted
+      description: A field of a form or table a run may pick people from
+    RoutineEmailMessageRuleInput:
+      type: object
+      description: An email
+      anyOf:
+      - required:
+        - approach
+      - required:
+        - id
+      properties:
+        approach:
+          type: string
+          enum:
+          - email
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        smtp_account_id:
+          type:
+          - string
+          - 'null'
+          description: Send through this custom SMTP account (`id` from `GET /smtp_accounts`); null sends from Jinshuju's address, using the email balance
+        recipients:
+          type: array
+          description: Addresses a run may send to
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+        recipient_fields:
+          type: array
+          description: Email fields a run may pick recipients from as well, each run the ones the instruction names; each one picked must be in the field
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - form_token
+            - field_code
+            properties:
+              form_token:
+                type: string
+                description: A form or table you can see
+              field_code:
+                type: string
+                description: An email field of it, such as `field_3`
+        subject:
+          type: string
+          description: The subject; Jiri fills in what changes from run to run
+        content:
+          type: string
+          description: The body in Markdown, at most 20000 characters; Jiri fills in what changes from run to run
+    RoutineEmailMessageRule:
+      type: object
+      description: An email
+      required:
+      - id
+      - approach
+      - smtp_account_id
+      - recipients
+      - recipient_fields
+      - subject
+      - content
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - email
+          -
+          description: null when its SMTP server was deleted or can no longer be used
+        smtp_account_id:
+          type:
+          - string
+          - 'null'
+          description: null when it is sent from Jinshuju's address
+        recipients:
+          type: array
+          items:
+            type: string
+        recipient_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutineMessageRuleField'
+        subject:
+          type: string
+        content:
+          type: string
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
+    StateFlowName:
+      type: string
+      enum:
+      - red_envelope_audit_state
+      - reservation_status
+      - wheel_fortune_prize_audit_state
+    StateFlowEvent:
+      type: string
+      enum:
+      - reda_confirm
+      - reda_refuse
+      - cancel_all
+      - winner_confirm
+      - delete_winner
