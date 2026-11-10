@@ -9,6 +9,12 @@ export interface Refusal {
   readonly message: string;
 }
 
+/** A reason as API v1's 400 gives it in errors[]: every place it occurs, as JSON Pointers. */
+export interface Reason {
+  readonly pointers: readonly string[];
+  readonly message: string;
+}
+
 /**
  * A body refused here, before it was sent, by the openapi.yaml this CLI
  * shipped with (src/preflight.ts). Usage, like any input the CLI could not
@@ -108,8 +114,11 @@ export type ClassifiedError = {
   body?: unknown;
   /** Seconds the server asked for before trying again, when it said. */
   retry_after?: number;
-  /** What a body was refused for before it was sent, each at its pointer. */
-  errors?: readonly Refusal[];
+  /**
+   * What a body was refused for before it was sent, in the shape of a server's
+   * 400 so a caller reads both the same way.
+   */
+  errors?: readonly Reason[];
 };
 
 function kindOfStatus(status: number): ErrorKind {
@@ -136,7 +145,8 @@ function retryAfterIn(body: unknown): number | undefined {
 export function classify(error: unknown): ClassifiedError {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof PreflightError) {
-    return { kind: 'usage', exitCode: EXIT_CODES.usage, message, errors: error.errors };
+    const errors = error.errors.map(({ pointer, message }) => ({ pointers: [pointer], message }));
+    return { kind: 'usage', exitCode: EXIT_CODES.usage, message, errors };
   }
   if (error instanceof UsageError) return { kind: 'usage', exitCode: EXIT_CODES.usage, message };
   if (error instanceof AuthError) return { kind: 'auth', exitCode: EXIT_CODES.auth, message };

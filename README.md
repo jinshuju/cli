@@ -462,6 +462,10 @@ the server answered with:
 }
 ```
 
+A payload the CLI refuses before sending it (exit code 2, no `status`) carries
+its reasons as `errors: [{ "pointers": ["/fields/0/required"], "message": … }]`,
+the shape API v1 gives them in a 400's body.
+
 ## Timeouts and retries
 
 Every request has a deadline of one minute; `JINSHUJU_TIMEOUT_MS` changes it. A
