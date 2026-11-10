@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -2500,6 +2500,79 @@ test('form wheel-fortune edit uploads nothing when one --prize-image file cannot
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /could not read missing\.png/);
   assert.equal(mock.requests.length, 0);
+});
+
+const QUICKPAY = {
+  mode: 'choice',
+  deliverables: [
+    { kind: 'link', name: '下载地址', url: 'https://example.com/book', goods_item_api_codes: ['early'] },
+    { kind: 'file', name: '电子书', goods_item_api_codes: ['early', 'full'] }
+  ]
+};
+
+test('form quickpay get reads, and edit without --deliverable-file sends the payload as one PATCH', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'quickpay', 'get', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'quickpay', 'edit', 'Kp7mQ2', '--json', '{"auto_delivery_enabled":true}'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0].method, 'GET');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/quickpay_setting');
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[1].method, 'PATCH');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/quickpay_setting');
+  assert.deepEqual(mock.requests[1].body, { auto_delivery_enabled: true });
+});
+
+test('form quickpay edit --deliverable-file uploads the file and sets it on the deliverable of that name', async () => {
+  const mock = uploadingClient({ '/api/v1/forms/Kp7mQ2/goods_deliverable_attachments': { id: 'gd_1' } });
+
+  await cli(
+    [
+      'form',
+      'quickpay',
+      'edit',
+      'Kp7mQ2',
+      '--json',
+      JSON.stringify(QUICKPAY),
+      '--deliverable-file',
+      '电子书=package.json'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/goods_deliverable_attachments');
+  assert.ok(mock.requests[0].form?.get('file'));
+  assert.deepEqual(mock.requests[1].body, {
+    ...QUICKPAY,
+    deliverables: [QUICKPAY.deliverables[0], { ...QUICKPAY.deliverables[1], attachment_id: 'gd_1' }]
+  });
+});
+
+test('form quickpay edit uploads nothing when a --deliverable-file names no deliverable, or its file will not go', async () => {
+  const tooLarge = join(mkdtempSync(join(tmpdir(), 'jsj-')), 'course.zip');
+  writeFileSync(tooLarge, '');
+  truncateSync(tooLarge, 200 * 1024 * 1024 + 1);
+
+  for (const [named, reason] of [
+    ['讲义=package.json', /no deliverable in the payload has that name/],
+    ['电子书=./missing.pdf', /could not read \.\/missing\.pdf/],
+    [`电子书=${tooLarge}`, /course\.zip is over 200 MB/]
+  ] as const) {
+    const mock = uploadingClient({});
+    const result = await cli(
+      ['form', 'quickpay', 'edit', 'Kp7mQ2', '--json', JSON.stringify(QUICKPAY), '--deliverable-file', named],
+      { env: WRITE_ENV, client: mock.client }
+    );
+
+    assert.equal(result.exitCode, 2);
+    assert.match(result.stderr, reason);
+    assert.equal(mock.requests.length, 0);
+  }
 });
 
 test('form image upload sends the image as a description image and answers with its url', async () => {

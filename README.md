@@ -369,7 +369,7 @@ version has no such scope, and the routine commands answer it with 403 (exit
 
 ## Working with files
 
-Eight commands take a file. The CLI uploads with its own credential; there is no
+Nine commands take a file. The CLI uploads with its own credential; there is no
 ticket to fetch first.
 
 ```bash
@@ -380,6 +380,7 @@ jinshuju entry create --form Kp7mQ2 --json '{"field_1":"Alice"}' --attach field_
 jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
 jinshuju opensearch edit Qy7nR3 --header ./banner.png
 jinshuju form wheel-fortune edit Kp7mQ2 --json @wheel.json --prize-image 一等奖=./earbuds.png
+jinshuju form quickpay edit Kp7mQ2 --json @quickpay.json --deliverable-file 电子书=./book.pdf
 jinshuju form image upload ./venue-map.png      # answers with a url for an <img> in a form or field description
 jinshuju sms signature create 小金培训 --license ./license.jpg --company-name 小金培训有限公司 --company-id 91110000MA00000000 \
   --id-card-front ./front.jpg --id-card-back ./back.jpg --id-card-name 张三 --id-card-number 110101199001011234 --mobile 13800000000
