@@ -287,9 +287,10 @@ the suite never reads the developer's own credentials.
   `src/generated` and fails on any difference, runs the same checks on Node 20
   and 22, then packs the tarball, installs it and starts both binaries.
 - Commits are conventional commits, and PRs are squash-merged so each lands as
-  one. release-please keeps a release PR open from `feat` and `fix` commits;
-  merging it tags, releases and publishes to npm through OIDC trusted
-  publishing. No token is stored anywhere.
+  one, unless its commits are separate changes the changelog should list one by
+  one: then it is rebase-merged. release-please keeps a release PR open from
+  `feat` and `fix` commits; merging it tags, releases and publishes to npm
+  through OIDC trusted publishing. No token is stored anywhere.
 - `VERSION` is read from `package.json` at runtime, so a release bumps one
   file.
 - A new OAuth scope in `defaultScopes` is released only after goldendata has
