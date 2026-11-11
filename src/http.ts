@@ -146,38 +146,34 @@ const MAX_REASONS = 20;
  * three of what may be a hundred and counts the rest. A caller shown the
  * description alone corrects what it was told, sends again, and learns the
  * next. So every reason is a line of its own, under whatever the description
- * said ahead of the first ("Request body invalid:"). One line per pointer,
- * carrying each distinct reason said at it: a value may break two rules at
- * once (too short, and not of its pattern), and a field that may be one of
- * several shapes is told about the same pointer once per shape. A list too
- * long to read is cut, and says how many it kept back.
+ * said ahead of the first ("Request body invalid:"). One line per entry of
+ * errors[]: API v1 already says a mistake made in several places once, its
+ * `pointers` naming them all and its message the first five, so splitting an
+ * entry by place would print it again for each, and two reasons at one place
+ * (a field that may be one of several shapes) are two things to fix. The
+ * places go in front of a line only when its message names none of them; an
+ * older server's single `pointer` counts as one place. A list too long to read
+ * is cut, and says how many it kept back.
  */
 function everyReason(body: Record<string, unknown>, stated: string): { head: string; rest: string[] } | undefined {
   const errors = body.errors;
   if (!Array.isArray(errors) || errors.length === 0) return undefined;
 
-  // Pointer to the reasons said at it, in the order the pointers were first named.
-  const said = new Map<string, { at: string | undefined; messages: string[] }>();
+  const lines: string[] = [];
   let first: string | undefined;
-  let count = 0;
   for (const item of errors) {
     if (item === null || typeof item !== 'object') continue;
-    const { pointer, message } = item as { pointer?: unknown; message?: unknown };
+    const { message } = item as { message?: unknown };
     if (typeof message !== 'string' || !message.trim()) continue;
-    const at = typeof pointer === 'string' && pointer ? pointer : undefined;
-    const entry = said.get(at ?? message) ?? { at, messages: [] };
-    if (entry.messages.includes(message)) continue;
-    entry.messages.push(message);
-    said.set(at ?? message, entry);
+    const places = placesOf(item);
+    const unplaced = places.length > 0 && !places.some((place) => message.includes(place));
+    const line = unplaced ? `${placeList(places)}: ${message}` : message;
+    if (lines.includes(line)) continue;
+    lines.push(line);
     first ??= message;
-    count += 1;
   }
   if (first === undefined) return undefined;
-  if (count === 1 && stated.includes(first)) return undefined;
-  const lines = [...said.values()].map(({ at, messages }) => {
-    const text = messages.join('; ');
-    return at && !messages.some((message) => message.includes(at)) ? `${at}: ${text}` : text;
-  });
+  if (lines.length === 1 && stated.includes(first)) return undefined;
 
   const kept = lines.slice(0, MAX_REASONS);
   if (lines.length > kept.length) kept.push(`… and ${lines.length - kept.length} more; --output json carries them all`);
@@ -187,6 +183,21 @@ function everyReason(body: Record<string, unknown>, stated: string): { head: str
   const heading = index < 0 ? stated : stated.slice(0, index).trim();
   if (heading) return { head: heading, rest: kept };
   return { head: kept[0] as string, rest: kept.slice(1) };
+}
+
+/** The JSON Pointers an entry of errors[] names: API v1's `pointers`, or an older server's `pointer`. */
+function placesOf(item: object): string[] {
+  const { pointers, pointer } = item as { pointers?: unknown; pointer?: unknown };
+  const named: unknown[] = Array.isArray(pointers) ? pointers : [pointer];
+  return named.filter((place): place is string => typeof place === 'string' && place !== '');
+}
+
+/** The most places put in front of one line, as many as API v1 names in a message. */
+const MAX_PLACES = 5;
+
+function placeList(places: readonly string[]): string {
+  const named = places.slice(0, MAX_PLACES).join(', ');
+  return places.length > MAX_PLACES ? `${named} and ${places.length - MAX_PLACES} more` : named;
 }
 
 /**
