@@ -588,7 +588,10 @@ webhook notification pushes it. A webhook can also push JSON of your own
 instead: `--body` is the whole request body, the text of a JSON object or
 array, posted as it is. A sent message cannot be recalled, so it takes
 `--yes`. After a timeout, send again with the same `--idempotency-key`: the
-API answers the first records instead of sending twice.
+API answers the first records instead of sending twice. `--estimate` in place
+of `--yes` checks the message as the send would and sends nothing: it answers
+how many records it would create and how many SMS or emails it would bill, and
+is refused as the send would be, a balance that does not cover it included.
 
 `message channel list` gives the ids `--channel` takes, `--type` narrowing
 them, and `message channel get <id>` shows one. Email needs no channel: without
@@ -599,6 +602,7 @@ SMTP account.
 jinshuju message channel list --type wxwork
 jinshuju message send --type wxwork --channel 6729f1c2a1b2c3d4e5f60718 --content '今天是星期三，该吃午饭啦！' --mention 13800000000 --yes
 jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes
+jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 --variable var_2=9:00 --estimate
 jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 --variable var_2=9:00 --yes
 jinshuju message send --type webhook --channel 6729f1c2a1b2c3d4e5f6071a --body '{"report":"orders","order_count":1}' --yes
 ```
