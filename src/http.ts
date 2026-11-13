@@ -122,11 +122,30 @@ function describeFailure(response: Response, text: string, parsed: ParsedBody): 
   const stated = body.message ?? body.error_description;
   if (typeof stated === 'string' && stated.trim()) {
     const reasons = everyReason(body, stated);
-    if (!reasons) return withCode(stated, body.error);
-    return [withCode(reasons.head, body.error), ...reasons.rest.map((line) => `  ${line}`)].join('\n');
+    const said = reasons
+      ? [withCode(reasons.head, body.error), ...reasons.rest.map((line) => `  ${line}`)]
+      : [withCode(stated, body.error)];
+    return [...said, ...restOf(body)].join('\n');
   }
 
   return rowErrors(body) ?? `${status}: ${snippet(JSON.stringify(parsed.value))}`;
+}
+
+/** What a refusal's lines above already say: the reason, the code and every reason in errors[]. */
+const SAID = new Set(['message', 'error_description', 'error', 'errors']);
+
+/**
+ * What a refusal carries besides its reason, a line a field under it: the paid
+ * features and the plan a plan refusal names, the balance a short VAS leaves. A
+ * caller reading text output, as Jiri does, passes these on as much as it acts
+ * on the code; `--output json` has them already, in `body`. Anything but a
+ * string is JSON, not a table: a table keeps the scalar columns, and each paid
+ * feature's lowest_plan would not reach the caller.
+ */
+function restOf(body: Record<string, unknown>): string[] {
+  return Object.entries(body)
+    .filter(([key]) => !SAID.has(key))
+    .map(([key, value]) => `  ${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
 }
 
 function withCode(reason: string, code: unknown): string {
