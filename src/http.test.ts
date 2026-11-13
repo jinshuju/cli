@@ -93,6 +93,38 @@ test('a refusal that names its error code keeps the code beside the reason, once
   assert.equal(named.message, 'paid_plan_required: upgrade first');
 });
 
+test('a refusal carrying more than its reason has the rest printed under it', async () => {
+  const server = await serve({
+    '/api/v1/forms/Kp7mQ2': {
+      status: 400,
+      body: JSON.stringify({
+        error_description: 'The current plan does not include 填写地域限制 (submission_region_limit)',
+        error: 'paid_feature_required',
+        paid_features: [
+          { key: 'submission_region_limit', name: '填写地区限制', lowest_plan: { code: 'pro2', name: '专业版' } }
+        ],
+        recommended_plan: { code: 'pro2', name: '专业版' },
+        triable: false,
+        caller_can_purchase: true
+      })
+    }
+  });
+  const error = await failure(server.url, '/api/v1/forms/Kp7mQ2');
+  await server.close();
+
+  const [reason, ...rest] = error.message.split('\n');
+  assert.equal(
+    reason,
+    'The current plan does not include 填写地域限制 (submission_region_limit) (paid_feature_required)'
+  );
+  assert.deepEqual(rest, [
+    '  paid_features: [{"key":"submission_region_limit","name":"填写地区限制","lowest_plan":{"code":"pro2","name":"专业版"}}]',
+    '  recommended_plan: {"code":"pro2","name":"专业版"}',
+    '  triable: false',
+    '  caller_can_purchase: true'
+  ]);
+});
+
 test('a per-row rejection names the rows, rather than collapsing to the HTTP status text', async () => {
   const server = await serve({
     '/api/v1/forms/Kp7mQ2/entries/batch': {
