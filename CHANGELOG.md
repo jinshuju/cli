@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.24.0](https://github.com/jinshuju/cli/compare/v0.23.0...v0.24.0) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* with `--output json`, a payload refused before sending (exit code 2) gives `error.errors[]` as `{ pointers: string[], message }` instead of `{ pointer: string, message }`, the shape of API v1's 400.
+
+### Features
+
+* **entry:** review red envelopes, cancel reservations and redeem prizes with entry state-flow ([c3fe233](https://github.com/jinshuju/cli/commit/c3fe23350e03ad7b836534d9e4f4a353929d0410))
+* follow openapi.yaml changes to createForm, createNotificationRule, createRoutine and 8 more ([7ef44da](https://github.com/jinshuju/cli/commit/7ef44dad246c40f58a9bdb509832077f3938d0f1))
+* **form:** set a quick payment form's mode and auto delivery with form quickpay get and edit ([e69e90b](https://github.com/jinshuju/cli/commit/e69e90bf670331c66ffa70eb8ffa8b8483e67487))
+* **form:** set up a form's lucky wheel with form wheel-fortune get, edit and export-vouchers ([77e27c9](https://github.com/jinshuju/cli/commit/77e27c9e82331285721e439c5c6817cbf8342f81))
+* give preflight's --output json errors as pointers, the shape API v1 answers in ([887e78a](https://github.com/jinshuju/cli/commit/887e78a8abf992db53590c1d77ce7b321167fb20))
+* print what a refusal carries besides its reason, a line a field under it ([#109](https://github.com/jinshuju/cli/issues/109)) ([82f692c](https://github.com/jinshuju/cli/commit/82f692cf9db3a44060417c0fab51488a2d433959))
+
+
+### Fixes
+
+* say each reason of a 400 on one line, reading the places API v1 gives as pointers ([#98](https://github.com/jinshuju/cli/issues/98)) ([639b2b7](https://github.com/jinshuju/cli/commit/639b2b76adc6f83f2e350fad7f7b422c6d60e203))
+
 ## [0.23.0](https://github.com/jinshuju/cli/compare/v0.22.0...v0.23.0) (2026-11-10)
 
 
