@@ -2437,10 +2437,10 @@ paths:
         Moves the form into a folder, or out of one (pass null as `folder_token`), the same as moving it on the product page; PUT is accepted too.
         OAuth scope: forms
         - The request body must contain the `folder_token` key (its value may be null); otherwise 400.
-        - `folder_token` takes only a folder token (not an id); returns 404 when the folder does not exist or the current user lacks manage permission on it.
-        - Takes a role given on the form itself, not only one inherited from a shared folder, and manage permission on the folder the caller placed it in; otherwise 403. An account access token needs no role.
-        - The folder type (form / table) must match the form's type; otherwise 400.
-        - To move a table, use `PATCH /tables/{table_token}/folder`.
+        - `folder_token` and `original_folder_token` take only folder tokens (not ids); returns 404 when a folder does not exist or the current user lacks manage permission on the target folder, and 400 when moving into a folder and the form is in neither `original_folder_token` nor that folder.
+        - Takes a role given on the form itself, not only one inherited from a shared folder, and manage permission on the folder it is moved out of; otherwise 403. An account access token needs no role.
+        - Moving it out of a folder takes it out for everyone, also out of a shared folder another cooperator put it in.
+        - The folder type (form / table) must match the form's type; otherwise 400. To move a table, use `PATCH /tables/{table_token}/folder`.
       operationId: moveFormToFolder
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -7965,10 +7965,10 @@ paths:
         Moves a table into a folder, or out of its folder (`folder_token` set to null), the same as moving it on the product page; PUT is also accepted.
         OAuth scope: forms
         - The request body must include the `folder_token` key (its value may be null); otherwise 400.
-        - `folder_token` accepts only a folder token (not an id); returns 404 when the folder does not exist or the current user lacks manage permission on it.
-        - Takes a role given on the table itself, not only one inherited from a shared folder, and manage permission on the folder the caller placed it in; otherwise 403. An account access token needs no role.
-        - The target folder's kind must be table; otherwise 400.
-        - Returns 404 `Table not found` when the token is not a table's.
+        - `folder_token` and `original_folder_token` accept only folder tokens (not ids); returns 404 when a folder does not exist or the current user lacks manage permission on the target folder, and 400 when moving into a folder and the table is in neither `original_folder_token` nor that folder.
+        - Takes a role given on the table itself, not only one inherited from a shared folder, and manage permission on the folder it is moved out of; otherwise 403. An account access token needs no role.
+        - Moving it out of a folder takes it out for everyone, also out of a shared folder another cooperator put it in.
+        - The target folder's kind must be table; otherwise 400. Returns 404 `Table not found` when the token is not a table's.
       operationId: moveTableToFolder
       parameters:
       - $ref: '#/components/parameters/TableToken'
@@ -9395,7 +9395,7 @@ components:
           type:
           - string
           - 'null'
-          description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
+          description: Token of the folder the current identity sees this form in, also a shared folder another cooperator put it in (for an account token, the account owner's view); null when it is in no such folder
         billing_account_id:
           type: string
           description: ID of the account the form belongs to, as `id` in `GET /billing_account`; a form shared from another account carries that account's
@@ -9572,6 +9572,9 @@ components:
           - string
           - 'null'
           description: Grey hint inside the empty input box; for inline blanks, the prompt with each blank marked by `${field_x}$`
+        scannable:
+          type: boolean
+          description: 'Single-line text field: fillers can scan a QR code or barcode into it in WeChat (present only when true)'
         max_file_quantity:
           type: integer
           description: 'Attachment field: maximum number of files to upload'
@@ -9850,6 +9853,24 @@ components:
           type:
           - number
           - 'null'
+        predefined_number:
+          type:
+          - integer
+          - 'null'
+          description: Default quantity
+        fixed_number:
+          type: boolean
+          description: The quantity cannot be changed
+        min_purchase_quantity:
+          type:
+          - integer
+          - 'null'
+          description: Minimum quantity per entry; null when there are specs, which carry their own
+        max_purchase_quantity:
+          type:
+          - integer
+          - 'null'
+          description: Maximum quantity per entry; null when there are specs, which carry their own
         skus:
           type: array
           items:
@@ -9874,6 +9895,16 @@ components:
           type:
           - integer
           - 'null'
+        min_purchase_quantity:
+          type:
+          - integer
+          - 'null'
+          description: Minimum quantity per entry
+        max_purchase_quantity:
+          type:
+          - integer
+          - 'null'
+          description: Maximum quantity per entry
     ReservationItem:
       type: object
       description: Form and table reads also give the item's settings, in the shape `ReservationItemInput` takes. A write replaces the whole list; an item matched to a current one (by `api_code`, else by name) keeps whether deleted entries give their places back, which a read does not give, and keeps its images when the write leaves `images` out. Time slot tables set up in the editor are not kept
@@ -10207,7 +10238,7 @@ components:
           type:
           - string
           - 'null'
-          description: Token of the folder the current identity put this table in (for an account token, the account owner's); null when the table is not in a folder
+          description: Token of the folder the current identity sees this table in, also a shared folder another cooperator put it in (for an account token, the account owner's view); null when it is in no such folder
         billing_account_id:
           type: string
           description: ID of the account the table belongs to, as `id` in `GET /billing_account`; a table shared from another account carries that account's
@@ -10290,7 +10321,7 @@ components:
           enum:
           - classic
           - card
-          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo / WidgetButton and takes no grids_to_occupy / start_new_row'
+          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo and takes no grids_to_occupy / start_new_row'
       allOf:
       - $ref: '#/components/schemas/FormCreateConstraints'
     TableCreateInput:
@@ -10783,6 +10814,7 @@ components:
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
         - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically and `payment_expirable` turns on unless passed or already `false`.
         - `notification_rules` replaces all notification rules created through the API as a whole (`[]` clears them); rules created in the desktop UI are not affected.
+        - A `weixin_collect_way` change the settings page does not offer is refused with 400 and the reason, e.g. turning collecting off while WeChat red envelopes are on.
       properties:
         success_message:
           type: string
@@ -10892,7 +10924,7 @@ components:
               - by_ip
               - by_device
               - by_fields
-              description: With by_weixin only submissions made in WeChat are accepted, and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account; changing condition later does not stop that
+              description: With by_weixin the form is filled in only inside WeChat (weixin_limited turns on, and passing weixin_limited false is refused), and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account unless weixin_collect_way is passed too; changing condition later turns neither off
             cycle_period:
               type: string
               enum:
@@ -10929,6 +10961,19 @@ components:
           - gd_user_only
         weixin_limited:
           type: boolean
+          description: Fill in only inside WeChat; turned on by fill_frequency condition by_weixin, and cannot be false while that limit is on
+        weixin_collect_way:
+          type: string
+          enum:
+          - not_collect
+          - goldendata
+          - own
+          - own_weixin_qiye
+          - yamcha
+          description: Collect submitters' WeChat info through Jinshuju's official account (goldendata) or not (not_collect); the other values are chosen on the settings page and accepted here only unchanged
+        weixin_collect_more_info_enabled:
+          type: boolean
+          description: While collecting, also ask submitters for their nickname and avatar; otherwise only the OpenID is taken, silently. Starting collection leaves it as it was (false unless set before), and it is refused while weixin_collect_way is own_weixin_qiye or yamcha
         submission_region_limited:
           type: boolean
         submission_regions:
@@ -10964,6 +11009,26 @@ components:
           description: Minutes an order may stay unpaid
         wording:
           $ref: '#/components/schemas/FormWordingInput'
+        gen_code_enabled:
+          type: boolean
+          description: Give each entry a confirmation code shown on the success page; needs a plan that includes "Confirmation code"
+        gen_code_label:
+          type: string
+          minLength: 2
+          maxLength: 6
+          description: Label shown before the confirmation code
+        gen_code_format:
+          type: string
+          enum:
+          - d8
+          - d12
+          - custom
+          description: d8 / d12 are random 8 / 12 digit codes; custom builds the code from `gen_code_rules` and needs a plan that includes "Custom code rules"
+        gen_code_rules:
+          type: array
+          description: Replaces all rules; parts join in order, and a custom code needs exactly one auto_count rule
+          items:
+            $ref: '#/components/schemas/GenCodeRuleInput'
         notification_rules:
           type: array
           items:
@@ -11024,6 +11089,117 @@ components:
           type: string
           description: Rich text shown at the fill frequency limit when the form is hidden; embedded iframe domains must be on the allowlist
       additionalProperties: false
+    GenCodeRule:
+      type: object
+      description: One part of a custom confirmation code
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - fixed_characters
+          - auto_count
+          - form_field
+        value:
+          type: string
+          description: The fixed characters (fixed_characters)
+        count_digit:
+          type: integer
+          description: Digits the count is padded to when fixed_digits is true (auto_count)
+        fixed_digits:
+          type: boolean
+          description: Pad the count with leading zeros (auto_count)
+        counter:
+          type: integer
+          description: Number the count starts from, not the latest number given (auto_count)
+        reset_rule_type:
+          type: string
+          enum:
+          - none
+          - daily
+          - weekly
+          - monthly
+          - form_field
+          description: When the count restarts (auto_count)
+        reset_rule_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of the field whose value restarts the count when reset_rule_type is form_field (auto_count)
+        api_code:
+          type: string
+          description: api_code of the field whose value goes into the code (form_field)
+    GenCodeRuleInput:
+      type: object
+      title: GenCodeRuleInput
+      description: One part of a custom confirmation code
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - fixed_characters
+          - auto_count
+      discriminator:
+        propertyName: type
+        mapping:
+          fixed_characters: "#/components/schemas/FixedCharactersGenCodeRuleInput"
+          auto_count: "#/components/schemas/AutoCountGenCodeRuleInput"
+      oneOf:
+      - $ref: '#/components/schemas/FixedCharactersGenCodeRuleInput'
+      - $ref: '#/components/schemas/AutoCountGenCodeRuleInput'
+    FixedCharactersGenCodeRuleInput:
+      type: object
+      title: FixedCharactersGenCodeRuleInput
+      additionalProperties: false
+      required:
+      - type
+      - value
+      properties:
+        type:
+          type: string
+          enum:
+          - fixed_characters
+        value:
+          type: string
+          minLength: 1
+          maxLength: 6
+    AutoCountGenCodeRuleInput:
+      type: object
+      title: AutoCountGenCodeRuleInput
+      additionalProperties: false
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - auto_count
+        count_digit:
+          type: integer
+          minimum: 1
+          maximum: 12
+          default: 6
+          description: Digits the count is padded to when fixed_digits is true
+        fixed_digits:
+          type: boolean
+          default: false
+          description: Pad the count with leading zeros to count_digit digits, e.g. 000001 when count_digit is 6
+        counter:
+          type: integer
+          minimum: 1
+          description: Number the count starts from, not the latest number given; 1 for a new rule, omitted keeps the current one, and changing it restarts the count
+        reset_rule_type:
+          type: string
+          enum:
+          - none
+          - daily
+          - weekly
+          - monthly
+          default: none
+          description: When the count restarts; omitted sets none even if the rule had another, and changing it restarts the count
     NotificationRuleInput:
       type: object
       required:
@@ -11108,7 +11284,7 @@ components:
           description: api_code of a date field, a reservation field, or created_at / updated_at
         reservation_item_key:
           type: string
-          description: The reservation item, when `date_key` is a reservation field
+          description: 'Required when `date_key` is a reservation field: the `value` of one of its `reservation_items`'
         date_offset_action:
           type: string
           enum:
@@ -11653,6 +11829,24 @@ components:
         placeholder:
           type: string
           description: Grey hint inside the empty input box, gone once the filler types
+        scannable:
+          type: boolean
+          description: Let the filler fill this field by scanning a QR code or barcode when the form is opened in WeChat; does not work on a form served from a custom domain
+        access_control_list_limit:
+          type: boolean
+          description: Check each submitted value against acl_values; needs a non-empty acl_values
+        access_control_type:
+          type: string
+          enum:
+          - white
+          - black
+          description: white accepts only values in acl_values, black refuses them and needs a plan with the field blacklist; a new field defaults to white, and an update without it keeps the stored type
+        acl_values:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+          description: The list, one value per item; replaces the whole list, and blank items are dropped
         sms_verification:
           type: boolean
           description: Verify the number by SMS (this also turns on the image captcha)
@@ -12021,8 +12215,11 @@ components:
           type: string
         add:
           type: array
+          description: Choices appended after the existing ones; ChoiceInput items for a choice field, ImageChoiceInput items for an ImageRadioButton / ImageCheckBox, each with one of image_url / image_base64 / attachment_id
           items:
-            $ref: '#/components/schemas/ChoiceInput'
+            anyOf:
+            - $ref: '#/components/schemas/ChoiceInput'
+            - $ref: '#/components/schemas/ImageChoiceInput'
         remove:
           type: array
           description: 'api_code (or choice label) of a choice to remove; can also be written as `{"api_code": "..."}`'
@@ -12253,7 +12450,7 @@ components:
           - by_ip
           - by_device
           - by_fields
-          description: What identifies the same submitter; by_fields is a paid feature. Cleared when fill_type is unlimited. With by_weixin only submissions made in WeChat are accepted, and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account; changing condition later does not stop that
+          description: What identifies the same submitter; by_fields is a paid feature. Cleared when fill_type is unlimited. With by_weixin the form is filled in only inside WeChat (weixin_limited turns on, and passing weixin_limited false is refused), and a form that collects no WeChat info starts collecting the submitter's openid through Jinshuju's official account unless weixin_collect_way is passed too; changing condition later turns neither off
         cycle_period:
           type: string
           enum:
@@ -12307,6 +12504,7 @@ components:
       - allowed_audience
       - weixin_limited
       - weixin_collect_way
+      - weixin_collect_more_info_enabled
       - submission_region_limited
       - submission_regions
       - locale
@@ -12317,6 +12515,10 @@ components:
       - payment_expiration_time
       - daily_repeat_close_rule
       - wording
+      - gen_code_enabled
+      - gen_code_label
+      - gen_code_format
+      - gen_code_rules
       properties:
         success_message:
           type:
@@ -12482,6 +12684,9 @@ components:
           - own_weixin_qiye
           - yamcha
           description: How WeChat user info is collected
+        weixin_collect_more_info_enabled:
+          type: boolean
+          description: While WeChat info is collected, submitters authorize their nickname and avatar too; otherwise only the OpenID is taken, silently
         submission_region_limited:
           type:
           - boolean
@@ -12592,6 +12797,25 @@ components:
               type: string
             fill_frequency_limited_hide_form:
               type: string
+        gen_code_enabled:
+          type: boolean
+          description: Whether each entry gets a confirmation code
+        gen_code_label:
+          type:
+          - string
+          - 'null'
+          description: Label shown before the confirmation code
+        gen_code_format:
+          type: string
+          enum:
+          - d8
+          - d12
+          - custom
+          description: d8 / d12 are random 8 / 12 digit codes; custom builds the code from `gen_code_rules`
+        gen_code_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenCodeRule'
     FormSettingInput:
       type: object
       description: Request body of PATCH /forms/{form_token}/setting; only the keys present are written
@@ -12666,6 +12890,19 @@ components:
           - gd_user_only
         weixin_limited:
           type: boolean
+          description: Fill in only inside WeChat; turned on by fill_frequency condition by_weixin, and cannot be false while that limit is on
+        weixin_collect_way:
+          type: string
+          enum:
+          - not_collect
+          - goldendata
+          - own
+          - own_weixin_qiye
+          - yamcha
+          description: Collect submitters' WeChat info through Jinshuju's official account (goldendata) or not (not_collect); the other values are chosen on the settings page and accepted here only unchanged, and a change the settings page does not offer is refused with 400 and the reason. Binding a new wxpay_account_id or merchant_account_id switches it to own, so it takes no other value in that request
+        weixin_collect_more_info_enabled:
+          type: boolean
+          description: While collecting, also ask submitters for their nickname and avatar; otherwise only the OpenID is taken, silently. Starting collection leaves it as it was (false unless set before), and it is refused while weixin_collect_way is own_weixin_qiye or yamcha
         locale:
           type: string
           enum:
@@ -12710,6 +12947,26 @@ components:
               type: integer
               maximum: 2147483647
           additionalProperties: false
+        gen_code_enabled:
+          type: boolean
+          description: Give each entry a confirmation code shown on the success page; saved on any plan, but without "Confirmation code" in the plan no code is given on submit
+        gen_code_label:
+          type: string
+          minLength: 2
+          maxLength: 6
+          description: Label shown before the confirmation code
+        gen_code_format:
+          type: string
+          enum:
+          - d8
+          - d12
+          - custom
+          description: d8 / d12 are random 8 / 12 digit codes; custom builds the code from `gen_code_rules`; without "Custom code rules" in the plan no code is given on submit
+        gen_code_rules:
+          type: array
+          description: Replaces all rules; parts join in order, and a custom code needs exactly one auto_count rule
+          items:
+            $ref: '#/components/schemas/GenCodeRuleInput'
         fill_frequency:
           $ref: '#/components/schemas/FormFillFrequencyInput'
         wording:
@@ -14223,6 +14480,9 @@ components:
           - string
           - 'null'
           description: Target folder token; null moves the form out of its folder
+        original_folder_token:
+          type: string
+          description: Folder to move it out of; defaults to the `folder_token` that `GET /forms/{form_token}` or `GET /tables/{table_token}` returns. Pass it on retries, or a retry moves the form out of the next folder it shows in
       additionalProperties: false
     FormFolderMoveResult:
       type: object
@@ -15963,6 +16223,24 @@ components:
         placeholder:
           type: string
           description: Grey hint inside the empty input box, gone once the filler types
+        scannable:
+          type: boolean
+          description: Let the filler fill this field by scanning a QR code or barcode when the form is opened in WeChat; does not work on a form served from a custom domain
+        access_control_list_limit:
+          type: boolean
+          description: Check each submitted value against acl_values; needs a non-empty acl_values
+        access_control_type:
+          type: string
+          enum:
+          - white
+          - black
+          description: white accepts only values in acl_values, black refuses them and needs a plan with the field blacklist; a new field defaults to white, and an update without it keeps the stored type
+        acl_values:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+          description: The list, one value per item; replaces the whole list, and blank items are dropped
         grids_to_occupy:
           type:
           - integer
@@ -16210,6 +16488,21 @@ components:
         sms_verification:
           type: boolean
           description: Verify the number by SMS (this also turns on the image captcha)
+        access_control_list_limit:
+          type: boolean
+          description: Check each submitted value against acl_values; needs a non-empty acl_values
+        access_control_type:
+          type: string
+          enum:
+          - white
+          - black
+          description: white accepts only values in acl_values, black refuses them and needs a plan with the field blacklist; a new field defaults to white, and an update without it keeps the stored type
+        acl_values:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+          description: The list, one value per item; replaces the whole list, and blank items are dropped
         grids_to_occupy:
           type:
           - integer
@@ -16253,6 +16546,21 @@ components:
         unique:
           type: boolean
           description: Refuse a value an existing entry already has
+        access_control_list_limit:
+          type: boolean
+          description: Check each submitted value against acl_values; needs a non-empty acl_values
+        access_control_type:
+          type: string
+          enum:
+          - white
+          - black
+          description: white accepts only values in acl_values, black refuses them and needs a plan with the field blacklist; a new field defaults to white, and an update without it keeps the stored type
+        acl_values:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+          description: The list, one value per item; replaces the whole list, and blank items are dropped
         grids_to_occupy:
           type:
           - integer
@@ -16296,6 +16604,21 @@ components:
         unique:
           type: boolean
           description: Refuse a value an existing entry already has
+        access_control_list_limit:
+          type: boolean
+          description: Check each submitted value against acl_values; needs a non-empty acl_values
+        access_control_type:
+          type: string
+          enum:
+          - white
+          - black
+          description: white accepts only values in acl_values, black refuses them and needs a plan with the field blacklist; a new field defaults to white, and an update without it keeps the stored type
+        acl_values:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+          description: The list, one value per item; replaces the whole list, and blank items are dropped
         grids_to_occupy:
           type:
           - integer
@@ -18769,6 +19092,24 @@ components:
         placeholder:
           type: string
           description: Grey hint inside the empty input box, gone once the filler types
+        scannable:
+          type: boolean
+          description: Let the filler fill this field by scanning a QR code or barcode when the form is opened in WeChat; does not work on a form served from a custom domain
+        access_control_list_limit:
+          type: boolean
+          description: Check each submitted value against acl_values; needs a non-empty acl_values
+        access_control_type:
+          type: string
+          enum:
+          - white
+          - black
+          description: white accepts only values in acl_values, black refuses them and needs a plan with the field blacklist; a new field defaults to white, and an update without it keeps the stored type
+        acl_values:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+          description: The list, one value per item; replaces the whole list, and blank items are dropped
         grids_to_occupy:
           type:
           - integer
@@ -19296,39 +19637,9 @@ components:
               items:
                 required:
                 - operand_value
-    BooleanFieldInput:
-      type: object
-      title: BooleanFieldInput
-      description: BooleanField field
-      additionalProperties: false
-      required:
-      - type
-      - label
-      properties:
-        type:
-          const: BooleanField
-        label:
-          type: string
-          description: Field label
-        cid:
-          type: string
-          description: Temporary id within this request, for formulas and the like to refer to
-        notes:
-          type: string
-          description: Text shown under the field label
-        private:
-          type: boolean
-          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
-        required:
-          type: boolean
-          description: Required
-        position:
-          type: integer
-          minimum: 0
-          description: Target position of the field in the form, from 0; appended at the end by default
     TableColumnInput:
       type: object
-      description: A table column definition; type is limited to the column types a table supports
+      description: A table column definition; type is limited to the column types a table supports, and a column takes no validations
       required:
       - type
       - label
@@ -19355,33 +19666,33 @@ components:
       discriminator:
         propertyName: type
         mapping:
-          TextArea: "#/components/schemas/TextAreaInput"
-          RadioButton: "#/components/schemas/RadioButtonInput"
-          CheckBox: "#/components/schemas/CheckBoxInput"
-          BooleanField: "#/components/schemas/BooleanFieldInput"
-          MobileField: "#/components/schemas/MobileFieldInput"
-          NumberField: "#/components/schemas/NumberFieldInput"
-          DateTimeField: "#/components/schemas/DateTimeFieldInput"
-          EmailField: "#/components/schemas/EmailFieldInput"
-          LinkField: "#/components/schemas/LinkFieldInput"
-          AttachmentField: "#/components/schemas/AttachmentFieldInput"
-          FormulaField: "#/components/schemas/FormulaFieldInput"
-          RelationField: "#/components/schemas/RelationFieldInput"
-          SequenceField: "#/components/schemas/SequenceFieldInput"
+          TextArea: "#/components/schemas/TextAreaColumnInput"
+          RadioButton: "#/components/schemas/RadioButtonColumnInput"
+          CheckBox: "#/components/schemas/CheckBoxColumnInput"
+          BooleanField: "#/components/schemas/BooleanFieldColumnInput"
+          MobileField: "#/components/schemas/MobileFieldColumnInput"
+          NumberField: "#/components/schemas/NumberFieldColumnInput"
+          DateTimeField: "#/components/schemas/DateTimeFieldColumnInput"
+          EmailField: "#/components/schemas/EmailFieldColumnInput"
+          LinkField: "#/components/schemas/LinkFieldColumnInput"
+          AttachmentField: "#/components/schemas/AttachmentFieldColumnInput"
+          FormulaField: "#/components/schemas/FormulaFieldColumnInput"
+          RelationField: "#/components/schemas/RelationFieldColumnInput"
+          SequenceField: "#/components/schemas/SequenceFieldColumnInput"
       oneOf:
-      - $ref: '#/components/schemas/TextAreaInput'
-      - $ref: '#/components/schemas/RadioButtonInput'
-      - $ref: '#/components/schemas/CheckBoxInput'
-      - $ref: '#/components/schemas/BooleanFieldInput'
-      - $ref: '#/components/schemas/MobileFieldInput'
-      - $ref: '#/components/schemas/NumberFieldInput'
-      - $ref: '#/components/schemas/DateTimeFieldInput'
-      - $ref: '#/components/schemas/EmailFieldInput'
-      - $ref: '#/components/schemas/LinkFieldInput'
-      - $ref: '#/components/schemas/AttachmentFieldInput'
-      - $ref: '#/components/schemas/FormulaFieldInput'
-      - $ref: '#/components/schemas/RelationFieldInput'
-      - $ref: '#/components/schemas/SequenceFieldInput'
+      - $ref: '#/components/schemas/TextAreaColumnInput'
+      - $ref: '#/components/schemas/RadioButtonColumnInput'
+      - $ref: '#/components/schemas/CheckBoxColumnInput'
+      - $ref: '#/components/schemas/BooleanFieldColumnInput'
+      - $ref: '#/components/schemas/MobileFieldColumnInput'
+      - $ref: '#/components/schemas/NumberFieldColumnInput'
+      - $ref: '#/components/schemas/DateTimeFieldColumnInput'
+      - $ref: '#/components/schemas/EmailFieldColumnInput'
+      - $ref: '#/components/schemas/LinkFieldColumnInput'
+      - $ref: '#/components/schemas/AttachmentFieldColumnInput'
+      - $ref: '#/components/schemas/FormulaFieldColumnInput'
+      - $ref: '#/components/schemas/RelationFieldColumnInput'
+      - $ref: '#/components/schemas/SequenceFieldColumnInput'
       title: TableColumnInput
     ImageChoiceInput:
       type: object
@@ -19783,7 +20094,6 @@ components:
                       - MultipleBlanksField
                       - WidgetContact
                       - WidgetVideo
-                      - WidgetButton
                 not:
                   anyOf:
                   - required:
@@ -20103,6 +20413,16 @@ components:
                   type: array
                   items:
                     type: string
+        structure:
+          type: object
+          description: The keys that give this type its shape (a table's `dimensions`, a goods field's `goods_items`), each with a sentence on what it holds. Omitted when the type has none
+          additionalProperties:
+            type: string
+        structure_specs:
+          type: object
+          description: What each key of `structure` may hold, keyed by structure key, as the JSON Schema the create request validates it against, with every `$ref` followed; read the keys a nested item takes here. A key the request schema does not define is left out
+          additionalProperties:
+            type: object
         summary:
           type: string
           description: A short explanation of what this field is and how to write it. Omitted when `kind=table`
@@ -20487,7 +20807,7 @@ components:
                   type:
                   - string
                   - 'null'
-                  description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
+                  description: Token of the folder the current identity sees this form in, also a shared folder another cooperator put it in (for an account token, the account owner's view); null when it is in no such folder
             - $ref: '#/components/schemas/EntryFormUnavailable'
       examples:
       - total: 3
@@ -20945,7 +21265,7 @@ components:
             type:
             - string
             - 'null'
-            description: Token of the folder the current identity put this form in (for an account token, the account owner's); null when the form is not in a folder
+            description: Token of the folder the current identity sees this form in, also a shared folder another cooperator put it in (for an account token, the account owner's view); null when it is in no such folder
           billing_account_id:
             type: string
             description: ID of the account the form belongs to, as `id` in `GET /billing_account`; a form shared from another account carries that account's
@@ -21450,6 +21770,9 @@ components:
         auto_send:
           type: boolean
           description: SMS tasks only; false while a task created with `auto_send` false waits to be sent with `PATCH /forms/{form_token}/sms_tasks/{id}/auto_send`
+        page_url:
+          type: string
+          description: SMS tasks only; the task's page in Jinshuju
       examples:
       - id: 6716f2a8c1d2e3f4a5b6c7d9
         status: sending
@@ -23300,6 +23623,7 @@ components:
       - count
       - data
       - next
+      - page_url
       properties:
         total:
           type: integer
@@ -23316,6 +23640,9 @@ components:
           - integer
           - 'null'
           description: Row offset of the next page; null on the last page
+        page_url:
+          type: string
+          description: The settings page where the account applies for signatures, with its licenses
     MessageType:
       type: string
       enum:
@@ -23613,6 +23940,222 @@ components:
           type: string
           maxLength: 255
           description: Sends once for the same key within 24 hours; retry a timed-out request with the same key
+    RoutineWebhookMessageRuleInput:
+      type: object
+      description: A webhook push of a title and content Jiri writes each run
+      anyOf:
+      - required:
+        - approach
+      - required:
+        - id
+      properties:
+        approach:
+          type: string
+          enum:
+          - webhook
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        url:
+          type: string
+          description: A new address to push to, a public https URL the user gave
+        channel_id:
+          type: string
+          description: Keep pushing to this address; left out with `id` keeps the rule's address
+        title:
+          type: string
+          maxLength: 200
+          description: The title pushed as `title`; Jiri fills in what changes from run to run
+        content:
+          type: string
+          description: The text pushed as `content`, at most 20000 characters, sent as it is; Jiri fills in what changes from run to run
+    RoutineWebhookBodyRuleInput:
+      type: object
+      description: A webhook push of JSON in a format the user gave, posted as the whole request body each run
+      anyOf:
+      - required:
+        - approach
+        - body
+      - required:
+        - id
+      properties:
+        approach:
+          type: string
+          enum:
+          - webhook
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        url:
+          type: string
+          description: A new address to push to, a public https URL the user gave
+        channel_id:
+          type: string
+          description: Keep pushing to this address; left out with `id` keeps the rule's address
+        body:
+          type: string
+          maxLength: 20000
+          description: The JSON posted as the whole request body, valid JSON once each `$(…)` outside a string stands for a whole value; Jiri fills in what changes from run to run
+    RoutineWebhookEntryRuleInput:
+      type: object
+      description: A webhook push of entries of a form or table, each entry on its own and shaped as a form's webhook notification pushes it
+      anyOf:
+      - required:
+        - approach
+        - form_token
+      - required:
+        - id
+      properties:
+        approach:
+          type: string
+          enum:
+          - webhook
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        url:
+          type: string
+          description: A new address to push to, a public https URL the user gave
+        channel_id:
+          type: string
+          description: Keep pushing to this address; left out with `id` keeps the rule's address
+        form_token:
+          type: string
+          description: The form or table whose entries are pushed; you must manage it
+        selection:
+          type: string
+          maxLength: 2000
+          description: Which entries a run pushes, such as `上次运行之后新增的登记`
+        once_per_entry:
+          type: boolean
+          description: Push each entry once across runs, refusing a run the entries an earlier run pushed or is still pushing but not those that failed; left out keeps the rule's setting, false for a new rule
+    RoutineWebhookMessageRule:
+      type: object
+      description: A webhook push of a title and content Jiri writes each run
+      required:
+      - id
+      - approach
+      - channel_id
+      - address
+      - title
+      - content
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - webhook
+          -
+          description: null when the address was deleted
+        channel_id:
+          type: string
+        address:
+          type:
+          - string
+          - 'null'
+          description: The address it pushes to; null when it was deleted
+        title:
+          type: string
+        content:
+          type: string
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
+    RoutineWebhookBodyRule:
+      type: object
+      description: A webhook push of JSON in a format the user gave, posted as the whole request body each run
+      required:
+      - id
+      - approach
+      - channel_id
+      - address
+      - body
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - webhook
+          -
+          description: null when the address was deleted
+        channel_id:
+          type: string
+        address:
+          type:
+          - string
+          - 'null'
+          description: The address it pushes to; null when it was deleted
+        body:
+          type: string
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
+    RoutineWebhookEntryRule:
+      type: object
+      description: A webhook push of entries of a form or table, each entry on its own and shaped as a form's webhook notification pushes it
+      required:
+      - id
+      - approach
+      - channel_id
+      - address
+      - form_token
+      - form_name
+      - selection
+      - once_per_entry
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - webhook
+          -
+          description: null when the address or the form was deleted
+        channel_id:
+          type: string
+        address:
+          type:
+          - string
+          - 'null'
+          description: The address it pushes to; null when it was deleted
+        form_token:
+          type:
+          - string
+          - 'null'
+          description: null when the form was deleted
+        form_name:
+          type:
+          - string
+          - 'null'
+        selection:
+          type: string
+          description: Which entries a run pushes
+        once_per_entry:
+          type: boolean
+          description: Each entry is pushed once across runs
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
     WebhookMessageInput:
       type: object
       description: 'A webhook message; the channel is the recipient. It pushes `{id, request_id, title, content, created_at}`, the `body` given as it is, or from Jiri the entries named, each in a request of its own. Each request names its message in the header `X-Jinshuju-Message-Id`, the same on every attempt.
@@ -24102,45 +24645,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BillingAccountPaidFeature'
-    RelationFieldInput:
-      type: object
-      title: RelationFieldInput
-      description: RelationField field
-      additionalProperties: false
-      required:
-      - type
-      - label
-      properties:
-        type:
-          const: RelationField
-        label:
-          type: string
-          description: Field label
-        cid:
-          type: string
-          description: Temporary id within this request, for formulas and the like to refer to
-        notes:
-          type: string
-          description: Text shown under the field label
-        private:
-          type: boolean
-          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
-        required:
-          type: boolean
-          description: Required
-        position:
-          type: integer
-          minimum: 0
-          description: Target position of the field in the form, from 0; appended at the end by default
-        related_form_token:
-          type: string
-          description: Token of the related table; must be another table, and you need manage permission on it
-        paired:
-          type: boolean
-          description: Two-way relation, on by default; when on, a reverse column is created in the related table
-        related_label:
-          type: string
-          description: Name of the reverse column, used only when the reverse column is created; defaults to the name of this table
     GoodsItemUpdateInput:
       type: object
       title: GoodsItemUpdateInput
@@ -24321,42 +24825,6 @@ components:
               properties:
                 attachment_ids:
                   minItems: 1
-    SequenceFieldInput:
-      type: object
-      title: SequenceFieldInput
-      description: SequenceField field
-      additionalProperties: false
-      required:
-      - type
-      - label
-      properties:
-        type:
-          const: SequenceField
-        label:
-          type: string
-          description: Field label
-        cid:
-          type: string
-          description: Temporary id within this request, for formulas and the like to refer to
-        notes:
-          type: string
-          description: Text shown under the field label
-        private:
-          type: boolean
-          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
-        required:
-          type: boolean
-          description: Required
-        position:
-          type: integer
-          minimum: 0
-          description: Target position of the field in the form, from 0; appended at the end by default
-        segments:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/SequenceSegmentInput'
-          description: Numbering rule, joined in order; exactly one sequence_number part. Defaults to a single 4-digit sequence number
     SequenceSegmentInput:
       type: object
       title: SequenceSegmentInput
@@ -24508,11 +24976,16 @@ components:
           type:
           - array
           - 'null'
-          description: The messages a run may send; on update they replace the routine's. A new or changed one is saved only as the user confirmed it on a card in this Jiri conversation.
+          description: The messages a run may send; on update they replace the routine's. A new or changed one, other than a site message, is saved only as the user confirmed it on a card in this Jiri conversation.
           items:
             anyOf:
             - $ref: '#/components/schemas/RoutineGroupMessageRuleInput'
             - $ref: '#/components/schemas/RoutineEmailMessageRuleInput'
+            - $ref: '#/components/schemas/RoutineSMSMessageRuleInput'
+            - $ref: '#/components/schemas/RoutineSystemMessageRuleInput'
+            - $ref: '#/components/schemas/RoutineWebhookMessageRuleInput'
+            - $ref: '#/components/schemas/RoutineWebhookBodyRuleInput'
+            - $ref: '#/components/schemas/RoutineWebhookEntryRuleInput'
     RoutineScheduleInput:
       type: object
       description: |
@@ -24908,6 +25381,11 @@ components:
             oneOf:
             - $ref: '#/components/schemas/RoutineGroupMessageRule'
             - $ref: '#/components/schemas/RoutineEmailMessageRule'
+            - $ref: '#/components/schemas/RoutineSMSMessageRule'
+            - $ref: '#/components/schemas/RoutineSystemMessageRule'
+            - $ref: '#/components/schemas/RoutineWebhookMessageRule'
+            - $ref: '#/components/schemas/RoutineWebhookBodyRule'
+            - $ref: '#/components/schemas/RoutineWebhookEntryRule'
         runs_count:
           type: integer
           description: How many times it has run
@@ -25970,6 +26448,159 @@ components:
           - 'null'
           format: date-time
           description: When the user confirmed it (Beijing time)
+    RoutineSMSMessageRuleInput:
+      type: object
+      description: An SMS, one message per number
+      anyOf:
+      - required:
+        - approach
+      - required:
+        - id
+      properties:
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sms
+          -
+          description: null as a rule whose template was deleted reads; sent back so with its `id`, the rule stays as it is
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        sms_template_id:
+          type:
+          - string
+          - 'null'
+          description: The template to send with (`id` from `GET /sms/templates`); one under review can be set, and is sent once approved. null, as a rule whose template was deleted reads, keeps the rule's template
+        recipients:
+          type: array
+          description: Mobile numbers a run may send to
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+        recipient_fields:
+          type: array
+          description: Mobile fields a run may pick recipients from as well, each run the ones the instruction names; each one picked must be in the field
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - form_token
+            - field_code
+            properties:
+              form_token:
+                type: string
+                description: A form or table you can see
+              field_code:
+                type: string
+                description: A mobile field of it, such as `field_3`
+        variables:
+          type: object
+          description: What Jiri fills each variable of the template with every run, keyed by the variable such as `var_1`; every variable of the template, none else
+          additionalProperties:
+            type: string
+    RoutineSMSMessageRule:
+      type: object
+      description: An SMS, one message per number
+      required:
+      - id
+      - approach
+      - sms_template_id
+      - content
+      - recipients
+      - recipient_fields
+      - variables
+      - confirmed_at
+      properties:
+        id:
+          type: string
+        approach:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sms
+          -
+          description: null when its template was deleted
+        sms_template_id:
+          type:
+          - string
+          - 'null'
+        content:
+          type:
+          - string
+          - 'null'
+          description: The template with its signature, such as `【金数据】$(var_1) 条登记信息不全`; null when the template was deleted
+        recipients:
+          type: array
+          items:
+            type: string
+        recipient_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutineMessageRuleField'
+        variables:
+          type: object
+          description: What Jiri fills each variable of the template with every run
+          additionalProperties:
+            type: string
+        confirmed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the user confirmed it (Beijing time)
+    RoutineSystemMessageRuleInput:
+      type: object
+      description: A site message to the routine's creator after each run, at most one a routine; it opens the run
+      anyOf:
+      - required:
+        - approach
+      - required:
+        - id
+      properties:
+        approach:
+          type: string
+          enum:
+          - system_message
+        id:
+          type: string
+          description: The message rule to change, keeping whatever this item leaves out; left out for a new one
+        title:
+          type: string
+          maxLength: 200
+          description: How Jiri writes the title each run, such as `上周新生报名：N 人`
+        content:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+          description: How Jiri writes the summary each run, such as `各年级人数和增减`; left out, null or empty, the message is the title alone
+    RoutineSystemMessageRule:
+      type: object
+      description: A site message to the routine's creator after each run
+      required:
+      - id
+      - approach
+      - title
+      - content
+      properties:
+        id:
+          type: string
+        approach:
+          type: string
+          enum:
+          - system_message
+        title:
+          type: string
+          description: How Jiri writes the title each run
+        content:
+          type:
+          - string
+          - 'null'
+          description: How Jiri writes the summary each run; null when the message is the title alone
     StateFlowName:
       type: string
       enum:
@@ -25984,3 +26615,771 @@ components:
       - cancel_all
       - winner_confirm
       - delete_winner
+    TextAreaColumnInput:
+      type: object
+      title: TextAreaColumnInput
+      description: TextArea column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: TextArea
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        predefined_value:
+          type: string
+          description: Default value
+        placeholder:
+          type: string
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+    RadioButtonColumnInput:
+      type: object
+      title: RadioButtonColumnInput
+      description: RadioButton column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: RadioButton
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        choices:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChoiceInput'
+          description: Choices
+        calculable:
+          type: boolean
+          description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
+        choices_layout:
+          type: string
+          description: How the choices are laid out
+        random_choices:
+          type: boolean
+          description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+      allOf:
+      - description: With calculable=true, every choice needs an operand_value
+        if:
+          properties:
+            calculable:
+              const: true
+          required:
+          - calculable
+        then:
+          properties:
+            choices:
+              items:
+                required:
+                - operand_value
+    CheckBoxColumnInput:
+      type: object
+      title: CheckBoxColumnInput
+      description: CheckBox column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: CheckBox
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        choices:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChoiceInput'
+          description: Choices
+        calculable:
+          type: boolean
+          description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
+        choices_layout:
+          type: string
+          description: How the choices are laid out
+        random_choices:
+          type: boolean
+          description: Shuffle the choices each time the form opens
+        hide_choice_when_quota_empty:
+          type: boolean
+          description: Hide a choice from fillers once its places run out, instead of showing it as full
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+      allOf:
+      - description: With calculable=true, every choice needs an operand_value
+        if:
+          properties:
+            calculable:
+              const: true
+          required:
+          - calculable
+        then:
+          properties:
+            choices:
+              items:
+                required:
+                - operand_value
+    BooleanFieldColumnInput:
+      type: object
+      title: BooleanFieldColumnInput
+      description: BooleanField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: BooleanField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+    MobileFieldColumnInput:
+      type: object
+      title: MobileFieldColumnInput
+      description: MobileField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: MobileField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        predefined_value:
+          type: string
+          description: Default value
+        placeholder:
+          type: string
+          description: Grey hint inside the empty input box, gone once the filler types
+        sms_verification:
+          type: boolean
+          description: Verify the number by SMS (this also turns on the image captcha)
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+    NumberFieldColumnInput:
+      type: object
+      title: NumberFieldColumnInput
+      description: NumberField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: NumberField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        predefined_value:
+          type:
+          - number
+          - string
+          description: Default value
+        placeholder:
+          type: string
+          description: Grey hint inside the empty input box, gone once the filler types
+        precision:
+          type: integer
+          minimum: 0
+          maximum: 14
+          description: Decimal places
+        display_precision:
+          type: integer
+          minimum: 0
+          description: Decimal places shown
+        display_as_percentage:
+          type: boolean
+          description: Show as a percentage; cannot be combined with thousands_separator
+        thousands_separator:
+          type: boolean
+          description: Show a thousands separator; cannot be combined with display_as_percentage
+        currency_symbol:
+          type: string
+          description: Currency symbol
+        currency_symbol_position:
+          type: string
+          enum:
+          - prefix
+          - suffix
+          description: Where the currency symbol goes
+        icon_type:
+          type: string
+          enum:
+          - none
+          - number-2
+          - dollar1
+          - cny1
+          description: Field icon
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+      allOf:
+      - description: display_as_percentage and thousands_separator cannot both be true
+        not:
+          properties:
+            display_as_percentage:
+              const: true
+            thousands_separator:
+              const: true
+          required:
+          - display_as_percentage
+          - thousands_separator
+    DateTimeFieldColumnInput:
+      type: object
+      title: DateTimeFieldColumnInput
+      description: DateTimeField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: DateTimeField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        predefined_value:
+          type: string
+          description: Default value
+        precision:
+          type: string
+          enum:
+          - month
+          - day
+          - minute
+          - second
+          description: Date precision; day by default
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+    EmailFieldColumnInput:
+      type: object
+      title: EmailFieldColumnInput
+      description: EmailField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: EmailField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        placeholder:
+          type: string
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+    LinkFieldColumnInput:
+      type: object
+      title: LinkFieldColumnInput
+      description: LinkField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: LinkField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        predefined_value:
+          type: string
+          description: Default value
+        placeholder:
+          type: string
+          description: Grey hint inside the empty input box, gone once the filler types
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+    AttachmentFieldColumnInput:
+      type: object
+      title: AttachmentFieldColumnInput
+      description: AttachmentField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: AttachmentField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        max_size:
+          type: integer
+          minimum: 1
+          maximum: 500
+          description: Maximum size of one file, in MB
+        max_file_quantity:
+          type: integer
+          minimum: 1
+          description: Maximum number of files
+        media_type:
+          type: object
+          additionalProperties: false
+          description: 'Allowed file types: type is one preset group, whose extensions x-groups lists, or custom with the extensions listed in value. To allow several groups, write type=custom with the union of their extensions in value'
+          x-groups:
+            doc:
+            - txt
+            - pdf
+            - doc
+            - docx
+            - xls
+            - xlsx
+            - ppt
+            - pptx
+            - wps
+            - rtf
+            - hlp
+            image:
+            - jpg
+            - jpeg
+            - png
+            - gif
+            - bmp
+            - psd
+            - tif
+            - heic
+            - heif
+            video:
+            - mkv
+            - mp4
+            - avi
+            - swf
+            - wmv
+            - rmvb
+            - mov
+            - mpg
+            audio:
+            - mp3
+            - flac
+            - ape
+            - wma
+            - wav
+            - aac
+            - m4a
+            - au
+            - ram
+            - mmf
+            - aif
+            compress:
+            - rar
+            - zip
+            - 7z
+            - gz
+            - arj
+            - z
+          properties:
+            type:
+              type: string
+              enum:
+              - unlimited
+              - doc
+              - image
+              - video
+              - audio
+              - compress
+              - custom
+            value:
+              type: array
+              items:
+                type: string
+              description: Lowercase extensions, without the dot
+          if:
+            properties:
+              type:
+                const: custom
+            required:
+            - type
+          then:
+            required:
+            - value
+            properties:
+              value:
+                minItems: 1
+        mobile_camera_only:
+          type: boolean
+          description: On mobile, only a photo taken with the camera; picking from the photo library is not allowed
+    FormulaFieldColumnInput:
+      type: object
+      title: FormulaFieldColumnInput
+      description: FormulaField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: FormulaField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        formula:
+          type: string
+          description: The formula, calling only the functions in x-functions; an existing field is named by api_code and a field created in the same request as $(cid), e.g. IF(FIND("overdue", field_3) > 0, $(price) * $(qty), 0); used instead of formula_display when both are given
+          x-functions:
+            $ref: '#/components/schemas/FormulaFunction'
+        formula_display:
+          type: string
+          description: Older HTML form of formula; refer to a field as <gd-field data-cid="..."> or <gd-field data-api-code="...">
+        result_display_type:
+          type: string
+          enum:
+          - string
+          - numeric
+          - datetime
+          - boolean
+          description: How the result is shown
+        result_display_as_date:
+          type: boolean
+          description: Older spelling of result_display_type=datetime
+        precision:
+          type: integer
+          minimum: 0
+          maximum: 14
+          description: Decimal places
+        display_precision:
+          type: integer
+          minimum: 0
+          description: Decimal places shown
+        display_as_percentage:
+          type: boolean
+          description: Show as a percentage; cannot be combined with thousands_separator
+        thousands_separator:
+          type: boolean
+          description: Show a thousands separator; cannot be combined with display_as_percentage
+        currency_symbol:
+          type: string
+          description: Currency symbol
+        currency_symbol_position:
+          type: string
+          enum:
+          - prefix
+          - suffix
+          description: Where the currency symbol goes
+        icon_type:
+          type: string
+          enum:
+          - none
+          - formula-2
+          - date-2
+          - number-2
+          - dollar1
+          - cny1
+          - sum
+          - text
+          - text2
+          description: Field icon
+        grids_to_occupy:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 3
+          description: Width in quarters of the row, so fields can sit side by side (2 = half); null for the whole row. Phones narrower than 576px always show one field per row
+        start_new_row:
+          type: boolean
+          description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+      allOf:
+      - description: display_as_percentage and thousands_separator cannot both be true
+        not:
+          properties:
+            display_as_percentage:
+              const: true
+            thousands_separator:
+              const: true
+          required:
+          - display_as_percentage
+          - thousands_separator
+    RelationFieldColumnInput:
+      type: object
+      title: RelationFieldColumnInput
+      description: RelationField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: RelationField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        related_form_token:
+          type: string
+          description: Token of the related table; must be another table, and you need manage permission on it
+        paired:
+          type: boolean
+          description: Two-way relation, on by default; when on, a reverse column is created in the related table
+        related_label:
+          type: string
+          description: Name of the reverse column, used only when the reverse column is created; defaults to the name of this table
+    SequenceFieldColumnInput:
+      type: object
+      title: SequenceFieldColumnInput
+      description: SequenceField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: SequenceField
+        label:
+          type: string
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type: string
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        segments:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SequenceSegmentInput'
+          description: Numbering rule, joined in order; exactly one sequence_number part. Defaults to a single 4-digit sequence number
