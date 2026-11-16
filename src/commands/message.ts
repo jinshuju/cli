@@ -1,7 +1,7 @@
 import { UsageError } from '../errors.js';
 import { PAGINATION_OPTIONS } from '../options.js';
 import { call, choices } from '../spec.js';
-import { given, LISTING, paging, requiredOption, SEND_OPTION } from './shared.js';
+import { ESTIMATE_OPTION, given, LISTING, paging, requiredOption, SEND_OPTION } from './shared.js';
 import type { Command } from './types.js';
 
 /** `var_1=张三`: one variable of an SMS channel's template. */
@@ -24,7 +24,9 @@ export const MESSAGE: readonly Command[] = [
       'request of its own, shaped as a form webhook notification pushes it. A webhook can also push JSON of your own ' +
       'instead: --body is the whole request body, posted as it is. Sent messages cannot be recalled: after a timeout ' +
       'or a dropped connection, send again with the same --idempotency-key, which answers the first records instead ' +
-      'of sending twice. --yes sends.',
+      'of sending twice. --estimate checks the message as the send would and sends nothing: it answers how many ' +
+      'records it would create and how many SMS or emails it would bill, and is refused as the send would be, a ' +
+      'balance that does not cover it included. --yes sends.',
     options: [
       {
         name: '--type',
@@ -107,6 +109,7 @@ export const MESSAGE: readonly Command[] = [
         placeholder: '<key>',
         description: 'Sends once for the same key within 24 hours; retry with the same key'
       },
+      ESTIMATE_OPTION,
       SEND_OPTION
     ],
     request: (input) => {
@@ -121,9 +124,15 @@ export const MESSAGE: readonly Command[] = [
           }
         }
       }
-      if (!input.options.yes) throw new UsageError('A sent message cannot be recalled; pass --yes to send');
+      const estimate = input.options.estimate === true;
+      if (estimate && input.options.yes) throw new UsageError('--estimate and --yes are alternatives, not both');
+      if (!estimate && !input.options.yes) {
+        throw new UsageError(
+          'A sent message cannot be recalled; pass --estimate to see what it takes, or --yes to send'
+        );
+      }
       const variables = input.options.variable as string[] | undefined;
-      return call('sendMessage', {
+      return call(estimate ? 'estimateMessage' : 'sendMessage', {
         body: given({
           type,
           channel_id: input.options.channel as string | undefined,
@@ -145,6 +154,8 @@ export const MESSAGE: readonly Command[] = [
       "jinshuju message send --type email --to someone@example.com --title 上课提醒 --content '明天上午 9 点开课' --yes",
       'jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 ' +
         '--variable var_2=9:00 --yes',
+      'jinshuju message send --type sms --channel 6729f1c2a1b2c3d4e5f60719 --to 13800000000 --variable var_1=张三 ' +
+        '--variable var_2=9:00 --estimate',
       'jinshuju message send --type webhook --channel 6729f1c2a1b2c3d4e5f6071a --form Kp7mQ2 --entry 1282 --entry 1283 --yes',
       'jinshuju message send --type webhook --channel 6729f1c2a1b2c3d4e5f6071a ' +
         '--body \'{"report":"orders","order_count":1}\' --yes'

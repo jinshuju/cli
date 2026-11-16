@@ -922,7 +922,7 @@ test('message send wants --yes, and sends what the flags give', async () => {
   const run = (args: string[]) => cli(['message', 'send', ...args], { env: WRITE_ENV, client: mock.client });
 
   const unconfirmed = await run(['--type', 'wxwork', '--channel', 'ch_1', '--content', '吃饭啦']);
-  assert.match(unconfirmed.stderr, /pass --yes to send/);
+  assert.match(unconfirmed.stderr, /pass --estimate to see what it takes, or --yes to send/);
   await run([
     '--type',
     'wxwork',
@@ -1030,6 +1030,28 @@ test('message send wants --yes, and sends what the flags give', async () => {
     type: 'webhook',
     channel_id: 'ch_3',
     body: '{"report": "orders",  "order_count":1 }'
+  });
+});
+
+test('message send --estimate asks what the send would take and sends nothing, and does not go with --yes', async () => {
+  const mock = createMockClient();
+  const sms = ['--type', 'sms', '--channel', 'ch_2', '--to', '13800000000', '--variable', 'var_1=张三'];
+  const run = (args: string[]) => cli(['message', 'send', ...sms, ...args], { env: WRITE_ENV, client: mock.client });
+
+  const both = await run(['--estimate', '--yes']);
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /--estimate and --yes are alternatives/);
+  await run(['--estimate']);
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['POST /api/v1/messages/estimate']
+  );
+  assert.deepEqual(mock.requests[0].body, {
+    type: 'sms',
+    channel_id: 'ch_2',
+    to: ['13800000000'],
+    variables: { var_1: '张三' }
   });
 });
 
