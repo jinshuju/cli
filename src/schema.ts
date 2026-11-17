@@ -64,6 +64,12 @@ export function validate(schema: Schema | boolean, value: unknown, pointer = '',
   if (typeof value === 'number') {
     if (s.minimum !== undefined && value < s.minimum) issue('range', `must be at least ${s.minimum}`);
     if (s.maximum !== undefined && value > s.maximum) issue('range', `must be at most ${s.maximum}`);
+    if (s.exclusiveMinimum !== undefined && value <= s.exclusiveMinimum) {
+      issue('range', `must be more than ${s.exclusiveMinimum}`);
+    }
+    if (s.exclusiveMaximum !== undefined && value >= s.exclusiveMaximum) {
+      issue('range', `must be less than ${s.exclusiveMaximum}`);
+    }
   }
   if (typeof value === 'string') {
     const length = [...value].length;

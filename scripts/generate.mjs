@@ -32,7 +32,17 @@ const JSON_TEXT = 'application/json';
  */
 const KEYWORDS = {
   value: ['type', 'enum', 'const', 'required', 'dependentRequired', 'pattern'],
-  number: ['minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems', 'uniqueItems'],
+  number: [
+    'minimum',
+    'maximum',
+    'exclusiveMinimum',
+    'exclusiveMaximum',
+    'minLength',
+    'maxLength',
+    'minItems',
+    'maxItems',
+    'uniqueItems'
+  ],
   schema: ['items', 'not', 'if', 'then', 'else', 'contains'],
   schemas: ['allOf', 'oneOf', 'anyOf']
 };
