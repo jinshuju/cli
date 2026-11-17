@@ -252,13 +252,17 @@ account lacks also answers with `unusable_features`, and these commands and
 `field list` keep it beside the fields: the form is saved, but respondents
 cannot submit it until the account upgrades.
 
+The CLI asks for API version `2026-11-12` (`Jinshuju-Version`), in which
+`form get`, `table get` and `field list` read each field in the shape
+`field update` takes: a field read goes back as it came, whole or a few of its
+keys, and `null` for a setting clears it or puts it back to its default.
+
 A payload is looked at once before it is sent, against the openapi.yaml the
 CLI shipped with, and refused only for what a newer API could not have made
 right: a required key missing, a value of the wrong type, `null` for a key
-that cannot be null, a field's `validation` written back as `form get` returned
-it. A key or a value that copy does not list is sent for the API to judge, since
-the API may have learned it since. A refusal names the day the copy was
-fetched, and `--as-is` sends the payload anyway.
+that cannot be null. A key or a value that copy does not list is sent for the
+API to judge, since the API may have learned it since. A refusal names the day
+the copy was fetched, and `--as-is` sends the payload anyway.
 
 Data and views:
 

@@ -81,6 +81,16 @@ const BACKOFF_CAP_MS = 8_000;
 const RETRY_ANY = new Set([429, 503]);
 const RETRY_READS = new Set([500, 502, 504]);
 
+/**
+ * The API version every request asks for, in `Jinshuju-Version`. In it a form
+ * or table reads its fields in the shape a field write takes, so a field read
+ * goes back as it came; without the header the API answers in 2013-07-03,
+ * whose fields a write does not take. The commands are written against this
+ * version's shapes, so it moves with them, by hand: a spec sync that carried
+ * a newer version in would change what the CLI reads before its code did.
+ */
+export const API_VERSION = '2026-11-12';
+
 /** How much of an unexpected body is worth putting in front of a reader. */
 const MAX_SNIPPET = 200;
 
@@ -295,7 +305,8 @@ export class JinshujuHttpClient implements HttpClient {
     const headers: Record<string, string> = {
       Authorization: await this.authorizationHeader(),
       Accept: 'application/json',
-      'User-Agent': `jinshuju-cli/${VERSION} node/${process.versions.node}`
+      'User-Agent': `jinshuju-cli/${VERSION} node/${process.versions.node}`,
+      'Jinshuju-Version': API_VERSION
     };
     if (!request.form) headers['Content-Type'] = 'application/json';
 

@@ -4,32 +4,29 @@ import { YES_OPTION, confirmed, onContainer, one, payload, requiredOption } from
 import type { Command, CommandInput } from './types.js';
 
 /**
- * One field, or a list of them — the same objects `fields` holds above. And
- * what a field read back is not: what the CLI's callers were most often
- * refused for was a field written back as `form get` returned it.
+ * One field, or a list of them — the same objects `fields` holds above. A
+ * field reads in the shape a write takes, so what `field list` answers goes
+ * back as it came; what is left to say is which of the keys it carries a
+ * write cannot change.
  */
 const FIELD_PAYLOAD: readonly string[] = [
   '{ "type": "TextField", "label": "Notes", "required": false }',
   '',
-  'A field as `form get` or `field list` returns it is not a field to write back:',
-  '  validation: {required, unique, minimum_length, …} is written flat on the field',
-  '  choices are changed with `field update-choices`; `field update` takes them only on a',
-  '    CascadeDropDown, or with a `type` that turns a text field into a choice field',
-  '  a key read as null is left out, not written as null',
+  'A field as `form get` or `field list` returns it can be written back as it is, whole or',
+  'a few of its keys:',
+  '  null for a setting clears it, or puts it back to its default',
+  '  choices are changed with `field update-choices`; `field update` takes them as read,',
+  '    which changes nothing, and replaces them only on a CascadeDropDown or with a `type`',
+  '    that turns a text field into a choice field',
+  "  a key no write can change, like minimum_length or a choice's hidden, goes back only as",
+  '    it was read; the API answers which key when one differs',
   '',
   'Field types: jinshuju field types'
 ];
 
-/**
- * A form's fields arrive as one object per field, keyed by api_code. A list of
- * fields is what a caller asked for, so it is a list here, with the api_code
- * alongside the rest rather than hidden in the key.
- */
+/** A form's or table's fields, each with its api_code, as the API answers them. */
 function selectFields(body: unknown): Record<string, unknown>[] {
-  const fields = (body as { fields?: Record<string, Record<string, unknown>>[] } | undefined)?.fields ?? [];
-  return fields.flatMap((entry) =>
-    Object.entries(entry).map(([api_code, attributes]) => ({ api_code, ...attributes }))
-  );
+  return (body as { fields?: Record<string, unknown>[] } | undefined)?.fields ?? [];
 }
 
 /** `field_7:choice_1` into the target the check endpoint reads. */
@@ -173,9 +170,10 @@ export const FIELD: readonly Command[] = [
     description:
       'What to put in `type` when adding a field, and what each type accepts. `structure` is the ' +
       "part no example can carry: the keys that give a type its shape, like a table's columns or " +
-      "a cascade's nesting. `settings` are the flat keys beside them, `flags` the booleans, and " +
-      '`read_as` the name the same field answers with when read back — which is not the name you ' +
-      'write. Name one type to see its structure described in full. A table holds far fewer types ' +
+      "a cascade's nesting. `settings` are the flat keys beside them, and `flags` the booleans. " +
+      'A field reads back with the `type` it was written with; `read_as` is the name an older API ' +
+      'version read it as, which this CLI does not ask for. ' +
+      'Name one type to see its structure described in full. A table holds far fewer types ' +
       'than a form, and a scorable question type only belongs to a form that scores answers. ' +
       '`value` is what an entry writes into the type: `example` is a value it takes, exact under ' +
       '--output json, and `note` what the example cannot show.',
@@ -214,7 +212,9 @@ export const FIELD: readonly Command[] = [
   {
     path: ['field', 'list'],
     summary: 'List the fields of a form or table',
-    description: `Read out of the object structure, the same fields \`form get\` and \`table get\` return. ${UNUSABLE_FEATURES}`,
+    description:
+      'The same fields `form get` and `table get` return, each in the shape `field update` takes, ' +
+      `so one can be changed and sent back as it is. ${UNUSABLE_FEATURES}`,
     options: [...CONTAINER_OPTIONS],
     request: (input) => onContainer(input, 'getForm', 'getTable'),
     select: (body) => fieldListing(body, selectFields(body))
@@ -283,7 +283,7 @@ export const FIELD: readonly Command[] = [
     summary: 'Update one field',
     description:
       'The patch is merged onto the field; the api_code comes from the argument, not the payload. ' +
-      'Write only the keys to change, flat on the field, as the payload below says. ' +
+      'Write the keys to change, or the whole field as `field list` read it, as the payload below says. ' +
       WRITE_ANSWER,
     args: [{ name: 'api-code', required: true, description: 'Field api_code, e.g. field_3' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
@@ -338,7 +338,7 @@ export const FIELD: readonly Command[] = [
       'The conversion happens in place, so the only thing at stake is the data: this reports how ' +
       'many values are kept and how many are cleared. The edit itself is `field update <api-code> ' +
       '--json \'{"type":"TextArea"}\'`, and supported=false means that call would refuse it. ' +
-      'source_type and target_type are write names (NumberField), not the names a read answers with.',
+      'source_type and target_type are type names as a field reads and writes them (NumberField).',
     args: [
       { name: 'api-code', required: false, description: 'Field api_code; omit it only when --json names the field' }
     ],

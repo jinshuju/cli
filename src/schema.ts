@@ -37,8 +37,6 @@ export interface Issue {
   readonly value: unknown;
   /** Whether the rule broken was certainly the one that applied, and not the closest of several shapes. */
   readonly certain: boolean;
-  /** For an unknown key, the keys the object does take. */
-  readonly takes?: readonly string[];
 }
 
 /** The ways a value breaks a schema, first found first. */
@@ -128,14 +126,7 @@ function objectIssues(s: Schema, value: Record<string, unknown>, pointer: string
     const declared = s.properties?.[name];
     if (declared !== undefined) issues.push(...validate(declared, item, where, certain));
     else if (s.additionalProperties === false) {
-      issues.push({
-        pointer: where,
-        kind: 'unknown_key',
-        message: 'is not a key it takes',
-        value: item,
-        certain,
-        takes: Object.keys(s.properties ?? {})
-      });
+      issues.push({ pointer: where, kind: 'unknown_key', message: 'is not a key it takes', value: item, certain });
     } else if (s.additionalProperties !== undefined) {
       issues.push(...validate(s.additionalProperties, item, where, certain));
     }
