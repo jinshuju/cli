@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.26.0](https://github.com/jinshuju/cli/compare/v0.25.1...v0.26.0) (2026-11-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* `form get`, `table get`, `field list` and the answers of `field add`, `field update` and `field update-choices` give fields in the 2026-11-12 shape: write type names, settings flat on the field instead of under `validation`, and choices as `{api_code, value, ...}`. `form get` and `table get` give `fields` as a list of field objects instead of one-key objects keyed by api_code.
+
+### Features
+
+* ask for API version 2026-11-12, and pass fields on in the shape a field write takes ([bc5513e](https://github.com/jinshuju/cli/commit/bc5513eb7f534380dbc14a02d3c3b71e817f1931))
+* follow openapi.yaml changes to aggregateEntries, aggregateFormViewEntries, aggregateTableEntries and 32 more ([1a21675](https://github.com/jinshuju/cli/commit/1a21675c174dd8ab9e1aead3b817d2eb44f614fb))
+
+
+### Fixes
+
+* keep exclusiveMinimum and exclusiveMaximum, which the published openapi.yaml now uses ([5aa4361](https://github.com/jinshuju/cli/commit/5aa43611b8d431acb0acae415b49ea495460056c))
+
 ## [0.25.1](https://github.com/jinshuju/cli/compare/v0.25.0...v0.25.1) (2026-11-17)
 
 
