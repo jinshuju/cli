@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-10';
+export const SPEC_DATE: string | undefined = '2026-11-18';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -2275,14 +2275,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'AddressField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      predefined_value: { type: 'object' },
-      changeable: { type: 'object', additionalProperties: { type: 'boolean' } },
+      predefined_value: { type: ['object', 'null'] },
+      changeable: { type: ['object', 'null'], additionalProperties: { type: 'boolean' } },
       enable_auto_position: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 2, maximum: 3 },
       start_new_row: { type: 'boolean' }
@@ -2336,22 +2336,46 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  AttachmentFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'AttachmentField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      media_type: {
+        type: ['object', 'null'],
+        additionalProperties: false,
+        properties: {
+          type: { type: 'string', enum: ['unlimited', 'doc', 'image', 'video', 'audio', 'compress', 'custom'] },
+          value: { type: 'array', items: { type: 'string' } }
+        },
+        if: { properties: { type: { const: 'custom' } }, required: ['type'] },
+        then: { required: ['value'], properties: { value: { minItems: 1 } } }
+      },
+      mobile_camera_only: { type: 'boolean' }
+    }
+  },
   AttachmentFieldInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'AttachmentField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      max_size: { type: 'integer', minimum: 1, maximum: 500 },
-      max_file_quantity: { type: 'integer', minimum: 1 },
+      max_size: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 500 },
+      max_file_quantity: { type: ['integer', 'null'], minimum: 1 },
       media_type: {
-        type: 'object',
+        type: ['object', 'null'],
         additionalProperties: false,
         properties: {
           type: { type: 'string', enum: ['unlimited', 'doc', 'image', 'video', 'audio', 'compress', 'custom'] },
@@ -2369,26 +2393,37 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'AudioField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      max_duration: { type: 'integer', minimum: 1, maximum: 5 }
+      max_duration: { type: ['integer', 'null'], minimum: 1, maximum: 5 }
     }
   },
-  BooleanFieldInput: {
+  AutoCountGenCodeRuleInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type'],
+    properties: {
+      type: { type: 'string', enum: ['auto_count'] },
+      count_digit: { type: 'integer', minimum: 1, maximum: 12 },
+      fixed_digits: { type: 'boolean' },
+      counter: { type: 'integer', minimum: 1 },
+      reset_rule_type: { type: 'string', enum: ['none', 'daily', 'weekly', 'monthly'] }
+    }
+  },
+  BooleanFieldColumnInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'BooleanField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 }
     }
   },
@@ -2412,14 +2447,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'CascadeDropDown' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'CascadeChoiceInput' } },
-      levels: { type: 'integer', minimum: 2 },
+      levels: { type: ['integer', 'null'], minimum: 2 },
       choice_filterable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
       calculable: { type: 'boolean' },
@@ -2428,25 +2463,51 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       start_new_row: { type: 'boolean' }
     }
   },
+  CheckBoxColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'CheckBox' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      calculable: { type: 'boolean' },
+      choices_layout: { type: ['string', 'null'] },
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    },
+    allOf: [
+      {
+        if: { properties: { calculable: { const: true } }, required: ['calculable'] },
+        then: { properties: { choices: { items: { required: ['operand_value'] } } } }
+      }
+    ]
+  },
   CheckBoxInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'CheckBox' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
-      minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
@@ -2545,7 +2606,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['field_api_code'],
     properties: {
       field_api_code: { type: 'string' },
-      add: { type: 'array', items: { $ref: 'ChoiceInput' } },
+      add: { type: 'array', items: { anyOf: [{ $ref: 'ChoiceInput' }, { $ref: 'ImageChoiceInput' }] } },
       remove: {
         type: 'array',
         items: { oneOf: [{ type: 'string' }, { type: 'object', properties: { api_code: { type: 'string' } } }] }
@@ -2594,20 +2655,37 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  DateTimeFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'DateTimeField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['string', 'null'] },
+      precision: { type: ['string', 'null'], enum: ['month', 'day', 'minute', 'second', null] },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    }
+  },
   DateTimeFieldInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'DateTimeField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      predefined_value: { type: 'string' },
-      precision: { type: 'string', enum: ['month', 'day', 'minute', 'second'] },
+      predefined_value: { type: ['string', 'null'] },
+      precision: { type: ['string', 'null'], enum: ['month', 'day', 'minute', 'second', null] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -2618,16 +2696,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'Department' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
@@ -2699,9 +2777,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'DropDown' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2726,9 +2804,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'choices', 'answers'],
     properties: {
       type: { const: 'DropDownSelect' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2765,12 +2843,28 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'ESignatureField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 }
+    }
+  },
+  EmailFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'EmailField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      placeholder: { type: ['string', 'null'] },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
     }
   },
   EmailFieldInput: {
@@ -2779,14 +2873,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'EmailField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      placeholder: { type: 'string' },
+      placeholder: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -2949,7 +3043,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'Nps'
         ]
       },
-      label: { type: 'string' }
+      label: { type: ['string', 'null'] }
     },
     discriminator: {
       propertyName: 'type',
@@ -3162,7 +3256,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'Grade'
         ]
       },
-      label: { type: 'string' }
+      label: { type: ['string', 'null'] }
     },
     discriminator: {
       propertyName: 'type',
@@ -3325,6 +3419,39 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
+  FieldAnalytics: {
+    type: 'object',
+    required: ['agg_funcs', 'summary_kind', 'groupable', 'buckets', 'default_agg', 'summarisable'],
+    properties: {
+      agg_funcs: { type: 'array', items: { type: 'string' } },
+      summary_kind: { type: 'string', enum: ['choice', 'matrix', 'number', 'date', 'text', 'geo'] },
+      groupable: { type: 'boolean' },
+      buckets: { type: 'array', items: { type: 'string', enum: ['day', 'week', 'month'] } },
+      default_agg: { type: 'string' },
+      summarisable: { type: 'boolean' }
+    }
+  },
+  FieldChoiceInput: {
+    type: 'object',
+    additionalProperties: false,
+    anyOf: [{ required: ['value'] }, { required: ['name'] }],
+    properties: {
+      api_code: { type: 'string' },
+      value: { type: 'string' },
+      quota: { type: ['integer', 'null'], minimum: 0 },
+      quota_left: { type: ['integer', 'null'] },
+      operand_value: { type: ['number', 'null'] },
+      selected: { type: 'boolean' },
+      is_other: { type: 'boolean' },
+      hidden: { type: 'boolean' },
+      allow_extended_text: { type: 'boolean' },
+      extended_text_required: { type: 'boolean' },
+      attachment_id: { type: 'string' },
+      image_url: { type: ['string', 'null'] },
+      sub_choices: { type: 'array', items: { $ref: 'FieldChoiceInput' } },
+      name: { type: 'string' }
+    }
+  },
   FieldDataCheck: {
     type: 'object',
     required: ['field_api_code'],
@@ -3338,6 +3465,91 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       parent_field: { type: 'string' },
       check_extended_text: { type: 'boolean' },
       goods_item_dimension_options: { type: 'object' }
+    }
+  },
+  FieldDimensionInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      api_code: { type: 'string' },
+      type: {
+        type: 'string',
+        enum: [
+          'TextField',
+          'TextArea',
+          'MobileField',
+          'CheckBox',
+          'DropDown',
+          'CascadeDropDown',
+          'NumberField',
+          'FormulaField',
+          'DateTimeField',
+          'TimeField',
+          'AttachmentField',
+          'IdCardField',
+          'EmailField'
+        ]
+      },
+      label: { type: ['string', 'null'] },
+      choices: { type: 'array', items: { $ref: 'FieldChoiceInput' } },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      predefined_value: {},
+      placeholder: { type: ['string', 'null'] },
+      scannable: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
+      api_code_alias: { type: ['string', 'null'] },
+      sms_verification: { type: 'boolean' },
+      calculable: { type: 'boolean' },
+      choices_layout: { type: ['string', 'null'] },
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      levels: { type: ['integer', 'null'], minimum: 2 },
+      choice_filterable: { type: 'boolean' },
+      range_min: { type: ['number', 'null'] },
+      range_max: { type: ['number', 'null'] },
+      precision: {
+        anyOf: [
+          { type: 'integer', minimum: 0, maximum: 14 },
+          { type: 'string', enum: ['month', 'day', 'minute', 'second'] },
+          { type: 'null' }
+        ]
+      },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
+      display_as_percentage: { type: 'boolean' },
+      thousands_separator: { type: 'boolean' },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
+      icon_type: {
+        type: ['string', 'null'],
+        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text', 'text2', null]
+      },
+      formula: { type: ['string', 'null'] },
+      formula_display: { type: ['string', 'null'] },
+      result_display_type: { type: ['string', 'null'], enum: ['string', 'numeric', 'datetime', 'boolean', null] },
+      result_display_as_date: { type: 'boolean' },
+      start_date: { type: ['string', 'null'] },
+      end_date: { type: ['string', 'null'] },
+      include_second: { type: 'boolean' },
+      max_size: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 500 },
+      max_file_quantity: { type: ['integer', 'null'], minimum: 1 },
+      media_type: {
+        type: ['object', 'null'],
+        additionalProperties: false,
+        properties: {
+          type: { type: 'string', enum: ['unlimited', 'doc', 'image', 'video', 'audio', 'compress', 'custom'] },
+          value: { type: 'array', items: { type: 'string' } }
+        },
+        if: { properties: { type: { const: 'custom' } }, required: ['type'] },
+        then: { required: ['value'], properties: { value: { minItems: 1 } } }
+      },
+      mobile_camera_only: { type: 'boolean' }
     }
   },
   FieldInput: {
@@ -3388,7 +3600,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'WidgetMarquee'
         ]
       },
-      label: { type: 'string' }
+      label: { type: ['string', 'null'] }
     },
     discriminator: {
       propertyName: 'type',
@@ -3560,63 +3772,97 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'WidgetButton',
           'WidgetContact',
           'WidgetMap',
-          'WidgetMarquee'
+          'WidgetMarquee',
+          'SingleSelect',
+          'MultiSelect',
+          'ImageSingleSelect',
+          'ImageMultiSelect',
+          'TrueOrFalse',
+          'DropDownSelect',
+          'FillInBlank',
+          'ShortAnswer',
+          'FillInNumber',
+          'Rating',
+          'Nps',
+          'Department',
+          'Grade',
+          'ReversedAssociation',
+          'Divider',
+          'StyledText',
+          'ImageText',
+          'Carousel',
+          'Timer',
+          'ImageGroup',
+          'WidgetVideo',
+          'MultipleBlanksField',
+          'BooleanField',
+          'RelationField',
+          'SequenceField'
         ]
       },
       confirm_data_loss: { type: 'boolean' },
-      label: { type: 'string' },
-      notes: { type: 'string' },
+      label: { type: ['string', 'null'] },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       unique: { type: 'boolean' },
       other_choice_required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       rating_max: { type: 'integer', minimum: 1 },
-      choices: { type: 'array', items: { $ref: 'CascadeChoiceInput' } },
-      dimensions: { type: 'array', items: { $ref: 'DimensionInput' } },
+      choices: { type: 'array', items: { $ref: 'FieldChoiceInput' } },
+      dimensions: { type: 'array', items: { $ref: 'FieldDimensionInput' } },
       statements: { type: 'array', items: { $ref: 'StatementInput' } },
       goods_items: { type: 'array', items: { $ref: 'GoodsItemUpdateInput' } },
       reservation_items: { type: 'array', items: { $ref: 'ReservationItemInput' } },
       buttons: { type: 'array', minItems: 1, items: { $ref: 'WidgetButtonItemInput' } },
       segments: { type: 'array', minItems: 1, items: { $ref: 'SequenceSegmentInput' } },
       display_field_api_codes: { type: 'array', maxItems: 20, items: { type: 'string' } },
-      answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
-      answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
-      answer_explanation: { type: 'string' },
+      init_row_length: { type: 'integer', minimum: 1 },
+      widget_images: { type: 'array', items: { $ref: 'WidgetImageInput' } },
+      answers: { type: 'array', items: { $ref: 'AnswerInput' } },
+      answer_setting_mode: { type: ['string', 'null'], enum: ['absolute', 'partial_absolute', 'relative', null] },
+      answer_explanation: { type: ['string', 'null'] },
+      api_code_alias: { type: ['string', 'null'] },
+      analytics: { anyOf: [{ $ref: 'FieldAnalytics' }, { type: 'null' }] },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
-      minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
       predefined_value: {},
-      placeholder: { type: 'string' },
+      placeholder: { type: ['string', 'null'] },
+      scannable: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
       sms_verification: { type: 'boolean' },
-      range_min: { type: 'number' },
-      range_max: { type: 'number' },
+      range_min: { type: ['number', 'null'] },
+      range_max: { type: ['number', 'null'] },
       precision: {
         anyOf: [
           { type: 'integer', minimum: 0, maximum: 14 },
-          { type: 'string', enum: ['month', 'day', 'minute', 'second'] }
+          { type: 'string', enum: ['month', 'day', 'minute', 'second'] },
+          { type: 'null' }
         ]
       },
-      display_precision: { type: 'integer', minimum: 0 },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: 'string' },
-      currency_symbol_position: { type: 'string', enum: ['prefix', 'suffix'] },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: {
-        type: 'string',
-        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text', 'text2']
+        type: ['string', 'null'],
+        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text', 'text2', null]
       },
-      changeable: { type: 'object', additionalProperties: { type: 'boolean' } },
+      changeable: { type: ['object', 'null'], additionalProperties: { type: 'boolean' } },
       enable_auto_position: { type: 'boolean' },
-      max_size: { type: 'integer', minimum: 1, maximum: 500 },
-      max_file_quantity: { type: 'integer', minimum: 1 },
+      max_size: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 500 },
+      max_file_quantity: { type: ['integer', 'null'], minimum: 1 },
       media_type: {
-        type: 'object',
+        type: ['object', 'null'],
         additionalProperties: false,
         properties: {
           type: { type: 'string', enum: ['unlimited', 'doc', 'image', 'video', 'audio', 'compress', 'custom'] },
@@ -3626,21 +3872,21 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         then: { required: ['value'], properties: { value: { minItems: 1 } } }
       },
       mobile_camera_only: { type: 'boolean' },
-      minimum_ratings_display_text: { type: 'string' },
-      maximum_ratings_display_text: { type: 'string' },
+      minimum_ratings_display_text: { type: ['string', 'null'] },
+      maximum_ratings_display_text: { type: ['string', 'null'] },
       include_second: { type: 'boolean' },
-      max_duration: { type: 'integer', minimum: 1, maximum: 5 },
-      levels: { type: 'integer', minimum: 2 },
+      max_duration: { type: ['integer', 'null'], minimum: 1, maximum: 5 },
+      levels: { type: ['integer', 'null'], minimum: 2 },
       choice_filterable: { type: 'boolean' },
       horizontal_on_mobile: { type: 'boolean' },
-      likert_choice_style: { type: 'string', enum: ['single', 'multiple'] },
+      likert_choice_style: { type: ['string', 'null'], enum: ['single', 'multiple', null] },
       advanced_feature: { type: 'boolean' },
-      unit: { type: 'string', maxLength: 2 },
+      unit: { type: ['string', 'null'], maxLength: 2 },
       collapse_on_mobile: { type: 'boolean' },
-      columns_on_mobile: { type: 'integer', minimum: 1 },
-      formula: { type: 'string' },
-      formula_display: { type: 'string' },
-      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime', 'boolean'] },
+      columns_on_mobile: { type: ['integer', 'null'], minimum: 1 },
+      formula: { type: ['string', 'null'] },
+      formula_display: { type: ['string', 'null'] },
+      result_display_type: { type: ['string', 'null'], enum: ['string', 'numeric', 'datetime', 'boolean', null] },
       result_display_as_date: { type: 'boolean' },
       allow_multiple_items: { type: 'boolean' },
       item_allow_multiple_reservations: { type: 'boolean' },
@@ -3653,34 +3899,38 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       reverse_display_field_api_codes: { type: 'array', items: { type: 'string' } },
       related_form_token: { type: 'string' },
       paired: { type: 'boolean' },
-      related_label: { type: 'string' },
+      related_label: { type: ['string', 'null'] },
       show_split_line: { type: 'boolean' },
       show_part_description: { type: 'boolean' },
       disable_previous_page: { type: 'boolean' },
-      previous_page_text: { type: 'string' },
-      next_page_text: { type: 'string' },
-      count_down: { type: 'integer', minimum: 0 },
-      buttons_number: { type: 'integer', minimum: 1 },
+      previous_page_text: { type: ['string', 'null'] },
+      next_page_text: { type: ['string', 'null'] },
+      count_down: { type: ['integer', 'null'], minimum: 0 },
+      buttons_number: { type: ['integer', 'null'], minimum: 1 },
       fixed_to_bottom: { type: 'boolean' },
-      widget_max_images_number: { type: 'integer', minimum: 1 },
+      widget_max_images_number: { type: ['integer', 'null'], minimum: 0 },
       phones: {
         type: 'array',
         items: {
           type: 'object',
           required: ['phone'],
           additionalProperties: false,
-          properties: { phone: { type: 'string' } }
+          properties: { phone: { type: 'string' }, notes: { type: ['string', 'null'] } }
         }
       },
-      nav_address: { type: 'string' },
-      longitude: { type: 'number' },
-      latitude: { type: 'number' },
-      value: { type: 'string' },
+      nav_address: { type: ['string', 'null'] },
+      longitude: { type: ['number', 'null'] },
+      latitude: { type: ['number', 'null'] },
+      value: { type: ['string', 'null'] },
       localizable_on_mobile: { type: 'boolean' },
-      lines: { type: 'integer', minimum: 1 },
-      entries_init_number: { type: 'integer', minimum: 0 },
+      lines: { type: ['integer', 'null'], minimum: 1 },
+      entries_init_number: { type: ['integer', 'null'], minimum: 0 },
       entries_number_visible: { type: 'boolean' },
-      marquee_data_type: { type: 'string', enum: ['fake', 'real'] }
+      marquee_data_type: { type: ['string', 'null'], enum: ['fake', 'real', null] },
+      start_date: { type: ['string', 'null'] },
+      end_date: { type: ['string', 'null'] },
+      rating_type: { type: ['string', 'null'] },
+      highlight_color: { type: ['string', 'null'] }
     },
     allOf: [
       {
@@ -3706,15 +3956,19 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'answers'],
     properties: {
       type: { const: 'FillInBlank' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      scannable: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -3739,24 +3993,24 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'answers'],
     properties: {
       type: { const: 'FillInNumber' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: ['number', 'string'] },
-      placeholder: { type: 'string' },
-      range_min: { type: 'number' },
-      range_max: { type: 'number' },
-      precision: { type: 'integer', minimum: 0, maximum: 14 },
-      display_precision: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['number', 'string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      range_min: { type: ['number', 'null'] },
+      range_max: { type: ['number', 'null'] },
+      precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: 'string' },
-      currency_symbol_position: { type: 'string', enum: ['prefix', 'suffix'] },
-      icon_type: { type: 'string', enum: ['none', 'number-2', 'dollar1', 'cny1'] },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
+      icon_type: { type: ['string', 'null'], enum: ['none', 'number-2', 'dollar1', 'cny1', null] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -3781,6 +4035,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
+  FixedCharactersGenCodeRuleInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'value'],
+    properties: {
+      type: { type: 'string', enum: ['fixed_characters'] },
+      value: { type: 'string', minLength: 1, maxLength: 6 }
+    }
+  },
   FolderInput: {
     type: 'object',
     required: ['name'],
@@ -3796,9 +4059,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'associated_form_token', 'associated_field_api_codes'],
     properties: {
       type: { const: 'FormAssociation' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -3822,11 +4085,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             fields: {
               items: {
                 properties: {
-                  type: {
-                    not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo', 'WidgetButton'] }
-                  }
-                },
-                not: { anyOf: [{ required: ['grids_to_occupy'] }, { required: ['start_new_row'] }] }
+                  type: { not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo'] } },
+                  grids_to_occupy: { type: 'null' },
+                  start_new_row: { const: false }
+                }
               }
             }
           }
@@ -3915,7 +4177,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   FormFolderMoveInput: {
     type: 'object',
     required: ['folder_token'],
-    properties: { folder_token: { type: ['string', 'null'] } },
+    properties: { folder_token: { type: ['string', 'null'] }, original_folder_token: { type: 'string' } },
     additionalProperties: false
   },
   FormIntervalCommentInput: {
@@ -3967,6 +4229,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         ]
       },
       weixin_limited: { type: 'boolean' },
+      weixin_collect_way: { type: 'string', enum: ['not_collect', 'goldendata', 'own', 'own_weixin_qiye', 'yamcha'] },
+      weixin_collect_more_info_enabled: { type: 'boolean' },
       locale: { type: 'string', enum: ['zh-CN', 'zh-TW', 'en'] },
       entry_post_url: { type: 'string' },
       post_new_entry: { type: 'boolean' },
@@ -3982,6 +4246,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         properties: { limit: { type: 'integer', maximum: 2147483647 } },
         additionalProperties: false
       },
+      gen_code_enabled: { type: 'boolean' },
+      gen_code_label: { type: 'string', minLength: 2, maxLength: 6 },
+      gen_code_format: { type: 'string', enum: ['d8', 'd12', 'custom'] },
+      gen_code_rules: { type: 'array', items: { $ref: 'GenCodeRuleInput' } },
       fill_frequency: { $ref: 'FormFillFrequencyInput' },
       wording: { $ref: 'FormWordingInput' }
     },
@@ -4053,6 +4321,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         ]
       },
       weixin_limited: { type: 'boolean' },
+      weixin_collect_way: { type: 'string', enum: ['not_collect', 'goldendata', 'own', 'own_weixin_qiye', 'yamcha'] },
+      weixin_collect_more_info_enabled: { type: 'boolean' },
       submission_region_limited: { type: 'boolean' },
       submission_regions: { type: 'array', items: { type: 'string' } },
       locale: { type: 'string', enum: ['zh-CN', 'zh-TW', 'en'] },
@@ -4062,6 +4332,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       payment_expirable: { type: 'boolean' },
       payment_expiration_time: { type: 'integer', minimum: 3, maximum: 30 },
       wording: { $ref: 'FormWordingInput' },
+      gen_code_enabled: { type: 'boolean' },
+      gen_code_label: { type: 'string', minLength: 2, maxLength: 6 },
+      gen_code_format: { type: 'string', enum: ['d8', 'd12', 'custom'] },
+      gen_code_rules: { type: 'array', items: { $ref: 'GenCodeRuleInput' } },
       notification_rules: { type: 'array', items: { $ref: 'NotificationRuleInput' } },
       daily_repeat_close_rule: { $ref: 'DailyRepeatCloseRuleInput' }
     },
@@ -4120,7 +4394,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       field: { type: 'string' },
       operator: { type: 'string' },
       value: {},
-      scope_attr: { type: 'string', enum: ['date_time'] }
+      scope_attr: { type: 'string', enum: ['date_time'] },
+      group_index: { type: 'integer' }
     }
   },
   FormViewInput: {
@@ -4183,31 +4458,30 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     },
     additionalProperties: false
   },
-  FormulaFieldInput: {
+  FormulaFieldColumnInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'FormulaField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      formula: { type: 'string' },
-      formula_display: { type: 'string' },
-      result_display_type: { type: 'string', enum: ['string', 'numeric', 'datetime', 'boolean'] },
+      formula: { type: ['string', 'null'] },
+      formula_display: { type: ['string', 'null'] },
+      result_display_type: { type: ['string', 'null'], enum: ['string', 'numeric', 'datetime', 'boolean', null] },
       result_display_as_date: { type: 'boolean' },
-      precision: { type: 'integer', minimum: 0, maximum: 14 },
-      display_precision: { type: 'integer', minimum: 0 },
+      precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: 'string' },
-      currency_symbol_position: { type: 'string', enum: ['prefix', 'suffix'] },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: {
-        type: 'string',
-        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text', 'text2']
+        type: ['string', 'null'],
+        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text', 'text2', null]
       },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
@@ -4221,15 +4495,63 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
+  FormulaFieldInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'FormulaField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      required: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      formula: { type: ['string', 'null'] },
+      formula_display: { type: ['string', 'null'] },
+      result_display_type: { type: ['string', 'null'], enum: ['string', 'numeric', 'datetime', 'boolean', null] },
+      result_display_as_date: { type: 'boolean' },
+      precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
+      display_as_percentage: { type: 'boolean' },
+      thousands_separator: { type: 'boolean' },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
+      icon_type: {
+        type: ['string', 'null'],
+        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text', 'text2', null]
+      },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    },
+    allOf: [
+      {
+        not: {
+          properties: { display_as_percentage: { const: true }, thousands_separator: { const: true } },
+          required: ['display_as_percentage', 'thousands_separator']
+        }
+      }
+    ]
+  },
+  GenCodeRuleInput: {
+    type: 'object',
+    required: ['type'],
+    properties: { type: { type: 'string', enum: ['fixed_characters', 'auto_count'] } },
+    discriminator: {
+      propertyName: 'type',
+      mapping: { fixed_characters: 'FixedCharactersGenCodeRuleInput', auto_count: 'AutoCountGenCodeRuleInput' }
+    },
+    oneOf: [{ $ref: 'FixedCharactersGenCodeRuleInput' }, { $ref: 'AutoCountGenCodeRuleInput' }]
+  },
   GeoFieldInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'GeoField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 }
@@ -4241,16 +4563,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'GoodsField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       goods_items: { type: 'array', minItems: 1, items: { $ref: 'GoodsItemInput' } },
-      unit: { type: 'string', maxLength: 2 },
+      unit: { type: ['string', 'null'], maxLength: 2 },
       collapse_on_mobile: { type: 'boolean' },
-      columns_on_mobile: { type: 'integer', minimum: 1 }
+      columns_on_mobile: { type: ['integer', 'null'], minimum: 1 }
     }
   },
   GoodsItemInput: {
@@ -4260,27 +4582,26 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     properties: {
       name: { type: 'string' },
       layout: { type: 'string', enum: ['without_images', 'price_only', 'images', 'text_options'] },
-      api_code: { type: 'string' },
-      description: { type: 'string' },
-      position: { type: 'integer', minimum: 0 },
+      api_code: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
+      position: { type: ['integer', 'null'], minimum: 0 },
       hidden: { type: 'boolean' },
-      price: { type: 'number', minimum: 0 },
-      original_price: { type: 'number', minimum: 0 },
-      predefined_number: { type: 'integer', minimum: 0 },
+      price: { type: ['number', 'null'], minimum: 0 },
+      original_price: { type: ['number', 'null'], minimum: 0 },
+      predefined_number: { type: ['integer', 'null'], minimum: 0 },
       fixed_number: { type: 'boolean' },
-      inventory: { type: 'integer', minimum: 0 },
+      inventory: { type: ['integer', 'null'], minimum: 0 },
       inventory_reset: { type: 'boolean' },
-      min_purchase_quantity: { type: 'integer', minimum: 0 },
-      max_purchase_quantity: { type: 'integer', minimum: 0 },
+      min_purchase_quantity: { type: ['integer', 'null'], minimum: 0 },
+      max_purchase_quantity: { type: ['integer', 'null'], minimum: 0 },
       dimensions: {
         type: 'array',
-        minItems: 1,
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['label', 'options'],
           properties: {
-            api_code: { type: 'string' },
+            api_code: { type: ['string', 'null'] },
             label: { type: 'string' },
             options: {
               type: 'array',
@@ -4289,7 +4610,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
                 type: 'object',
                 additionalProperties: false,
                 required: ['label'],
-                properties: { label: { type: 'string' }, value: { type: 'string' } }
+                properties: { label: { type: 'string' }, value: { type: ['string', 'null'] } }
               }
             }
           }
@@ -4297,19 +4618,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       skus: {
         type: 'array',
-        minItems: 1,
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['specification'],
           properties: {
             specification: { type: 'object', additionalProperties: { type: 'string' } },
-            price: { type: 'number', minimum: 0 },
-            original_price: { type: 'number', minimum: 0 },
-            inventory: { type: 'integer', minimum: 0 },
+            price: { type: ['number', 'null'], minimum: 0 },
+            original_price: { type: ['number', 'null'], minimum: 0 },
+            inventory: { type: ['integer', 'null'], minimum: 0 },
             inventory_reset: { type: 'boolean' },
-            min_purchase_quantity: { type: 'integer', minimum: 0 },
-            max_purchase_quantity: { type: 'integer', minimum: 0 }
+            min_purchase_quantity: { type: ['integer', 'null'], minimum: 0 },
+            max_purchase_quantity: { type: ['integer', 'null'], minimum: 0 }
           }
         }
       },
@@ -4339,29 +4659,28 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     type: 'object',
     additionalProperties: false,
     properties: {
-      name: { type: 'string' },
-      layout: { type: 'string', enum: ['without_images', 'price_only', 'images', 'text_options'] },
-      api_code: { type: 'string' },
-      description: { type: 'string' },
-      position: { type: 'integer', minimum: 0 },
+      name: { type: ['string', 'null'] },
+      layout: { type: ['string', 'null'], enum: ['without_images', 'price_only', 'images', 'text_options', null] },
+      api_code: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
+      position: { type: ['integer', 'null'], minimum: 0 },
       hidden: { type: 'boolean' },
-      price: { type: 'number', minimum: 0 },
-      original_price: { type: 'number', minimum: 0 },
-      predefined_number: { type: 'integer', minimum: 0 },
+      price: { type: ['number', 'null'], minimum: 0 },
+      original_price: { type: ['number', 'null'], minimum: 0 },
+      predefined_number: { type: ['integer', 'null'], minimum: 0 },
       fixed_number: { type: 'boolean' },
-      inventory: { type: 'integer', minimum: 0 },
+      inventory: { type: ['integer', 'null'], minimum: 0 },
       inventory_reset: { type: 'boolean' },
-      min_purchase_quantity: { type: 'integer', minimum: 0 },
-      max_purchase_quantity: { type: 'integer', minimum: 0 },
+      min_purchase_quantity: { type: ['integer', 'null'], minimum: 0 },
+      max_purchase_quantity: { type: ['integer', 'null'], minimum: 0 },
       dimensions: {
         type: 'array',
-        minItems: 1,
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['label', 'options'],
           properties: {
-            api_code: { type: 'string' },
+            api_code: { type: ['string', 'null'] },
             label: { type: 'string' },
             options: {
               type: 'array',
@@ -4370,7 +4689,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
                 type: 'object',
                 additionalProperties: false,
                 required: ['label'],
-                properties: { label: { type: 'string' }, value: { type: 'string' } }
+                properties: { label: { type: 'string' }, value: { type: ['string', 'null'] } }
               }
             }
           }
@@ -4378,19 +4697,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       skus: {
         type: 'array',
-        minItems: 1,
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['specification'],
           properties: {
             specification: { type: 'object', additionalProperties: { type: 'string' } },
-            price: { type: 'number', minimum: 0 },
-            original_price: { type: 'number', minimum: 0 },
-            inventory: { type: 'integer', minimum: 0 },
+            price: { type: ['number', 'null'], minimum: 0 },
+            original_price: { type: ['number', 'null'], minimum: 0 },
+            inventory: { type: ['integer', 'null'], minimum: 0 },
             inventory_reset: { type: 'boolean' },
-            min_purchase_quantity: { type: 'integer', minimum: 0 },
-            max_purchase_quantity: { type: 'integer', minimum: 0 }
+            min_purchase_quantity: { type: ['integer', 'null'], minimum: 0 },
+            max_purchase_quantity: { type: ['integer', 'null'], minimum: 0 }
           }
         }
       },
@@ -4402,6 +4720,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     if: { not: { required: ['api_code'] } },
     then: {
       required: ['name', 'layout'],
+      properties: {
+        name: { type: 'string' },
+        layout: { type: 'string', enum: ['without_images', 'price_only', 'images', 'text_options'] }
+      },
       allOf: [
         {
           if: { properties: { layout: { enum: ['price_only', 'text_options'] } } },
@@ -4426,16 +4748,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'Grade' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
@@ -4454,13 +4776,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'IdCardField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -4471,18 +4796,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'ImageCheckBox' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
-      minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' }
     },
     allOf: [
@@ -4517,18 +4842,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'choices', 'answers'],
     properties: {
       type: { const: 'ImageMultiSelect' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
-      minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
@@ -4569,15 +4894,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'ImageRadioButton' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' }
     },
@@ -4594,15 +4919,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'choices', 'answers'],
     properties: {
       type: { const: 'ImageSingleSelect' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -4631,24 +4956,24 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'LikertField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       statements: { type: 'array', minItems: 1, items: { $ref: 'StatementInput' } },
       horizontal_on_mobile: { type: 'boolean' },
-      likert_choice_style: { type: 'string', enum: ['single', 'multiple'] },
-      minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 },
+      likert_choice_style: { type: ['string', 'null'], enum: ['single', 'multiple', null] },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
       calculable: { type: 'boolean' }
     },
     allOf: [
       {
         if: { not: { properties: { likert_choice_style: { const: 'multiple' } }, required: ['likert_choice_style'] } },
-        then: { not: { anyOf: [{ required: ['minimum_length'] }, { required: ['maximum_length'] }] } }
+        then: { properties: { minimum_length: { type: 'null' }, maximum_length: { type: 'null' } } }
       },
       {
         if: { properties: { calculable: { const: true } }, required: ['calculable'] },
@@ -4656,21 +4981,38 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
+  LinkFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'LinkField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    }
+  },
   LinkFieldInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'LinkField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -4681,9 +5023,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'MatrixField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -4699,9 +5041,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'MatrixScaleField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -4815,22 +5157,43 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   MessageSource: { type: 'string', enum: ['api', 'jiri', 'routine'] },
   MessageStatus: { type: 'string', enum: ['queued', 'sending', 'succeeded', 'failed'] },
   MessageType: { type: 'string', enum: ['email', 'sms', 'ding_talk', 'wxwork', 'webhook'] },
+  MobileFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'MobileField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      sms_verification: { type: 'boolean' },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    }
+  },
   MobileFieldInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'MobileField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
       sms_verification: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -4841,19 +5204,19 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'choices', 'answers'],
     properties: {
       type: { const: 'MultiSelect' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
-      minimum_length: { type: 'integer', minimum: 0 },
-      maximum_length: { type: 'integer', minimum: 0 },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
@@ -4896,13 +5259,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'NameField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -4975,14 +5341,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'NpsField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      minimum_ratings_display_text: { type: 'string' },
-      maximum_ratings_display_text: { type: 'string' }
+      minimum_ratings_display_text: { type: ['string', 'null'] },
+      maximum_ratings_display_text: { type: ['string', 'null'] }
     }
   },
   NpsInput: {
@@ -4991,14 +5357,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'answers'],
     properties: {
       type: { const: 'Nps' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      minimum_ratings_display_text: { type: 'string' },
-      maximum_ratings_display_text: { type: 'string' },
+      minimum_ratings_display_text: { type: ['string', 'null'] },
+      maximum_ratings_display_text: { type: ['string', 'null'] },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -5015,30 +5381,62 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
+  NumberFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'NumberField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['number', 'string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
+      display_as_percentage: { type: 'boolean' },
+      thousands_separator: { type: 'boolean' },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
+      icon_type: { type: ['string', 'null'], enum: ['none', 'number-2', 'dollar1', 'cny1', null] },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    },
+    allOf: [
+      {
+        not: {
+          properties: { display_as_percentage: { const: true }, thousands_separator: { const: true } },
+          required: ['display_as_percentage', 'thousands_separator']
+        }
+      }
+    ]
+  },
   NumberFieldInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'NumberField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: ['number', 'string'] },
-      placeholder: { type: 'string' },
-      range_min: { type: 'number' },
-      range_max: { type: 'number' },
-      precision: { type: 'integer', minimum: 0, maximum: 14 },
-      display_precision: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['number', 'string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      range_min: { type: ['number', 'null'] },
+      range_max: { type: ['number', 'null'] },
+      precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: 'string' },
-      currency_symbol_position: { type: 'string', enum: ['prefix', 'suffix'] },
-      icon_type: { type: 'string', enum: ['none', 'number-2', 'dollar1', 'cny1'] },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
+      icon_type: { type: ['string', 'null'], enum: ['none', 'number-2', 'dollar1', 'cny1', null] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -5146,16 +5544,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'PageBreak' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       disable_previous_page: { type: 'boolean' },
-      previous_page_text: { type: 'string' },
-      next_page_text: { type: 'string' },
-      count_down: { type: 'integer', minimum: 0 }
+      previous_page_text: { type: ['string', 'null'] },
+      next_page_text: { type: ['string', 'null'] },
+      count_down: { type: ['integer', 'null'], minimum: 0 }
     }
   },
   PublishedArtifactInput: {
@@ -5188,22 +5586,48 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       deliverables: { type: 'array', maxItems: 10, items: { $ref: 'QuickpayDeliverableInput' } }
     }
   },
+  RadioButtonColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'RadioButton' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      calculable: { type: 'boolean' },
+      choices_layout: { type: ['string', 'null'] },
+      random_choices: { type: 'boolean' },
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    },
+    allOf: [
+      {
+        if: { properties: { calculable: { const: true } }, required: ['calculable'] },
+        then: { properties: { choices: { items: { required: ['operand_value'] } } } }
+      }
+    ]
+  },
   RadioButtonInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'RadioButton' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
@@ -5222,9 +5646,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'RatingField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5237,9 +5661,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'answers'],
     properties: {
       type: { const: 'Rating' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5260,21 +5684,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
-  RelationFieldInput: {
+  RelationFieldColumnInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'RelationField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       related_form_token: { type: 'string' },
       paired: { type: 'boolean' },
-      related_label: { type: 'string' }
+      related_label: { type: ['string', 'null'] }
     }
   },
   ReservationByDayQuotaInput: {
@@ -5289,14 +5712,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       show_left_quota: { type: 'boolean' },
       start_time_offset: {
-        type: 'object',
+        type: ['object', 'null'],
         additionalProperties: false,
-        properties: { offset_number: { type: 'integer', minimum: 0 }, unit: { type: 'string', enum: ['day', 'hour'] } }
+        properties: {
+          offset_number: { type: ['integer', 'null'], minimum: 0 },
+          unit: { type: ['string', 'null'], enum: ['day', 'hour', null] }
+        }
       },
       end_time_offset: {
-        type: 'object',
+        type: ['object', 'null'],
         additionalProperties: false,
-        properties: { offset_number: { type: 'integer', minimum: 0 }, unit: { type: 'string', enum: ['day', 'hour'] } }
+        properties: {
+          offset_number: { type: ['integer', 'null'], minimum: 0 },
+          unit: { type: ['string', 'null'], enum: ['day', 'hour', null] }
+        }
       },
       daily_time_range_quotas: {
         type: 'array',
@@ -5305,13 +5734,13 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           additionalProperties: false,
           properties: {
             for_wday: {
-              type: 'string',
-              enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+              type: ['string', 'null'],
+              enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', null]
             },
-            quota: { type: 'integer', minimum: 0 },
-            price: { type: 'number', minimum: 0 },
-            position: { type: 'integer', minimum: 0 },
-            daily_time_range_token: { type: 'string' }
+            quota: { type: ['integer', 'null'], minimum: 0 },
+            price: { type: ['number', 'null'], minimum: 0 },
+            position: { type: ['integer', 'null'], minimum: 0 },
+            daily_time_range_token: { type: ['string', 'null'] }
           }
         }
       },
@@ -5320,7 +5749,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         items: {
           type: 'object',
           additionalProperties: false,
-          properties: { start_time: { type: 'string' }, end_time: { type: 'string' } }
+          properties: { start_time: { type: ['string', 'null'] }, end_time: { type: ['string', 'null'] } }
         }
       },
       special_time_range_quotas: {
@@ -5332,7 +5761,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           properties: {
             special_dates: { type: 'array', minItems: 1, items: { type: 'string' } },
             quota: { type: 'integer', minimum: 0 },
-            price: { type: 'number', minimum: 0 }
+            price: { type: ['number', 'null'], minimum: 0 }
           }
         }
       }
@@ -5351,14 +5780,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       show_left_quota: { type: 'boolean' },
       start_time_offset: {
-        type: 'object',
+        type: ['object', 'null'],
         additionalProperties: false,
-        properties: { offset_number: { type: 'integer', minimum: 0 }, unit: { type: 'string', enum: ['day', 'hour'] } }
+        properties: {
+          offset_number: { type: ['integer', 'null'], minimum: 0 },
+          unit: { type: ['string', 'null'], enum: ['day', 'hour', null] }
+        }
       },
       end_time_offset: {
-        type: 'object',
+        type: ['object', 'null'],
         additionalProperties: false,
-        properties: { offset_number: { type: 'integer', minimum: 0 }, unit: { type: 'string', enum: ['day', 'hour'] } }
+        properties: {
+          offset_number: { type: ['integer', 'null'], minimum: 0 },
+          unit: { type: ['string', 'null'], enum: ['day', 'hour', null] }
+        }
       },
       daily_time_range_quotas: {
         type: 'array',
@@ -5368,27 +5803,27 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           required: ['start_time', 'end_time'],
           properties: {
             for_wday: {
-              type: 'string',
-              enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+              type: ['string', 'null'],
+              enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', null]
             },
-            quota: { type: 'integer', minimum: 0 },
-            price: { type: 'number', minimum: 0 },
-            position: { type: 'integer', minimum: 0 },
-            daily_time_range_token: { type: 'string' },
+            quota: { type: ['integer', 'null'], minimum: 0 },
+            price: { type: ['number', 'null'], minimum: 0 },
+            position: { type: ['integer', 'null'], minimum: 0 },
+            daily_time_range_token: { type: ['string', 'null'] },
             start_time: {
               type: 'object',
               additionalProperties: false,
               properties: {
-                hour: { type: 'integer', minimum: 0, maximum: 23 },
-                minute: { type: 'integer', minimum: 0, maximum: 59 }
+                hour: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
+                minute: { type: ['integer', 'null'], minimum: 0, maximum: 59 }
               }
             },
             end_time: {
               type: 'object',
               additionalProperties: false,
               properties: {
-                hour: { type: 'integer', minimum: 0, maximum: 23 },
-                minute: { type: 'integer', minimum: 0, maximum: 59 }
+                hour: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
+                minute: { type: ['integer', 'null'], minimum: 0, maximum: 59 }
               }
             }
           }
@@ -5399,13 +5834,27 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         items: {
           type: 'object',
           additionalProperties: false,
-          properties: { start_time: { type: 'string' }, end_time: { type: 'string' } }
+          properties: { start_time: { type: ['string', 'null'] }, end_time: { type: ['string', 'null'] } }
         }
       },
-      time_range_mode: { type: 'string', enum: ['same_by_wday', 'different_by_wday'] }
+      time_range_mode: { type: ['string', 'null'], enum: ['same_by_wday', 'different_by_wday', null] }
     },
     if: { properties: { time_range_mode: { const: 'different_by_wday' } }, required: ['time_range_mode'] },
-    then: { properties: { daily_time_range_quotas: { items: { required: ['for_wday'] } } } }
+    then: {
+      properties: {
+        daily_time_range_quotas: {
+          items: {
+            required: ['for_wday'],
+            properties: {
+              for_wday: {
+                type: 'string',
+                enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+              }
+            }
+          }
+        }
+      }
+    }
   },
   ReservationFieldInput: {
     type: 'object',
@@ -5413,9 +5862,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'ReservationField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5430,7 +5879,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     type: 'object',
     additionalProperties: false,
     anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['attachment_id'] }],
-    properties: { image_url: { type: 'string' }, image_base64: { type: 'string' }, attachment_id: { type: 'string' } }
+    properties: {
+      image_url: { type: ['string', 'null'] },
+      image_base64: { type: ['string', 'null'] },
+      attachment_id: { type: ['string', 'null'] }
+    }
   },
   ReservationItemInput: {
     type: 'object',
@@ -5438,14 +5891,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['name'],
     properties: {
       name: { type: 'string' },
-      api_code: { type: 'string' },
-      description: { type: 'string' },
-      position: { type: 'integer', minimum: 0 },
+      api_code: { type: ['string', 'null'] },
+      description: { type: ['string', 'null'] },
+      position: { type: ['integer', 'null'], minimum: 0 },
       hidden: { type: 'boolean' },
       selected: { type: 'boolean' },
       payable: { type: 'boolean' },
-      start_date: { type: 'string', anyOf: [{}, {}] },
-      end_date: { type: 'string', anyOf: [{}, {}] },
+      start_date: { type: ['string', 'null'], anyOf: [{}, {}] },
+      end_date: { type: ['string', 'null'], anyOf: [{}, {}] },
       quota_setting: { $ref: 'ReservationQuotaSettingInput' },
       images: { type: 'array', maxItems: 5, items: { $ref: 'ReservationItemImageInput' } }
     }
@@ -5555,8 +6008,38 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       delete_authorized: {},
       message_rules: {
         type: ['array', 'null'],
-        items: { anyOf: [{ $ref: 'RoutineGroupMessageRuleInput' }, { $ref: 'RoutineEmailMessageRuleInput' }] }
+        items: {
+          anyOf: [
+            { $ref: 'RoutineGroupMessageRuleInput' },
+            { $ref: 'RoutineEmailMessageRuleInput' },
+            { $ref: 'RoutineSMSMessageRuleInput' },
+            { $ref: 'RoutineSystemMessageRuleInput' },
+            { $ref: 'RoutineWebhookMessageRuleInput' },
+            { $ref: 'RoutineWebhookBodyRuleInput' },
+            { $ref: 'RoutineWebhookEntryRuleInput' }
+          ]
+        }
       }
+    }
+  },
+  RoutineSMSMessageRuleInput: {
+    type: 'object',
+    anyOf: [{ required: ['approach'] }, { required: ['id'] }],
+    properties: {
+      approach: { type: ['string', 'null'], enum: ['sms', null] },
+      id: { type: 'string' },
+      sms_template_id: { type: ['string', 'null'] },
+      recipients: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'string' } },
+      recipient_fields: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['form_token', 'field_code'],
+          properties: { form_token: { type: 'string' }, field_code: { type: 'string' } }
+        }
+      },
+      variables: { type: 'object', additionalProperties: { type: 'string' } }
     }
   },
   RoutineScheduleInput: {
@@ -5578,6 +6061,52 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: {},
       group_index: { type: 'integer' },
       scope_attr: { type: 'string' }
+    }
+  },
+  RoutineSystemMessageRuleInput: {
+    type: 'object',
+    anyOf: [{ required: ['approach'] }, { required: ['id'] }],
+    properties: {
+      approach: { type: 'string', enum: ['system_message'] },
+      id: { type: 'string' },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: ['string', 'null'], maxLength: 500 }
+    }
+  },
+  RoutineWebhookBodyRuleInput: {
+    type: 'object',
+    anyOf: [{ required: ['approach', 'body'] }, { required: ['id'] }],
+    properties: {
+      approach: { type: 'string', enum: ['webhook'] },
+      id: { type: 'string' },
+      url: { type: 'string' },
+      channel_id: { type: 'string' },
+      body: { type: 'string', maxLength: 20000 }
+    }
+  },
+  RoutineWebhookEntryRuleInput: {
+    type: 'object',
+    anyOf: [{ required: ['approach', 'form_token'] }, { required: ['id'] }],
+    properties: {
+      approach: { type: 'string', enum: ['webhook'] },
+      id: { type: 'string' },
+      url: { type: 'string' },
+      channel_id: { type: 'string' },
+      form_token: { type: 'string' },
+      selection: { type: 'string', maxLength: 2000 },
+      once_per_entry: { type: 'boolean' }
+    }
+  },
+  RoutineWebhookMessageRuleInput: {
+    type: 'object',
+    anyOf: [{ required: ['approach'] }, { required: ['id'] }],
+    properties: {
+      approach: { type: 'string', enum: ['webhook'] },
+      id: { type: 'string' },
+      url: { type: 'string' },
+      channel_id: { type: 'string' },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: 'string' }
     }
   },
   SMSMessageChannelInput: {
@@ -5749,7 +6278,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'end'
         ]
       },
-      value: {}
+      value: {},
+      group_index: { type: 'integer' },
+      groupIndex: { type: 'integer' }
     }
   },
   SectionBreakInput: {
@@ -5758,9 +6289,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'SectionBreak' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5768,17 +6299,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_part_description: { type: 'boolean' }
     }
   },
-  SequenceFieldInput: {
+  SequenceFieldColumnInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'SequenceField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       segments: { type: 'array', minItems: 1, items: { $ref: 'SequenceSegmentInput' } }
     }
@@ -5789,18 +6319,29 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['kind'],
     properties: {
       kind: { type: 'string', enum: ['fixed_text', 'field_value', 'sequence_number'] },
-      value: { type: 'string', minLength: 1, maxLength: 6 },
-      api_code: { type: 'string' },
-      cid: { type: 'string' },
-      digits: { type: 'integer', minimum: 1, maximum: 12 }
+      value: { type: ['string', 'null'], minLength: 1, maxLength: 6 },
+      api_code: { type: ['string', 'null'] },
+      cid: { type: ['string', 'null'] },
+      digits: { type: ['integer', 'null'], minimum: 1, maximum: 12 }
     },
     allOf: [
-      { if: { properties: { kind: { const: 'fixed_text' } } }, then: { required: ['value'] } },
+      {
+        if: { properties: { kind: { const: 'fixed_text' } } },
+        then: { required: ['value'], properties: { value: { type: 'string' } } }
+      },
       {
         if: { properties: { kind: { const: 'field_value' } } },
-        then: { anyOf: [{ required: ['api_code'] }, { required: ['cid'] }] }
+        then: {
+          anyOf: [
+            { required: ['api_code'], properties: { api_code: { type: 'string' } } },
+            { required: ['cid'], properties: { cid: { type: 'string' } } }
+          ]
+        }
       },
-      { if: { properties: { kind: { const: 'sequence_number' } } }, then: { required: ['digits'] } }
+      {
+        if: { properties: { kind: { const: 'sequence_number' } } },
+        then: { required: ['digits'], properties: { digits: { type: 'integer' } } }
+      }
     ]
   },
   ShortAnswerInput: {
@@ -5809,15 +6350,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'answers'],
     properties: {
       type: { const: 'ShortAnswer' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -5842,16 +6383,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'choices', 'answers'],
     properties: {
       type: { const: 'SingleSelect' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
@@ -5882,9 +6423,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'SortField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5933,40 +6474,40 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'SequenceField'
         ]
       },
-      label: { type: 'string' }
+      label: { type: ['string', 'null'] }
     },
     discriminator: {
       propertyName: 'type',
       mapping: {
-        TextArea: 'TextAreaInput',
-        RadioButton: 'RadioButtonInput',
-        CheckBox: 'CheckBoxInput',
-        BooleanField: 'BooleanFieldInput',
-        MobileField: 'MobileFieldInput',
-        NumberField: 'NumberFieldInput',
-        DateTimeField: 'DateTimeFieldInput',
-        EmailField: 'EmailFieldInput',
-        LinkField: 'LinkFieldInput',
-        AttachmentField: 'AttachmentFieldInput',
-        FormulaField: 'FormulaFieldInput',
-        RelationField: 'RelationFieldInput',
-        SequenceField: 'SequenceFieldInput'
+        TextArea: 'TextAreaColumnInput',
+        RadioButton: 'RadioButtonColumnInput',
+        CheckBox: 'CheckBoxColumnInput',
+        BooleanField: 'BooleanFieldColumnInput',
+        MobileField: 'MobileFieldColumnInput',
+        NumberField: 'NumberFieldColumnInput',
+        DateTimeField: 'DateTimeFieldColumnInput',
+        EmailField: 'EmailFieldColumnInput',
+        LinkField: 'LinkFieldColumnInput',
+        AttachmentField: 'AttachmentFieldColumnInput',
+        FormulaField: 'FormulaFieldColumnInput',
+        RelationField: 'RelationFieldColumnInput',
+        SequenceField: 'SequenceFieldColumnInput'
       }
     },
     oneOf: [
-      { $ref: 'TextAreaInput' },
-      { $ref: 'RadioButtonInput' },
-      { $ref: 'CheckBoxInput' },
-      { $ref: 'BooleanFieldInput' },
-      { $ref: 'MobileFieldInput' },
-      { $ref: 'NumberFieldInput' },
-      { $ref: 'DateTimeFieldInput' },
-      { $ref: 'EmailFieldInput' },
-      { $ref: 'LinkFieldInput' },
-      { $ref: 'AttachmentFieldInput' },
-      { $ref: 'FormulaFieldInput' },
-      { $ref: 'RelationFieldInput' },
-      { $ref: 'SequenceFieldInput' }
+      { $ref: 'TextAreaColumnInput' },
+      { $ref: 'RadioButtonColumnInput' },
+      { $ref: 'CheckBoxColumnInput' },
+      { $ref: 'BooleanFieldColumnInput' },
+      { $ref: 'MobileFieldColumnInput' },
+      { $ref: 'NumberFieldColumnInput' },
+      { $ref: 'DateTimeFieldColumnInput' },
+      { $ref: 'EmailFieldColumnInput' },
+      { $ref: 'LinkFieldColumnInput' },
+      { $ref: 'AttachmentFieldColumnInput' },
+      { $ref: 'FormulaFieldColumnInput' },
+      { $ref: 'RelationFieldColumnInput' },
+      { $ref: 'SequenceFieldColumnInput' }
     ]
   },
   TableCreateInput: {
@@ -6003,9 +6544,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'TableField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -6019,15 +6560,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'TelephoneField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -6050,21 +6591,38 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       confirm_form_app_trial: { type: 'boolean' }
     }
   },
+  TextAreaColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'TextArea' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
+      start_new_row: { type: 'boolean' }
+    }
+  },
   TextAreaInput: {
     type: 'object',
     additionalProperties: false,
     required: ['type', 'label'],
     properties: {
       type: { const: 'TextArea' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -6075,15 +6633,19 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'TextField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
-      predefined_value: { type: 'string' },
-      placeholder: { type: 'string' },
+      predefined_value: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      scannable: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -6159,14 +6721,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'TimeField' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       predefined_value: {
-        type: 'object',
+        type: ['object', 'null'],
         properties: { hour: { type: 'integer' }, minute: { type: 'integer' }, second: { type: 'integer' } }
       },
       include_second: { type: 'boolean' },
@@ -6189,16 +6751,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label', 'choices', 'answers'],
     properties: {
       type: { const: 'TrueOrFalse' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
       calculable: { type: 'boolean' },
-      choices_layout: { type: 'string' },
+      choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
@@ -6404,14 +6966,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'WidgetButton' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       buttons: { type: 'array', minItems: 1, items: { $ref: 'WidgetButtonItemInput' } },
-      buttons_number: { type: 'integer', minimum: 1 },
+      buttons_number: { type: ['integer', 'null'], minimum: 1 },
       fixed_to_bottom: { type: 'boolean' }
     }
   },
@@ -6421,10 +6983,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['text'],
     properties: {
       text: { type: 'string' },
-      position: { type: 'integer', minimum: 0 },
-      link_type: { type: 'string', enum: ['normal', 'miniapp', 'phone', 'qrcode'] },
-      link_attrs: { type: 'object' },
-      url: { type: 'string' }
+      position: { type: ['integer', 'null'], minimum: 0 },
+      link_type: { type: ['string', 'null'], enum: ['normal', 'miniapp', 'phone', 'qrcode', null] },
+      link_attrs: { type: ['object', 'null'] },
+      url: { type: ['string', 'null'] }
     }
   },
   WidgetContactInput: {
@@ -6433,21 +6995,21 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'WidgetContact' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       widget_images: { type: 'array', items: { $ref: 'WidgetImageInput' } },
-      widget_max_images_number: { type: 'integer', minimum: 1 },
+      widget_max_images_number: { type: ['integer', 'null'], minimum: 0 },
       phones: {
         type: 'array',
         items: {
           type: 'object',
           required: ['phone'],
           additionalProperties: false,
-          properties: { phone: { type: 'string' } }
+          properties: { phone: { type: 'string' }, notes: { type: ['string', 'null'] } }
         }
       }
     }
@@ -6456,7 +7018,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     type: 'object',
     additionalProperties: false,
     anyOf: [{ required: ['image_url'] }, { required: ['image_base64'] }, { required: ['attachment_id'] }],
-    properties: { image_url: { type: 'string' }, image_base64: { type: 'string' }, attachment_id: { type: 'string' } }
+    properties: {
+      image_url: { type: ['string', 'null'] },
+      image_base64: { type: ['string', 'null'] },
+      attachment_id: { type: ['string', 'null'] }
+    }
   },
   WidgetMapInput: {
     type: 'object',
@@ -6464,16 +7030,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'WidgetMap' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      nav_address: { type: 'string' },
-      longitude: { type: 'number' },
-      latitude: { type: 'number' },
-      value: { type: 'string' },
+      nav_address: { type: ['string', 'null'] },
+      longitude: { type: ['number', 'null'] },
+      latitude: { type: ['number', 'null'] },
+      value: { type: ['string', 'null'] },
       localizable_on_mobile: { type: 'boolean' }
     }
   },
@@ -6483,16 +7049,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
     required: ['type', 'label'],
     properties: {
       type: { const: 'WidgetMarquee' },
-      label: { type: 'string' },
+      label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: 'string' },
+      notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      lines: { type: 'integer', minimum: 1 },
-      entries_init_number: { type: 'integer', minimum: 0 },
+      lines: { type: ['integer', 'null'], minimum: 1 },
+      entries_init_number: { type: ['integer', 'null'], minimum: 0 },
       entries_number_visible: { type: 'boolean' },
-      marquee_data_type: { type: 'string', enum: ['fake', 'real'] }
+      marquee_data_type: { type: ['string', 'null'], enum: ['fake', 'real', null] }
     }
   },
   WxworkMessageChannelInput: {

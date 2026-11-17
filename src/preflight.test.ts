@@ -54,13 +54,13 @@ test('a field written back as it was read is refused before it is sent, with the
 
 test('null for a key the spec does not let be null is refused, and the key read as null is named', async () => {
   const mock = recording();
-  const patched = await runCli(field('{"range_min":null,"placeholder":null,"label":"ok"}'), {
+  const patched = await runCli(field('{"required":null,"unique":null,"label":"ok"}'), {
     env: ENV,
     client: mock.client
   });
   assert.equal(patched.exitCode, 2);
-  assert.match(patched.stderr, /\/fields\/update\/0\/range_min: is null; leave the key out to leave it unchanged/);
-  assert.match(patched.stderr, /\/fields\/update\/0\/placeholder: is null; leave the key out to leave it unchanged/);
+  assert.match(patched.stderr, /\/fields\/update\/0\/required: is null; leave the key out to leave it unchanged/);
+  assert.match(patched.stderr, /\/fields\/update\/0\/unique: is null; leave the key out to leave it unchanged/);
 
   // A key the spec does let be null goes: a choice's quota, which null takes off.
   const nullable = await runCli(field('{"update":[{"api_code":"c1","quota":null}]}', 'update-choices'), {
@@ -203,12 +203,12 @@ test('a command with two requests to make is refused for the second before the f
 
 test('--as-is sends the body anyway, and --output json carries each refusal the way API v1 gives its errors', async () => {
   const mock = recording();
-  const asIs = await runCli([...field('{"range_min":null}'), '--as-is'], { env: ENV, client: mock.client });
+  const asIs = await runCli([...field('{"required":null}'), '--as-is'], { env: ENV, client: mock.client });
   assert.equal(asIs.exitCode, 0, asIs.stderr);
   assert.equal(mock.requests.length, 1);
-  assert.deepEqual(mock.requests[0]?.body, { fields: { update: [{ range_min: null, api_code: 'field_3' }] } });
+  assert.deepEqual(mock.requests[0]?.body, { fields: { update: [{ required: null, api_code: 'field_3' }] } });
 
-  const json = await runCli([...field('{"range_min":null,"validation":{"required":true}}'), '--output', 'json'], {
+  const json = await runCli([...field('{"required":null,"validation":{"required":true}}'), '--output', 'json'], {
     env: ENV,
     client: mock.client
   });
@@ -226,6 +226,6 @@ test('--as-is sends the body anyway, and --output json carries each refusal the 
   );
   assert.deepEqual(
     envelope.error.errors.map((refusal) => refusal.pointers),
-    [['/fields/update/0/range_min'], ['/fields/update/0/validation']]
+    [['/fields/update/0/required'], ['/fields/update/0/validation']]
   );
 });
