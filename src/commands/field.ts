@@ -75,6 +75,19 @@ function fieldTypesForReading(body: unknown): unknown {
 }
 
 /**
+ * Fields as a listing, cut out of the form that answered, with the one thing
+ * beside them that the cut must not lose: `unusable_features`. A form answers
+ * with it when its fields need a plan its account lacks. The form is saved, but
+ * a respondent's submission is refused until the account upgrades, and the
+ * fields are where that news arrives: dropping it left the caller thinking all
+ * was well. A table never has it.
+ */
+function fieldListing(body: unknown, rows: Record<string, unknown>[]): Record<string, unknown> {
+  const unusable = (body as { unusable_features?: unknown } | undefined)?.unusable_features;
+  return { data: rows, ...(unusable === undefined ? {} : { unusable_features: unusable }) };
+}
+
+/**
  * What a field write touched, out of the whole form it answers with.
  *
  * A patch returns the container, so adding one field to a form of twenty-five
@@ -86,7 +99,7 @@ function fieldTypesForReading(body: unknown): unknown {
 function touchedFields(body: unknown, wanted: (field: Record<string, unknown>) => boolean): unknown {
   const fields = selectFields(body);
   const touched = fields.filter(wanted);
-  return { data: touched.length > 0 ? touched : fields };
+  return fieldListing(body, touched.length > 0 ? touched : fields);
 }
 
 /** The labels a field payload carries, one object or a list of them. */
@@ -137,6 +150,13 @@ function conditionFieldsForReading(body: unknown): unknown {
     })
   );
 }
+
+/** What `unusable_features` beside the fields means, which help says for each command that keeps it. */
+const UNUSABLE_FEATURES =
+  "unusable_features beside the fields means the form holds fields its account's plan cannot use: " +
+  'it is saved, but respondents cannot submit it until the account upgrades.';
+
+const WRITE_ANSWER = `Answers with the fields it touched. ${UNUSABLE_FEATURES}`;
 
 const KIND_OPTION: OptionSpec = {
   name: '--kind',
@@ -194,10 +214,10 @@ export const FIELD: readonly Command[] = [
   {
     path: ['field', 'list'],
     summary: 'List the fields of a form or table',
-    description: 'Read out of the object structure, the same fields `form get` and `table get` return.',
+    description: `Read out of the object structure, the same fields \`form get\` and \`table get\` return. ${UNUSABLE_FEATURES}`,
     options: [...CONTAINER_OPTIONS],
     request: (input) => onContainer(input, 'getForm', 'getTable'),
-    select: (body) => ({ data: selectFields(body) })
+    select: (body) => fieldListing(body, selectFields(body))
   },
   {
     path: ['field', 'filterable'],
@@ -247,7 +267,7 @@ export const FIELD: readonly Command[] = [
   {
     path: ['field', 'add'],
     summary: 'Add fields to a form or table',
-    description: 'One field object, or a list of them. Do not pass api_code: the backend generates it.',
+    description: `One field object, or a list of them. Do not pass api_code: the backend generates it. ${WRITE_ANSWER}`,
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
     payload: FIELD_PAYLOAD,
     request: (input) =>
@@ -263,7 +283,8 @@ export const FIELD: readonly Command[] = [
     summary: 'Update one field',
     description:
       'The patch is merged onto the field; the api_code comes from the argument, not the payload. ' +
-      'Write only the keys to change, flat on the field, as the payload below says.',
+      'Write only the keys to change, flat on the field, as the payload below says. ' +
+      WRITE_ANSWER,
     args: [{ name: 'api-code', required: true, description: 'Field api_code, e.g. field_3' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
     payload: FIELD_PAYLOAD,
@@ -279,7 +300,7 @@ export const FIELD: readonly Command[] = [
   {
     path: ['field', 'update-choices'],
     summary: "Change a field's choices",
-    description: 'The payload is the choice operations the field takes, e.g. {add, update, remove}.',
+    description: `The payload is the choice operations the field takes, e.g. {add, update, remove}. ${WRITE_ANSWER}`,
     args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
     options: [...CONTAINER_OPTIONS, JSON_OPTION],
     request: (input) =>
