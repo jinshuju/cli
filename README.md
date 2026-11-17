@@ -246,6 +246,12 @@ jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"Th
 jinshuju field remove --form Kp7mQ2 field_9 --yes
 ```
 
+`add`, `update` and `update-choices` answer with the fields they touched rather
+than the whole container the PATCH returns. A form whose fields need a plan its
+account lacks also answers with `unusable_features`, and these commands and
+`field list` keep it beside the fields: the form is saved, but respondents
+cannot submit it until the account upgrades.
+
 A payload is looked at once before it is sent, against the openapi.yaml the
 CLI shipped with, and refused only for what a newer API could not have made
 right: a required key missing, a value of the wrong type, `null` for a key

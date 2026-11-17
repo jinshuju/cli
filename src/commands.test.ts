@@ -3720,6 +3720,52 @@ test('a field write answers with the field it touched, not the whole form', asyn
   );
 });
 
+// A form answers with unusable_features when its fields need a plan its account
+// lacks. Cutting the answer down to its fields dropped it, so an e-signature
+// field added on a plan without one read as all well, and so did listing them.
+test('a field read or write keeps unusable_features beside the fields', async () => {
+  const unusable_features = {
+    paid_features: [{ key: 'e_signature_field', name: '手写签名', lowest_plan: { code: 'e20', name: '企业协作版' } }],
+    recommended_plan: { code: 'e20', name: '企业协作版' },
+    triable: true,
+    caller_can_purchase: true
+  };
+  const fields = [
+    { field_1: { label: '甲', type: 'single_choice' } },
+    { field_2: { label: '签名', type: 'e_signature' } }
+  ];
+  const answering = (body: unknown) => ({
+    async request<T>(): Promise<T> {
+      return body as T;
+    }
+  });
+  const env = { JINSHUJU_ACCESS_TOKEN: 't' };
+  const choice = { api_code: 'field_1', label: '甲', type: 'single_choice' };
+  const signature = { api_code: 'field_2', label: '签名', type: 'e_signature' };
+  const add = ['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"ESignatureField","label":"签名"}'];
+  const commands: [string[], Record<string, unknown>[]][] = [
+    [add, [signature]],
+    [['field', 'update', '--form', 'Kp7mQ2', 'field_2', '--json', '{"required":true}'], [signature]],
+    [['field', 'update-choices', '--form', 'Kp7mQ2', 'field_1', '--json', '{"add":[{"name":"丙"}]}'], [choice]],
+    [
+      ['field', 'list', '--form', 'Kp7mQ2'],
+      [choice, signature]
+    ]
+  ];
+
+  for (const [args, data] of commands) {
+    const flagged = await cli([...args, '--output', 'json'], { client: answering({ fields, unusable_features }), env });
+    assert.equal(flagged.exitCode, 0, args.join(' '));
+    assert.deepEqual(JSON.parse(flagged.stdout), { data, unusable_features }, args.join(' '));
+
+    const plain = await cli([...args, '--output', 'json'], { client: answering({ fields }), env });
+    assert.deepEqual(JSON.parse(plain.stdout), { data }, args.join(' '));
+  }
+
+  const read = await cli([...add, '--output', 'text'], { client: answering({ fields, unusable_features }), env });
+  assert.match(read.stdout, /^unusable_features:\n[\s\S]*e_signature_field[\s\S]*caller_can_purchase: true\ndata:\n/);
+});
+
 // Naming the field twice used to drop the argument silently, and the server
 // answered about a field named nothing.
 test('preview-convert refuses a field named both ways', async () => {
