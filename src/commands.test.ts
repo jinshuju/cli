@@ -4164,6 +4164,40 @@ test('--schedule and --object refuse what they cannot read, before anything is s
   assert.equal(mock.requests.length, 0);
 });
 
+test('a schedule in --json written as --schedule takes it is sent as the object --schedule makes', async () => {
+  const created = createMockClient();
+  const updated = createMockClient();
+  const payload = { name: '日报', instruction: '汇总昨天新增的报名', schedule: 'daily 23:00' };
+
+  const create = await cli(['routine', 'create', '--json', JSON.stringify(payload)], {
+    env: WRITE_ENV,
+    client: created.client
+  });
+  const update = await cli(['routine', 'update', ROUTINE_ID, '--json', '{"schedule":"weekly 1,5 09:00"}'], {
+    env: WRITE_ENV,
+    client: updated.client
+  });
+
+  assert.equal(create.exitCode, 0, create.stderr);
+  assert.deepEqual(created.requests[0].body, { ...payload, schedule: { freq: 'daily', time: '23:00' } });
+  assert.equal(update.exitCode, 0, update.stderr);
+  assert.deepEqual(updated.requests[0].body, { schedule: { freq: 'weekly', weekdays: [1, 5], time: '09:00' } });
+});
+
+test('a schedule string in --json that --schedule cannot read is refused with both ways to write it', async () => {
+  const mock = createMockClient();
+
+  const result = await cli(['routine', 'create', '--json', '{"name":"日报","schedule":"每天 23:00"}'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /schedule in --json must be an object such as \{"freq":"daily","time":"09:00"\}/);
+  assert.match(result.stderr, /or a string as --schedule reads it: 'once <YYYY-MM-DD> <HH:MM>'.*got "每天 23:00"/);
+  assert.equal(mock.requests.length, 0);
+});
+
 test('routine flags lay over --json: a given flag wins, and one left out keeps the payload', async () => {
   const event = {
     name: '新报名通知',

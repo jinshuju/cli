@@ -42,6 +42,7 @@ const ROUTINE_PAYLOAD: readonly string[] = [
   '  weekly    "weekdays": [1-7], "time": "HH:MM"; 1 is Monday, 7 is Sunday',
   '  monthly   "month_days": [1-31, or -1 for the last day], "time": "HH:MM";',
   '            a month without the day is skipped, not moved',
+  'It may also be a string as --schedule takes it: "daily 09:00".',
   '',
   'event, with "trigger_kind": "event" in place of a schedule:',
   '  { "source_kind": "form" | "table", "source_token": "Kp7mQ2",',
@@ -143,6 +144,22 @@ export function parseSchedule(input: string): Record<string, unknown> {
   }
 }
 
+/**
+ * A schedule written in --json as --schedule takes it, `"daily 09:00"`, read
+ * the same way: the words are what an agent writes in a payload as often as
+ * on the command line, and sent as they are the API refuses them.
+ */
+function payloadSchedule(raw: string): Record<string, unknown> {
+  try {
+    return parseSchedule(raw);
+  } catch {
+    throw new UsageError(
+      'schedule in --json must be an object such as {"freq":"daily","time":"09:00"} (see --help), ' +
+        `or a string as --schedule reads it: ${SCHEDULE_GRAMMAR}; got ${JSON.stringify(raw)}`
+    );
+  }
+}
+
 /** `form:Kp7mQ2` into `{ kind, token }`. The kinds are the server's to check. */
 export function parseObject(input: string): { kind: string; token: string } {
   const separator = input.indexOf(':');
@@ -207,10 +224,11 @@ function routineBody(input: CommandInput): Record<string, unknown> {
         'Take it out of --json'
     );
   }
+  const payload = typeof raw?.schedule === 'string' ? { ...raw, schedule: payloadSchedule(raw.schedule) } : raw;
   const objects = (input.options.object as string[] | undefined)?.map(parseObject);
   const spec = input.options.schedule as string | undefined;
   const schedule = spec === undefined ? undefined : parseSchedule(spec);
-  return overriding(raw ?? {}, {
+  return overriding(payload ?? {}, {
     name: input.options.name,
     description: input.options.description,
     instruction: input.options.instruction,
