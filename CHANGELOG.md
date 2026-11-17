@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/jinshuju/cli/compare/v0.24.0...v0.25.0) (2026-11-17)
+
+
+### Features
+
+* **message:** estimate a message with message send --estimate, sending nothing ([#110](https://github.com/jinshuju/cli/issues/110)) ([a1b16a3](https://github.com/jinshuju/cli/commit/a1b16a3c2b611cc1cd6f6bb37eb28c8e18188b54))
+
+
+### Fixes
+
+* **routine:** read a schedule string in --json as --schedule reads it ([#112](https://github.com/jinshuju/cli/issues/112)) ([a132a74](https://github.com/jinshuju/cli/commit/a132a74df8f28e2079b1c1352d71b8ee64eb8ebf))
+
 ## [0.24.0](https://github.com/jinshuju/cli/compare/v0.23.0...v0.24.0) (2026-11-13)
 
 
