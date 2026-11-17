@@ -151,8 +151,14 @@ test('form get renders its fields as a table in text output', async () => {
         name: '活动报名表',
         token: 'Kp7mQ2',
         fields: [
-          { field_1: { label: '序号', type: 'number', private: false, validation: {} } },
-          { field_2: { label: '会员等级', type: 'single_choice', private: false, choices: [{ name: '金卡' }] } }
+          { api_code: 'field_1', label: '序号', type: 'NumberField', private: false, required: false },
+          {
+            api_code: 'field_2',
+            label: '会员等级',
+            type: 'RadioButton',
+            private: false,
+            choices: [{ api_code: 'Vn4x', value: '金卡' }]
+          }
         ]
       } as T;
     }
@@ -167,8 +173,8 @@ test('form get renders its fields as a table in text output', async () => {
   assert.match(result.stdout, /name: 活动报名表/);
   assert.match(result.stdout, /fields:\n/);
   assert.match(result.stdout, /api_code\s+label\s+type/);
-  assert.match(result.stdout, /field_1\s+序号\s+number/);
-  assert.match(result.stdout, /field_2\s+会员等级\s+single_choice/);
+  assert.match(result.stdout, /field_1\s+序号\s+NumberField/);
+  assert.match(result.stdout, /field_2\s+会员等级\s+RadioButton/);
   assert.doesNotMatch(result.stdout, /"label"/);
 });
 
@@ -3689,9 +3695,9 @@ test('a list is essential only to the command that says so; elsewhere it is deta
 test('a field write answers with the field it touched, not the whole form', async () => {
   const form = {
     fields: [
-      { field_1: { label: '甲', type: 'single_line_text' } },
-      { field_2: { label: '乙', type: 'single_line_text' } },
-      { field_3: { label: '新增字段', type: 'number' } }
+      { api_code: 'field_1', label: '甲', type: 'TextField' },
+      { api_code: 'field_2', label: '乙', type: 'TextField' },
+      { api_code: 'field_3', label: '新增字段', type: 'NumberField' }
     ]
   };
   const client = {
@@ -3730,18 +3736,15 @@ test('a field read or write keeps unusable_features beside the fields', async ()
     triable: true,
     caller_can_purchase: true
   };
-  const fields = [
-    { field_1: { label: '甲', type: 'single_choice' } },
-    { field_2: { label: '签名', type: 'e_signature' } }
-  ];
+  const choice = { api_code: 'field_1', label: '甲', type: 'RadioButton' };
+  const signature = { api_code: 'field_2', label: '签名', type: 'ESignatureField' };
+  const fields = [choice, signature];
   const answering = (body: unknown) => ({
     async request<T>(): Promise<T> {
       return body as T;
     }
   });
   const env = { JINSHUJU_ACCESS_TOKEN: 't' };
-  const choice = { api_code: 'field_1', label: '甲', type: 'single_choice' };
-  const signature = { api_code: 'field_2', label: '签名', type: 'e_signature' };
   const add = ['field', 'add', '--form', 'Kp7mQ2', '--json', '{"type":"ESignatureField","label":"签名"}'];
   const commands: [string[], Record<string, unknown>[]][] = [
     [add, [signature]],

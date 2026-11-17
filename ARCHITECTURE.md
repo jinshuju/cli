@@ -95,8 +95,9 @@ Dependencies point downward: `cli.ts` knows everything, `commands/` knows
    `spec.call`, which refuses a parameter or a value the spec would, and
    leaves through `preflight.checked`, which looks once at a body on its way
    to the client and refuses the few things no newer spec could take.
-5. `JinshujuHttpClient.request` adds the credential, a `User-Agent` and a
-   deadline, serializes the query, and sends. A 401 on a stored OAuth session
+5. `JinshujuHttpClient.request` adds the credential, a `User-Agent`, the API
+   version (`Jinshuju-Version`) and a deadline, serializes the query, and
+   sends. A 401 on a stored OAuth session
    refreshes the token and tries once more. A retryable status is tried again
    after backing off. A failure becomes an `HttpError` carrying the status and
    body, or a `TransportError` if there was no response at all.
@@ -175,9 +176,8 @@ upgrades it, and from then on it would refuse each field type, key and value
 the API learns: an old client is always stricter than the API it talks to. So
 `preflight.ts` refuses only what no newer spec could have made right — a
 required key missing, a value of the wrong type, `null` where nothing may be
-null, a field's `validation` written back as `form get` returned it — and
-sends the rest, a key or a value this copy does not list included, for the API
-to judge. `schema.ts` says of each issue how surely its rule applied: a value
+null — and sends the rest, a key or a value this copy does not list included,
+for the API to judge. `schema.ts` says of each issue how surely its rule applied: a value
 that may be one of several shapes is told about the closest, and that is a
 guess, never refused on; a discriminator's branch is the value's own choice,
 and is held to. What the CLI's callers were refused for was mostly of the
@@ -216,6 +216,14 @@ shortens that. An operation it does not call is a `chore`, and so is prose. `spe
 reads the lookups off the source, which is why each names its operation and
 field in literals. The pull request is opened even when the CLI no
 longer passes, and says so: that is the case that needs a person.
+
+The API version is the CLI's to choose, not the spec's. Every request carries
+`Jinshuju-Version: 2026-11-12` (`API_VERSION` in `http.ts`), in which a form or
+table reads its fields in the shape a field write takes: `field list` answers
+what `field update` takes, and nothing is reshaped on either side. Without the
+header the API answers in `2013-07-03`, which the published spec no longer
+describes. A newer version changes what the commands read, so moving to one is
+a change to the code that reads it, made by hand; a spec sync never moves it.
 
 ## Errors and exit codes
 

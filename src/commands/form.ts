@@ -51,8 +51,8 @@ const FORM_PAYLOAD: readonly string[] = [
   '  }',
   '}',
   '',
-  'A choice carries "name". The "value" it reads back with is the code the',
-  'backend assigns, not what you sent.',
+  'A choice carries "name". It reads back with that text as "value", beside',
+  'the "api_code" the backend assigns, which `field update-choices` names it by.',
   '',
   '"setting" is optional and travels as is. When the form takes entries is its',
   'close rules: by_time_range_close_rule opens it between two instants (either',
@@ -70,9 +70,10 @@ const FORM_PAYLOAD: readonly string[] = [
   'not-open and fill-limit messages. A key left out keeps its text, and ""',
   'puts the default back.',
   '',
-  'Reading a form back does not give you something you can send again: a field',
-  'written as "TextField" reads as "single_line_text". `field types` lists the',
-  'names to write, and `field types <Type>` describes one.',
+  'A form reads its fields back in the shape written here, each with the',
+  'api_code the backend assigned, and a field read goes back through',
+  '`field update` as it came. `field types` lists the types to write, and',
+  '`field types <Type>` describes one.',
   '',
   'Field types: jinshuju field types'
 ];
@@ -415,8 +416,8 @@ export const FORM: readonly Command[] = [
       'otherwise, so asking for a form and its rules is one round trip. analytics says which ' +
       'statistics each field takes, which is what the analysis reads validate against. ' +
       "exam_setting is an exam form's, read back in the shape `form edit` writes it. `fields` " +
-      'comes back as a list of one-key objects keyed by api_code, not a flat list — `field list` ' +
-      'answers the same fields flattened, with api_code on each.',
+      'is a list of fields, each with its api_code and in the shape `field update` takes, so a ' +
+      'field read here goes back as it came.',
     args: [{ name: 'form', required: true, description: 'Form token, six letters and digits, e.g. Kp7mQ2' }],
     options: [INCLUDE_OPTION],
     request: (input) => call('getForm', { path: { form_token: input.args.form }, query: includes(input) }),

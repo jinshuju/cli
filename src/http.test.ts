@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 
-import { HttpError, JinshujuHttpClient, TransportError } from './http.js';
+import { API_VERSION, HttpError, JinshujuHttpClient, TransportError } from './http.js';
 import { loadConfig, saveOAuthConfig } from './config.js';
 import { AuthError } from './errors.js';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -503,6 +503,24 @@ test('every request says which client it is', async () => {
   await server.close();
 
   assert.match(String(server.hits[0]?.headers['user-agent']), /^jinshuju-cli\/\S+ node\//);
+});
+
+// Without the header the API answers in 2013-07-03, whose fields a field write
+// does not take; with it a field read goes back as it came.
+test('every request asks for the API version the commands are written against', async () => {
+  const server = await script([{ status: 200 }, { status: 200 }]);
+  const { client } = quickClient(server.url);
+  await client.request({ method: 'GET', path: '/api/v1/forms/Kp7mQ2' });
+  const form = new FormData();
+  form.append('file', new Blob(['a,b']), 'entries.csv');
+  await client.request({ method: 'POST', path: '/api/v1/forms/Kp7mQ2/entries/import_files', form });
+  await server.close();
+
+  assert.equal(API_VERSION, '2026-11-12');
+  assert.deepEqual(
+    server.hits.map((hit) => hit.headers['jinshuju-version']),
+    [API_VERSION, API_VERSION]
+  );
 });
 
 test('JINSHUJU_TIMEOUT_MS sets the deadline, and refuses what is not a number', () => {
