@@ -38,6 +38,8 @@ export interface Schema {
   readonly else?: Schema | boolean;
   readonly minimum?: number;
   readonly maximum?: number;
+  readonly exclusiveMinimum?: number;
+  readonly exclusiveMaximum?: number;
   readonly minLength?: number;
   readonly maxLength?: number;
   readonly minItems?: number;
