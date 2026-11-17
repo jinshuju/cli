@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/jinshuju/cli/compare/v0.25.0...v0.25.1) (2026-11-17)
+
+
+### Fixes
+
+* **field:** keep unusable_features beside the fields a field command answers with ([#113](https://github.com/jinshuju/cli/issues/113)) ([8f252d7](https://github.com/jinshuju/cli/commit/8f252d7f03f485e1058ae105efe33346b6e6b34f))
+
 ## [0.25.0](https://github.com/jinshuju/cli/compare/v0.24.0...v0.25.0) (2026-11-17)
 
 
