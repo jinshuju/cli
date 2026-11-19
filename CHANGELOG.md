@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/jinshuju/cli/compare/v0.26.0...v0.26.1) (2026-11-19)
+
+
+### Fixes
+
+* **routine:** say only formula and form association fields cannot be watched ([5804e85](https://github.com/jinshuju/cli/commit/5804e857250618e70bed8136386aa12d1946553b))
+
 ## [0.26.0](https://github.com/jinshuju/cli/compare/v0.25.1...v0.26.0) (2026-11-17)
 
 
