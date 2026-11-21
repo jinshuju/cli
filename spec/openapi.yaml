@@ -269,7 +269,7 @@ paths:
       summary: Edit a form
       operationId: updateForm
       description: |
-        Edits a form partially; also accepts `PUT`. The request body must contain at least one of `name` / `description` / `fields` / `setting` / `field_rules`, otherwise returns 400.
+        Edits a form partially; also accepts `PUT`. The request body must contain at least one of `name` / `description` / `fields` / `setting` / `field_rules` / `layout`, otherwise returns 400.
         - `fields` is changed incrementally through four kinds of operation, `add` / `remove` / `update` / `update_choices`; fields, choices and api_codes not mentioned are all kept;
           `update[].type` changes a field's type in place, and a change that clears entry data must carry `confirm_data_loss: true`;
           exam questions and customized fields (Department / Grade) cannot change type in place — remove the field and add a new one instead.
@@ -540,7 +540,7 @@ paths:
       operationId: createEntry
       description: |
         Submits one entry keyed by field api_code (or api_code_alias). Unknown keys are ignored; when no valid key remains, returns 400, with `error_description` starting with `Entry attributes cannot be empty` and naming each dropped key (not a field of this form, or a signature / calculated field that cannot be written).
-        - The form's field display rules and field validation still apply; a validation failure returns 400, and `error_description` is `{ "<api_code>": ["error"] }` serialized as a JSON string.
+        - The form's field display rules and field validation still apply; a validation failure returns 400, and `error_description` is `{ "<api_code>": ["error"] }` serialized as a JSON string. A value for a field a rule hides, or for an address part the field does not let change, is not saved and comes back in `ignored_fields`.
         - Mobile fields skip SMS verification; signature fields and calculated fields cannot be written.
         - Returns 403 when the form's entry count has reached the plan limit.
         - Attachment fields accept several forms of input; see `EntryInput`.
@@ -4080,7 +4080,7 @@ paths:
       operationId: createTable
       description: |
         Creates a table. Same as creating a form, except:
-        - field types can only be the column types tables support: `TextArea`, `RadioButton`, `CheckBox`, `BooleanField`, `MobileField`, `NumberField`, `DateTimeField`, `EmailField`, `LinkField`, `AttachmentField`, `FormulaField`, `RelationField`, `SequenceField`;
+        - field types can only be the column types tables support: `TextArea`, `RadioButton`, `CheckBox`, `BooleanField`, `MobileField`, `NumberField`, `DateTimeField`, `EmailField`, `LinkField`, `AttachmentField`, `FormulaField`, `RelationField`, `SequenceField`, `LookupField`, `RollupField`;
         - attachment columns do not accept limit properties such as count / size limits, and number / formula columns have limited precision; a violation returns 400 listing the offending columns;
         - choice columns do not get an "Other" choice; `folder_token` must be a table folder; `layout` is not supported.
         - with `with_default_entries: true`, 3 blank entries are added after creation (as when creating a table in the product); by default none are added.
@@ -9578,6 +9578,12 @@ components:
           - online_payment
           - quickpay
           description: Form scene, as set by `scene` on create
+        layout:
+          type: string
+          enum:
+          - classic
+          - card
+          description: Layout; card shows one field per page
         url:
           type: string
           format: uri
@@ -9674,6 +9680,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Whether fillers stop seeing a choice once its places run out, instead of seeing it as full. Only on form and table reads of a choice field with a limit on some choice
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null for the default text. Only on form and table reads of a choice field with a limit on some choice
         random_choices:
           type: boolean
           default: false
@@ -9785,6 +9796,11 @@ components:
           items:
             type: string
           description: 'Form association: api_codes of the fields the reverse association shows; given when reverse association is on'
+        display_api_code:
+          type:
+          - string
+          - 'null'
+          description: 'Relation column: api_code of the related table''s column that `<api_code>_related_entries` values come from; null when the related table is gone'
         rating_type:
           type: string
           description: 'Rating field: appearance (e.g. `star`)'
@@ -10111,6 +10127,8 @@ components:
         | Reservation | `[{"item_name","scheduled_label","number", ...}]` |
         | Form association | Display value string of the associated entry |
         | Association (table) | Array of serial numbers of the linked entries in the associated table, e.g. `[1, 3]`; plus `<api_code>_related_entries`: `[{"serial_number": 1, "value": "..."}]`, where value is that entry's first-column value |
+        | Lookup (table) | Array of the values its source column has in the linked entries, each shaped as that column's value |
+        | Rollup (table) | Number, or a date for the max or min of a date column |
         When the request has `include_labels=true`, form field values are wrapped as `{label, value}`.
       required:
       - token
@@ -10185,6 +10203,11 @@ components:
           type: string
           format: uri
           description: URL that opens this entry in Jinshuju's data page (the data page for a form, the table page for a table, scrolled to this serial number), for users to check against. Appears only in responses that get, create or update a single entry; list and batch endpoints do not return it; entries of quick payment forms have no such key.
+        ignored_fields:
+          type: array
+          description: Values this request passed that the entry did not keep, though it was saved; empty when every value was kept. Appears only in responses that create or update a single entry.
+          items:
+            $ref: '#/components/schemas/IgnoredField'
       examples:
       - form: kjFelJqi
         form_name: 报名表
@@ -10244,7 +10267,7 @@ components:
         | Ranking | Ordered array `["choice api_code", ...]` |
         | Form association | token / id of the associated entry, or a display value matched by the association key (an array for multiple association keys) |
         | Reservation | `[{"api_code": "item", "scheduled_at": "2021-04-26", "end_at"?: "...", "number": 1}]` |
-        | Color mark | `"color_mark": "<color api_code or name>"` |
+        | Color mark | `"color_mark": "color_1"`: a color's api_code (`color_1`, `color_2`, ...) or its name as the data page shows it; `null` or `""` leaves the entry without a mark; any other value is refused (400, or that row's error in a batch) with an error that lists every color |
         | International mobile number | Also pass `"<api_code>_country_id"` / `"<api_code>_country_code"` |
       additionalProperties: true
       examples:
@@ -10264,6 +10287,7 @@ components:
       required:
       - created_count
       - errors
+      - ignored_fields
       properties:
         created_count:
           type: integer
@@ -10280,11 +10304,25 @@ components:
                 description: Index in the request array
               reason:
                 type: string
+        ignored_fields:
+          type: array
+          description: Values passed for created entries that the entry did not keep
+          items:
+            allOf:
+            - $ref: '#/components/schemas/IgnoredField'
+            - type: object
+              required:
+              - index
+              properties:
+                index:
+                  type: integer
+                  description: Index in the request array
     BatchPatchResult:
       type: object
       required:
       - updated_count
       - failed_rows
+      - ignored_fields
       properties:
         updated_count:
           type: integer
@@ -10317,6 +10355,37 @@ components:
                     items:
                       type: string
                 - type: 'null'
+        ignored_fields:
+          type: array
+          description: Values passed for updated rows that the entry did not keep
+          items:
+            allOf:
+            - $ref: '#/components/schemas/IgnoredField'
+            - type: object
+              required:
+              - serial_number
+              properties:
+                serial_number:
+                  type: integer
+    IgnoredField:
+      type: object
+      description: A value the request passed that the entry did not keep, while the rest of the entry was saved
+      required:
+      - field
+      - reason
+      - message
+      properties:
+        field:
+          type: string
+          description: api_code of the field
+        reason:
+          type: string
+          enum:
+          - hidden_by_field_rule
+          - address_part_not_changeable
+          description: "`hidden_by_field_rule`: a field rule hides the field for this entry's answers (an earlier answer ends the form, or the field shows only for other choices), and the fill page drops the value of a hidden field. `address_part_not_changeable`: the address field does not let these parts (district, street, ...) be changed; `message` names them."
+        message:
+          type: string
     TableSummary:
       type: object
       required:
@@ -10443,7 +10512,7 @@ components:
           enum:
           - classic
           - card
-          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo and takes no grids_to_occupy / start_new_row'
+          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo, and keeps grids_to_occupy / start_new_row without showing them; to split a form into a few pages or steps, keep classic and add PageBreak fields'
       allOf:
       - $ref: '#/components/schemas/FormCreateConstraints'
     TableCreateInput:
@@ -10647,8 +10716,8 @@ components:
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
         quota:
           type: integer
-          minimum: 1
-          description: Maximum number of places; leave out for no limit
+          minimum: 0
+          description: Maximum number of places; 0 opens the choice already full; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -11033,8 +11102,9 @@ components:
           type: boolean
         show_close_count_down:
           type: boolean
-        show_form_before_open:
+        show_form_when_unavailable:
           type: boolean
+          description: Show the questions without a submit button while the form is not open yet or has stopped; otherwise show the not_open_hide_form text
         manually_close_rule:
           type:
           - object
@@ -11234,17 +11304,17 @@ components:
         already_closed:
           type: string
           maxLength: 40
-          description: Shown when the form no longer accepts entries
+          description: Shown on the respondent's my-entries page after the form stops accepting entries
         not_open:
           type: string
           maxLength: 40
-          description: Shown before the form opens when the matching text below is empty
+          description: Shown on the respondent's my-entries page before the form opens
         not_open_show_form:
           type: string
-          description: Rich text shown before the form opens while `show_form_before_open` is on; embedded iframe domains must be on the allowlist
+          description: Rich text shown while the form cannot be filled in (not open yet or stopped) and `show_form_when_unavailable` is on; embedded iframe domains must be on the allowlist
         not_open_hide_form:
           type: string
-          description: Rich text shown before the form opens while `show_form_before_open` is off; embedded iframe domains must be on the allowlist
+          description: Rich text shown while the form cannot be filled in (not open yet or stopped) and `show_form_when_unavailable` is off; embedded iframe domains must be on the allowlist
         fill_frequency_limited:
           type: string
           maxLength: 40
@@ -11783,8 +11853,10 @@ components:
           format: date-time
     FormUpdateInput:
       type: object
-      description: Contains at least one of `name` / `description` / `fields` / `setting` / `field_rules`
+      description: Contains at least one of `name` / `description` / `fields` / `setting` / `field_rules` / `layout`
       properties:
+        layout:
+          $ref: '#/components/schemas/FormLayoutUpdate'
         name:
           type: string
         description:
@@ -11901,6 +11973,8 @@ components:
           - BooleanField
           - RelationField
           - SequenceField
+          - LookupField
+          - RollupField
           description: Change the field to this type, keeping its api_code and entries and converting the values; a change that would clear data needs confirm_data_loss. The target is a FieldInput type (a TableColumnInput type on a table); the field's current type changes nothing. Exam questions and customized fields (Department / Grade) cannot change type in place; remove the field and add a new one instead
         confirm_data_loss:
           type: boolean
@@ -12028,6 +12102,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -12386,6 +12465,65 @@ components:
           - string
           - 'null'
           description: Name of the reverse column, used only when the reverse column is created; defaults to the name of this table
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of a relation column of this table that is already linked; the lookup or rollup reads the rows linked through it
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code, in the related table, of the column whose values are shown or computed
+        scope_conditions:
+          type: array
+          description: Reads only the linked rows that match. Conditions sharing a `group_index` must all hold, different groups are alternatives; an empty array removes the conditions
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        aggregation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sum
+          - count
+          - avg
+          - max
+          - min
+          -
+          description: How the rollup computes the values; count is the number of linked rows whose source column is not empty
         show_split_line:
           type: boolean
           description: Show a divider line
@@ -12819,7 +12957,7 @@ components:
       - show_submit_again
       - hide_login_and_signup
       - show_close_count_down
-      - show_form_before_open
+      - show_form_when_unavailable
       - open_entry_action
       - open_entry_message
       - open_entry_cancel_reservation
@@ -12916,11 +13054,11 @@ components:
           - boolean
           - 'null'
           description: Show a countdown before closing
-        show_form_before_open:
+        show_form_when_unavailable:
           type:
           - boolean
           - 'null'
-          description: Whether to show the form before it opens
+          description: Show the questions without a submit button while the form is not open yet or has stopped
         open_entry_action:
           type: string
           enum:
@@ -13195,8 +13333,9 @@ components:
           type: boolean
         show_close_count_down:
           type: boolean
-        show_form_before_open:
+        show_form_when_unavailable:
           type: boolean
+          description: Show the questions without a submit button while the form is not open yet or has stopped
         show_field_number:
           type: boolean
           description: Whether to show field numbers (not echoed in the GET response)
@@ -15116,7 +15255,7 @@ components:
           description: The artifact's id; the share endpoints' path takes it to mean its latest version, `version_id` does not
         title:
           type: string
-          description: The latest version's file name
+          description: The latest version's file name, under the user's own name for the artifact once they renamed it
         versions_count:
           type: integer
           description: How many versions it has
@@ -15719,9 +15858,9 @@ components:
           description: Field api_code (api_code / trigger are also accepted as the key name)
         operator:
           type: string
-          description: 'Operator, the same as the entry list filters: eq, ne, any_in, none_in, between, not_between, null, not_null, gte, gt, lte, lt, like, not_like, match, within_last; the aliases start / end / equal / not_equal are equivalent to gte / lte / eq / ne respectively. The server decides which subset each field type supports. On choice fields, eq / ne are saved as any_in / none_in and the value is turned into an array.'
+          description: 'Operator, the same as the entry list filters: eq, ne, any_in, none_in, between, not_between, null, not_null, gte, gt, lte, lt, like, not_like, match, within_last; the aliases start / end / equal / not_equal are equivalent to gte / lte / eq / ne respectively. The server decides which subset each field type supports. On choice fields, eq / ne are saved as any_in / none_in and the value is turned into an array. within_last is saved as between with the matching rolling range, see value.'
         value:
-          description: 'Condition value; its type depends on the field and the operator: a two-element array for between; {"unit": "day", "n": 30} for within_last (unit can be minute / day / week / month); on choice fields, pass choice api_codes or choice texts, with "null" meaning not filled in; null / not_null take no value.'
+          description: 'Condition value; its type depends on the field and the operator: a two-element array for between / not_between, or on a date field one of the rolling ranges the data page offers: today, yesterday, tomorrow, this_week, last_week, this_month, last_month, next_month, last_1, last_3, last_7, last_30 (last_N runs from N days ago at 00:00 to the end of today, counted again each time the view is read); {"unit": "day", "n": 30} for within_last, where n is 1, 3, 7 or 30 and the condition is saved as between last_N; on choice fields, pass choice api_codes or choice texts, with "null" meaning not filled in; null / not_null take no value.'
         scope_attr:
           type: string
           enum:
@@ -17090,6 +17229,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -17183,6 +17327,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -17259,6 +17408,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -18046,6 +18200,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -18623,6 +18782,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -18703,6 +18867,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -19094,6 +19263,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -19217,6 +19391,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -19345,6 +19524,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         answers:
           type: array
           minItems: 1
@@ -19455,6 +19639,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         answers:
           type: array
           minItems: 1
@@ -19576,6 +19765,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -19682,6 +19876,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -20280,6 +20479,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -20361,6 +20565,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -20408,6 +20617,8 @@ components:
           - FormulaField
           - RelationField
           - SequenceField
+          - LookupField
+          - RollupField
         label:
           type:
           - string
@@ -20429,6 +20640,8 @@ components:
           FormulaField: "#/components/schemas/FormulaFieldColumnInput"
           RelationField: "#/components/schemas/RelationFieldColumnInput"
           SequenceField: "#/components/schemas/SequenceFieldColumnInput"
+          LookupField: "#/components/schemas/LookupFieldColumnInput"
+          RollupField: "#/components/schemas/RollupFieldColumnInput"
       oneOf:
       - $ref: '#/components/schemas/TextAreaColumnInput'
       - $ref: '#/components/schemas/RadioButtonColumnInput'
@@ -20443,6 +20656,8 @@ components:
       - $ref: '#/components/schemas/FormulaFieldColumnInput'
       - $ref: '#/components/schemas/RelationFieldColumnInput'
       - $ref: '#/components/schemas/SequenceFieldColumnInput'
+      - $ref: '#/components/schemas/LookupFieldColumnInput'
+      - $ref: '#/components/schemas/RollupFieldColumnInput'
       title: TableColumnInput
     ImageChoiceInput:
       type: object
@@ -20474,8 +20689,8 @@ components:
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
         quota:
           type: integer
-          minimum: 1
-          description: Maximum number of places; leave out for no limit
+          minimum: 0
+          description: Maximum number of places; 0 opens the choice already full; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -20514,8 +20729,8 @@ components:
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
         quota:
           type: integer
-          minimum: 1
-          description: Maximum number of places; leave out for no limit
+          minimum: 0
+          description: Maximum number of places; 0 opens the choice already full; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -20913,7 +21128,7 @@ components:
       title: FormCreateConstraints
       description: Constraints between fields and scene / layout when creating a form
       allOf:
-      - description: The card layout cannot hold field types the paged layout cannot render, nor a field width
+      - description: The card layout cannot hold field types the paged layout cannot render
         if:
           properties:
             layout:
@@ -20932,10 +21147,6 @@ components:
                       - MultipleBlanksField
                       - WidgetContact
                       - WidgetVideo
-                  grids_to_occupy:
-                    type: 'null'
-                  start_new_row:
-                    const: false
       - description: scene=exam takes ExamFieldInput
         if:
           properties:
@@ -25849,7 +26060,7 @@ components:
                 - delete_authorization_page_only
                 description: |
                   What kind of reason it is: `active_limit` 20 routines are enabled already; `once_passed` a one-off's time has passed; `object_unavailable` an object or the data trigger's source does not exist or you cannot reach it;
-                  `field_unavailable` a trigger field does not exist, cannot be seen, cannot be watched (formula and association fields) or cannot be used in a condition; `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else, such as a condition's operator or value its field type does not take.
+                  `field_unavailable` a trigger field does not exist, cannot be seen, cannot be watched (formula and form association fields) or cannot be used in a condition; `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else, such as a condition's operator or value its field type does not take.
               message:
                 type: string
                 description: The message the routines page shows, word for word
@@ -26062,7 +26273,7 @@ components:
           type: array
           items:
             type: string
-          description: "`updated`: the api_codes of the fields watched, 1–10; fields the system computes (formula, association) cannot be watched"
+          description: "`updated`: the api_codes of the fields watched, 1–10; formula and form association fields cannot be watched; relation, lookup and rollup columns can"
         scope_conditions:
           type: array
           description: Data conditions, written as the routines page saves them. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. A condition on an operator or value its field type does not take returns `422` saying what the field takes.
@@ -26439,6 +26650,7 @@ components:
       - title
       - summary
       - severity
+      - attention
       - url
       properties:
         id:
@@ -26509,6 +26721,11 @@ components:
           - warning
           - critical
           -
+        attention:
+          type:
+          - string
+          - 'null'
+          description: What to look at, in a sentence; only a warning or critical result Jiri reported has it, so it is null otherwise
         url:
           type: string
           description: The run's page
@@ -27667,6 +27884,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -27742,6 +27964,11 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 Chinese characters, two other characters counting as one
         grids_to_occupy:
           type:
           - integer
@@ -28234,7 +28461,7 @@ components:
     FormulaFieldColumnInput:
       type: object
       title: FormulaFieldColumnInput
-      description: FormulaField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      description: FormulaField column; its values are computed, and an entry does not write it
       additionalProperties: false
       required:
       - type
@@ -28403,7 +28630,7 @@ components:
     SequenceFieldColumnInput:
       type: object
       title: SequenceFieldColumnInput
-      description: SequenceField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      description: SequenceField column; its values are computed, and an entry does not write it
       additionalProperties: false
       required:
       - type
@@ -29012,6 +29239,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -29046,6 +29274,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -29084,6 +29316,7 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -29128,6 +29361,10 @@ components:
           minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -29163,6 +29400,7 @@ components:
       - calculable
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -29193,6 +29431,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -29977,6 +30219,7 @@ components:
       - random_choices
       - calculable
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -30012,6 +30255,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -30544,6 +30791,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - api_code_alias
       - analytics
@@ -30574,6 +30822,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -30603,6 +30855,7 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - api_code_alias
       - analytics
@@ -30643,6 +30896,10 @@ components:
           minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -31012,6 +31269,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31049,6 +31307,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -31103,6 +31365,7 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31150,6 +31413,10 @@ components:
           minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -31202,6 +31469,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - answers
       - answer_setting_mode
@@ -31235,6 +31503,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -31280,6 +31552,7 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - answers
       - answer_setting_mode
@@ -31323,6 +31596,10 @@ components:
           minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -31368,6 +31645,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31405,6 +31683,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -31456,6 +31738,7 @@ components:
       - calculable
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31489,6 +31772,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -32027,6 +32314,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32061,6 +32349,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -32097,6 +32389,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32131,6 +32424,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -32573,6 +32870,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32603,6 +32901,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -32637,6 +32939,7 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32667,6 +32970,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         grids_to_occupy:
           type:
           - integer
@@ -33490,6 +33797,8 @@ components:
           FormulaField: "#/components/schemas/FormulaFieldColumn"
           RelationField: "#/components/schemas/RelationFieldColumn"
           SequenceField: "#/components/schemas/SequenceFieldColumn"
+          LookupField: "#/components/schemas/LookupFieldColumn"
+          RollupField: "#/components/schemas/RollupFieldColumn"
       oneOf:
       - $ref: '#/components/schemas/TextAreaColumn'
       - $ref: '#/components/schemas/RadioButtonColumn'
@@ -33504,6 +33813,8 @@ components:
       - $ref: '#/components/schemas/FormulaFieldColumn'
       - $ref: '#/components/schemas/RelationFieldColumn'
       - $ref: '#/components/schemas/SequenceFieldColumn'
+      - $ref: '#/components/schemas/LookupFieldColumn'
+      - $ref: '#/components/schemas/RollupFieldColumn'
     FieldChoice:
       type: object
       title: FieldChoice
@@ -33905,6 +34216,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         levels:
           type:
           - integer
@@ -34246,6 +34561,7 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - api_code_alias
       properties:
@@ -34283,6 +34599,10 @@ components:
           minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -34304,6 +34624,7 @@ components:
       - calculable
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - api_code_alias
       properties:
@@ -34327,6 +34648,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -34350,6 +34675,7 @@ components:
       - random_choices
       - calculable
       - hide_choice_when_quota_empty
+      - quota_blank_warning
       - choices
       - api_code_alias
       properties:
@@ -34380,6 +34706,10 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
         choices:
           type: array
           items:
@@ -35511,3 +35841,426 @@ components:
           - 'null'
           minimum: 1
           maximum: 12
+    LookupFieldColumnInput:
+      type: object
+      title: LookupFieldColumnInput
+      description: LookupField column; its values are computed, and an entry does not write it
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: LookupField
+        label:
+          type:
+          - string
+          - 'null'
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type:
+          - string
+          - 'null'
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of a relation column of this table that is already linked; the lookup or rollup reads the rows linked through it
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code, in the related table, of the column whose values are shown or computed
+        scope_conditions:
+          type: array
+          description: Reads only the linked rows that match. Conditions sharing a `group_index` must all hold, different groups are alternatives; an empty array removes the conditions
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+    LookupFieldColumn:
+      type: object
+      title: LookupFieldColumn
+      additionalProperties: false
+      required:
+      - api_code
+      - type
+      - label
+      - notes
+      - private
+      - relation_field_api_code
+      - source_field_api_code
+      - scope_conditions
+      - api_code_alias
+      - analytics
+      properties:
+        api_code:
+          type: string
+        type:
+          const: LookupField
+        label:
+          type:
+          - string
+          - 'null'
+        notes:
+          type:
+          - string
+          - 'null'
+        private:
+          type: boolean
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+        scope_conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        api_code_alias:
+          type:
+          - string
+          - 'null'
+        analytics:
+          anyOf:
+          - $ref: '#/components/schemas/FieldAnalytics'
+          - type: 'null'
+    RollupFieldColumnInput:
+      type: object
+      title: RollupFieldColumnInput
+      description: RollupField column; its values are computed, and an entry does not write it
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: RollupField
+        label:
+          type:
+          - string
+          - 'null'
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type:
+          - string
+          - 'null'
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of a relation column of this table that is already linked; the lookup or rollup reads the rows linked through it
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code, in the related table, of the column whose values are shown or computed
+        aggregation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sum
+          - count
+          - avg
+          - max
+          - min
+          -
+          description: How the rollup computes the values; count is the number of linked rows whose source column is not empty
+        scope_conditions:
+          type: array
+          description: Reads only the linked rows that match. Conditions sharing a `group_index` must all hold, different groups are alternatives; an empty array removes the conditions
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        display_precision:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          description: Decimal places shown, for a table column only; refused on a form field, which takes precision
+        display_as_percentage:
+          type: boolean
+          description: Show as a percentage; cannot be combined with thousands_separator
+        thousands_separator:
+          type: boolean
+          description: Show a thousands separator; cannot be combined with display_as_percentage
+        currency_symbol:
+          type:
+          - string
+          - 'null'
+          description: Currency symbol
+        currency_symbol_position:
+          type:
+          - string
+          - 'null'
+          enum:
+          - prefix
+          - suffix
+          -
+          description: Where the currency symbol goes
+      allOf:
+      - description: display_as_percentage and thousands_separator cannot both be true
+        not:
+          properties:
+            display_as_percentage:
+              const: true
+            thousands_separator:
+              const: true
+          required:
+          - display_as_percentage
+          - thousands_separator
+    RollupFieldColumn:
+      type: object
+      title: RollupFieldColumn
+      additionalProperties: false
+      required:
+      - api_code
+      - type
+      - label
+      - notes
+      - private
+      - relation_field_api_code
+      - source_field_api_code
+      - aggregation
+      - scope_conditions
+      - display_precision
+      - display_as_percentage
+      - thousands_separator
+      - currency_symbol
+      - currency_symbol_position
+      - result_display_type
+      - api_code_alias
+      - analytics
+      properties:
+        api_code:
+          type: string
+        type:
+          const: RollupField
+        label:
+          type:
+          - string
+          - 'null'
+        notes:
+          type:
+          - string
+          - 'null'
+        private:
+          type: boolean
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+        aggregation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sum
+          - count
+          - avg
+          - max
+          - min
+          -
+        scope_conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        display_precision:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        display_as_percentage:
+          type: boolean
+        thousands_separator:
+          type: boolean
+        currency_symbol:
+          type:
+          - string
+          - 'null'
+        currency_symbol_position:
+          type:
+          - string
+          - 'null'
+          enum:
+          - prefix
+          - suffix
+          -
+        result_display_type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - numeric
+          - datetime
+          -
+          description: 'What a value is: a number, or a date for the max or min of a date column; ignored on write'
+        api_code_alias:
+          type:
+          - string
+          - 'null'
+        analytics:
+          anyOf:
+          - $ref: '#/components/schemas/FieldAnalytics'
+          - type: 'null'
+    FormLayoutUpdate:
+      type: string
+      enum:
+      - classic
+      - card
+      description: Switches the layout; only a form of scene survey / form / exam / evaluation takes card, a table never. Switching keeps the fields and the theme as they are, PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo and grids_to_occupy / start_new_row included, which the paged fill page may leave out

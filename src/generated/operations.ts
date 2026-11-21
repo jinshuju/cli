@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-18';
+export const SPEC_DATE: string | undefined = '2026-11-21';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -2435,7 +2435,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
-      quota: { type: 'integer', minimum: 1 },
+      quota: { type: 'integer', minimum: 0 },
       operand_value: { type: 'number' },
       selected: { type: 'boolean' },
       sub_choices: { type: 'array', items: { $ref: 'CascadeChoiceInput' } }
@@ -2459,6 +2459,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       calculable: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -2479,6 +2480,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2509,6 +2511,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2595,7 +2598,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
-      quota: { type: 'integer', minimum: 1 },
+      quota: { type: 'integer', minimum: 0 },
       operand_value: { type: 'number' },
       selected: { type: 'boolean' },
       is_other: { type: 'boolean' }
@@ -2708,6 +2711,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2788,6 +2792,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2815,6 +2820,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -3510,6 +3516,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       levels: { type: ['integer', 'null'], minimum: 2 },
       choice_filterable: { type: 'boolean' },
       range_min: { type: ['number', 'null'] },
@@ -3797,7 +3804,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'MultipleBlanksField',
           'BooleanField',
           'RelationField',
-          'SequenceField'
+          'SequenceField',
+          'LookupField',
+          'RollupField'
         ]
       },
       confirm_data_loss: { type: 'boolean' },
@@ -3828,6 +3837,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
@@ -3900,6 +3910,44 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       related_form_token: { type: 'string' },
       paired: { type: 'boolean' },
       related_label: { type: ['string', 'null'] },
+      relation_field_api_code: { type: ['string', 'null'] },
+      source_field_api_code: { type: ['string', 'null'] },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer' }
+          }
+        }
+      },
+      aggregation: { type: ['string', 'null'], enum: ['sum', 'count', 'avg', 'max', 'min', null] },
       show_split_line: { type: 'boolean' },
       show_part_description: { type: 'boolean' },
       disable_previous_page: { type: 'boolean' },
@@ -4085,9 +4133,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             fields: {
               items: {
                 properties: {
-                  type: { not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo'] } },
-                  grids_to_occupy: { type: 'null' },
-                  start_new_row: { const: false }
+                  type: { not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo'] } }
                 }
               }
             }
@@ -4189,6 +4235,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       retry: { type: 'boolean' }
     }
   },
+  FormLayoutUpdate: { type: 'string', enum: ['classic', 'card'] },
   FormManuallyCloseRuleInput: {
     type: 'object',
     required: ['open'],
@@ -4212,7 +4259,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_submit_again: { type: 'boolean' },
       hide_login_and_signup: { type: 'boolean' },
       show_close_count_down: { type: 'boolean' },
-      show_form_before_open: { type: 'boolean' },
+      show_form_when_unavailable: { type: 'boolean' },
       show_field_number: { type: 'boolean' },
       password_required: { type: 'boolean' },
       access_password: { type: 'string' },
@@ -4274,7 +4321,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_submit_again: { type: 'boolean' },
       hide_login_and_signup: { type: 'boolean' },
       show_close_count_down: { type: 'boolean' },
-      show_form_before_open: { type: 'boolean' },
+      show_form_when_unavailable: { type: 'boolean' },
       manually_close_rule: {
         type: ['object', 'null'],
         properties: { closed: { type: 'boolean' } },
@@ -4352,6 +4399,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   FormUpdateInput: {
     type: 'object',
     properties: {
+      layout: { $ref: 'FormLayoutUpdate' },
       name: { type: 'string' },
       description: { type: ['string', 'null'] },
       setting: { $ref: 'FormSettingWriteInput' },
@@ -4760,6 +4808,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -4808,7 +4857,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
-      hide_choice_when_quota_empty: { type: 'boolean' }
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] }
     },
     allOf: [
       {
@@ -4828,7 +4878,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
-      quota: { type: 'integer', minimum: 1 },
+      quota: { type: 'integer', minimum: 0 },
       operand_value: { type: 'number' },
       selected: { type: 'boolean' },
       image_url: { type: 'string' },
@@ -4855,6 +4905,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -4904,7 +4955,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
-      hide_choice_when_quota_empty: { type: 'boolean' }
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] }
     },
     allOf: [
       {
@@ -4930,6 +4982,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -5015,6 +5068,56 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       placeholder: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
+    }
+  },
+  LookupFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'LookupField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      relation_field_api_code: { type: ['string', 'null'] },
+      source_field_api_code: { type: ['string', 'null'] },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer' }
+          }
+        }
+      }
     }
   },
   MatrixFieldInput: {
@@ -5218,6 +5321,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -5602,6 +5706,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -5630,6 +5735,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -5928,6 +6034,70 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       mentioned_mobile_list: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'string' } },
       idempotency_key: { type: 'string', maxLength: 255 }
     }
+  },
+  RollupFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'RollupField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      relation_field_api_code: { type: ['string', 'null'] },
+      source_field_api_code: { type: ['string', 'null'] },
+      aggregation: { type: ['string', 'null'], enum: ['sum', 'count', 'avg', 'max', 'min', null] },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer' }
+          }
+        }
+      },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
+      display_as_percentage: { type: 'boolean' },
+      thousands_separator: { type: 'boolean' },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] }
+    },
+    allOf: [
+      {
+        not: {
+          properties: { display_as_percentage: { const: true }, thousands_separator: { const: true } },
+          required: ['display_as_percentage', 'thousands_separator']
+        }
+      }
+    ]
   },
   RoutineDataConditionInput: {
     type: 'object',
@@ -6395,6 +6565,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -6471,7 +6642,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'AttachmentField',
           'FormulaField',
           'RelationField',
-          'SequenceField'
+          'SequenceField',
+          'LookupField',
+          'RollupField'
         ]
       },
       label: { type: ['string', 'null'] }
@@ -6491,7 +6664,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         AttachmentField: 'AttachmentFieldColumnInput',
         FormulaField: 'FormulaFieldColumnInput',
         RelationField: 'RelationFieldColumnInput',
-        SequenceField: 'SequenceFieldColumnInput'
+        SequenceField: 'SequenceFieldColumnInput',
+        LookupField: 'LookupFieldColumnInput',
+        RollupField: 'RollupFieldColumnInput'
       }
     },
     oneOf: [
@@ -6507,7 +6682,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       { $ref: 'AttachmentFieldColumnInput' },
       { $ref: 'FormulaFieldColumnInput' },
       { $ref: 'RelationFieldColumnInput' },
-      { $ref: 'SequenceFieldColumnInput' }
+      { $ref: 'SequenceFieldColumnInput' },
+      { $ref: 'LookupFieldColumnInput' },
+      { $ref: 'RollupFieldColumnInput' }
     ]
   },
   TableCreateInput: {
@@ -6763,6 +6940,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
