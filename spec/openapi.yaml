@@ -269,7 +269,7 @@ paths:
       summary: Edit a form
       operationId: updateForm
       description: |
-        Edits a form partially; also accepts `PUT`. The request body must contain at least one of `name` / `description` / `fields` / `setting` / `field_rules`, otherwise returns 400.
+        Edits a form partially; also accepts `PUT`. The request body must contain at least one of `name` / `description` / `fields` / `setting` / `field_rules` / `layout`, otherwise returns 400.
         - `fields` is changed incrementally through four kinds of operation, `add` / `remove` / `update` / `update_choices`; fields, choices and api_codes not mentioned are all kept;
           `update[].type` changes a field's type in place, and a change that clears entry data must carry `confirm_data_loss: true`;
           exam questions and customized fields (Department / Grade) cannot change type in place — remove the field and add a new one instead.
@@ -540,7 +540,7 @@ paths:
       operationId: createEntry
       description: |
         Submits one entry keyed by field api_code (or api_code_alias). Unknown keys are ignored; when no valid key remains, returns 400, with `error_description` starting with `Entry attributes cannot be empty` and naming each dropped key (not a field of this form, or a signature / calculated field that cannot be written).
-        - The form's field display rules and field validation still apply; a validation failure returns 400, and `error_description` is `{ "<api_code>": ["error"] }` serialized as a JSON string.
+        - The form's field display rules and field validation still apply; a validation failure returns 400, and `error_description` is `{ "<api_code>": ["error"] }` serialized as a JSON string. A value for a field a rule hides, or for an address part the field does not let change, is not saved and comes back in `ignored_fields`.
         - Mobile fields skip SMS verification; signature fields and calculated fields cannot be written.
         - Returns 403 when the form's entry count has reached the plan limit.
         - Attachment fields accept several forms of input; see `EntryInput`.
@@ -2557,7 +2557,7 @@ paths:
       tags:
       - Views
       summary: Create a view on a form
-      description: 'Creates a new view on the form, created by the caller; visibility defaults to cooperators when not passed, and position is the highest position among the currently visible views plus 1. Each user can have at most 100 views on one form; at the limit, returns 422 (View limit reached). When view_type is kanban and kanban_group_by_api_code is not passed, the server picks the grouping field; when kanban_hidden_groups is not passed, the __unset__ group is hidden by default; when prefer_columns is empty, the form''s default columns are used (at most 5 columns for a kanban view, serial_number included). Returns 422 when filter is invalid (not an array, unknown field, unsupported operator, invalid value). Returns 422 when model validation fails (e.g. name is empty or longer than 120 characters, or the grouping field does not support kanban grouping). Form views (view_type form): supported only on tables, otherwise 422; title defaults to the table name; without field_overrides, all fillable columns are selected in the current column order; published defaults to false (the fill link does not work while unpublished). title / description / published / field_overrides apply only to form views; using them on another type returns 422. Creating, updating or deleting a form view (including switching a view to or from a form view) requires the caller to hold a predefined role on the table that can add entries, otherwise 403; an account token is exempt. Returns 422 when a fill item''s column does not exist, cannot be a fill item, or sets a validation its column type does not support; the error message names the column''s api_code. OAuth scope: forms'
+      description: 'Creates a new view on the form, created by the caller; visibility defaults to cooperators when not passed, and position is the highest position among the currently visible views plus 1. Each user can have at most 100 views on one form; at the limit, returns 422 (View limit reached). When view_type is kanban and kanban_group_by_api_code is not passed, the server picks the grouping field; when kanban_hidden_groups is not passed, the __unset__ group is hidden by default; when prefer_columns is empty, the form''s default columns are used (at most 5 columns for a kanban view, serial_number included), except for a public view (allowed_audience public), which returns 422 without prefer_columns. Returns 422 when filter is invalid (not an array, unknown field, unsupported operator, invalid value). Returns 422 when model validation fails (e.g. name is empty or longer than 120 characters, or the grouping field does not support kanban grouping). Form views (view_type form): supported only on tables, otherwise 422; title defaults to the table name; without field_overrides, all fillable columns are selected in the current column order; published defaults to false (the fill link does not work while unpublished). title / description / published / field_overrides apply only to form views; using them on another type returns 422. Creating, updating or deleting a form view (including switching a view to or from a form view) requires the caller to hold a predefined role on the table that can add entries, otherwise 403; an account token is exempt. Returns 422 when a fill item''s column does not exist, cannot be a fill item, or sets a validation its column type does not support; the error message names the column''s api_code. allowed_audience, search_field_api_codes and privacy_protected_field_api_codes, and any change to or deletion of a public view, take manage permission on the form; on a form whose account does not have public views yet, those three keys return 403. OAuth scope: forms'
       operationId: createFormView
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -2628,7 +2628,7 @@ paths:
       tags:
       - Views
       summary: Update a view of a form
-      description: 'Updates the view''s configuration; PUT is accepted too. Only the keys present in the request are updated: an empty array for filter clears the filters, and leaving filter out keeps them unchanged; when kanban_group_by_api_code changes and kanban_group_order / kanban_hidden_groups are not passed with it, those two lists reset to their defaults. Cooperators can change the configuration of a view visible to cooperators, but only the view''s creator can switch visibility, otherwise returns 403; a view whose view_scope is form cannot switch visibility. Returns 422 when filter is invalid or model validation fails. field_overrides replaces the fill item settings as a whole; form views have the same permission requirements and parameter limits as on create. OAuth scope: forms'
+      description: 'Updates the view''s configuration; PUT is accepted too. Only the keys present in the request are updated: an empty array for filter clears the filters, and leaving filter out keeps them unchanged; when kanban_group_by_api_code changes and kanban_group_order / kanban_hidden_groups are not passed with it, those two lists reset to their defaults. Cooperators can change the configuration of a view visible to cooperators, but only the view''s creator can switch visibility, otherwise returns 403; a view whose view_scope is form cannot switch visibility. Returns 422 when filter is invalid or model validation fails. field_overrides replaces the fill item settings as a whole; form views have the same permission requirements and parameter limits as on create. allowed_audience, search_field_api_codes and privacy_protected_field_api_codes, and any change to or deletion of a public view, take manage permission on the form; on a form whose account does not have public views yet, those three keys return 403. OAuth scope: forms'
       operationId: updateFormView
       requestBody:
         required: true
@@ -2661,7 +2661,7 @@ paths:
       tags:
       - Views
       summary: Delete a view of a form
-      description: 'Deletes a view. Predefined views (predefined) and views whose view_scope is form cannot be deleted, and the deletion is also refused when it would leave the caller with no visible view; all of these return 422. Deleting a form view needs the same permission as creating one (otherwise 403); once it is deleted, its fill link stops working immediately, and this cannot be undone. OAuth scope: forms'
+      description: 'Deletes a view. Predefined views (predefined) and views whose view_scope is form cannot be deleted, and the deletion is also refused when it would leave the caller with no visible view; all of these return 422. Deleting a form view needs the same permission as creating one (otherwise 403); once it is deleted, its fill link stops working immediately, and this cannot be undone. allowed_audience, search_field_api_codes and privacy_protected_field_api_codes, and any change to or deletion of a public view, take manage permission on the form. OAuth scope: forms'
       operationId: deleteFormView
       responses:
         '200':
@@ -4080,7 +4080,7 @@ paths:
       operationId: createTable
       description: |
         Creates a table. Same as creating a form, except:
-        - field types can only be the column types tables support: `TextArea`, `RadioButton`, `CheckBox`, `BooleanField`, `MobileField`, `NumberField`, `DateTimeField`, `EmailField`, `LinkField`, `AttachmentField`, `FormulaField`, `RelationField`, `SequenceField`;
+        - field types can only be the column types tables support: `TextArea`, `RadioButton`, `CheckBox`, `BooleanField`, `MobileField`, `NumberField`, `DateTimeField`, `EmailField`, `LinkField`, `AttachmentField`, `FormulaField`, `RelationField`, `SequenceField`, `LookupField`, `RollupField`;
         - attachment columns do not accept limit properties such as count / size limits, and number / formula columns have limited precision; a violation returns 400 listing the offending columns;
         - choice columns do not get an "Other" choice; `folder_token` must be a table folder; `layout` is not supported.
         - with `with_default_entries: true`, 3 blank entries are added after creation (as when creating a table in the product); by default none are added.
@@ -9578,6 +9578,12 @@ components:
           - online_payment
           - quickpay
           description: Form scene, as set by `scene` on create
+        layout:
+          type: string
+          enum:
+          - classic
+          - card
+          description: Layout; card shows one field per page
         url:
           type: string
           format: uri
@@ -9674,6 +9680,18 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Whether fillers stop seeing a choice once its places run out, instead of seeing it as full. Only on form and table reads of a choice field with a limit on some choice
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null for the default text. Only on form and table reads of a choice field with a limit on some choice
+        quota_cycle_rule:
+          type: string
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          description: When every choice gets its full quota back, as in `RadioButtonInput`. Only on form and table reads of a choice field with a limit on some choice
         random_choices:
           type: boolean
           default: false
@@ -9785,6 +9803,11 @@ components:
           items:
             type: string
           description: 'Form association: api_codes of the fields the reverse association shows; given when reverse association is on'
+        display_api_code:
+          type:
+          - string
+          - 'null'
+          description: 'Relation column: api_code of the related table''s column that `<api_code>_related_entries` values come from; null when the related table is gone'
         rating_type:
           type: string
           description: 'Rating field: appearance (e.g. `star`)'
@@ -10111,6 +10134,8 @@ components:
         | Reservation | `[{"item_name","scheduled_label","number", ...}]` |
         | Form association | Display value string of the associated entry |
         | Association (table) | Array of serial numbers of the linked entries in the associated table, e.g. `[1, 3]`; plus `<api_code>_related_entries`: `[{"serial_number": 1, "value": "..."}]`, where value is that entry's first-column value |
+        | Lookup (table) | Array of the values its source column has in the linked entries, each shaped as that column's value |
+        | Rollup (table) | Number, or a date for the max or min of a date column |
         When the request has `include_labels=true`, form field values are wrapped as `{label, value}`.
       required:
       - token
@@ -10185,6 +10210,11 @@ components:
           type: string
           format: uri
           description: URL that opens this entry in Jinshuju's data page (the data page for a form, the table page for a table, scrolled to this serial number), for users to check against. Appears only in responses that get, create or update a single entry; list and batch endpoints do not return it; entries of quick payment forms have no such key.
+        ignored_fields:
+          type: array
+          description: Values this request passed that the entry did not keep, though it was saved; empty when every value was kept. Appears only in responses that create or update a single entry.
+          items:
+            $ref: '#/components/schemas/IgnoredField'
       examples:
       - form: kjFelJqi
         form_name: 报名表
@@ -10244,8 +10274,8 @@ components:
         | Ranking | Ordered array `["choice api_code", ...]` |
         | Form association | token / id of the associated entry, or a display value matched by the association key (an array for multiple association keys) |
         | Reservation | `[{"api_code": "item", "scheduled_at": "2021-04-26", "end_at"?: "...", "number": 1}]` |
-        | Color mark | `"color_mark": "<color api_code or name>"` |
-        | International mobile number | Also pass `"<api_code>_country_id"` / `"<api_code>_country_code"` |
+        | Color mark | `"color_mark": "color_1"`: a color's api_code (`color_1`, `color_2`, ...) or its name as the data page shows it; `null` or `""` leaves the entry without a mark; any other value is refused (400, or that row's error in a batch) with an error that lists every color |
+        | Mobile number taking international numbers | A mainland China number alone; a number of another country or region also needs `"<api_code>_intl_mobile_no_country_id"` (such as `"US"`) and `"<api_code>_intl_mobile_no_country_code"` (such as `"1"`) |
       additionalProperties: true
       examples:
       - field_1: 张三
@@ -10264,6 +10294,7 @@ components:
       required:
       - created_count
       - errors
+      - ignored_fields
       properties:
         created_count:
           type: integer
@@ -10280,11 +10311,25 @@ components:
                 description: Index in the request array
               reason:
                 type: string
+        ignored_fields:
+          type: array
+          description: Values passed for created entries that the entry did not keep
+          items:
+            allOf:
+            - $ref: '#/components/schemas/IgnoredField'
+            - type: object
+              required:
+              - index
+              properties:
+                index:
+                  type: integer
+                  description: Index in the request array
     BatchPatchResult:
       type: object
       required:
       - updated_count
       - failed_rows
+      - ignored_fields
       properties:
         updated_count:
           type: integer
@@ -10317,6 +10362,37 @@ components:
                     items:
                       type: string
                 - type: 'null'
+        ignored_fields:
+          type: array
+          description: Values passed for updated rows that the entry did not keep
+          items:
+            allOf:
+            - $ref: '#/components/schemas/IgnoredField'
+            - type: object
+              required:
+              - serial_number
+              properties:
+                serial_number:
+                  type: integer
+    IgnoredField:
+      type: object
+      description: A value the request passed that the entry did not keep, while the rest of the entry was saved
+      required:
+      - field
+      - reason
+      - message
+      properties:
+        field:
+          type: string
+          description: api_code of the field
+        reason:
+          type: string
+          enum:
+          - hidden_by_field_rule
+          - address_part_not_changeable
+          description: "`hidden_by_field_rule`: a field rule hides the field for this entry's answers (an earlier answer ends the form, or the field shows only for other choices), and the fill page drops the value of a hidden field. `address_part_not_changeable`: the address field does not let these parts (district, street, ...) be changed; `message` names them."
+        message:
+          type: string
     TableSummary:
       type: object
       required:
@@ -10443,7 +10519,7 @@ components:
           enum:
           - classic
           - card
-          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / MultipleBlanksField / WidgetContact / WidgetVideo and takes no grids_to_occupy / start_new_row'
+          description: 'Layout; applies only when scene is survey / form / exam / evaluation; card is the paged layout, one field per page: it cannot hold PageBreak / WidgetContact / WidgetVideo, and keeps grids_to_occupy / start_new_row without showing them; to split a form into a few pages or steps, keep classic and add PageBreak fields'
       allOf:
       - $ref: '#/components/schemas/FormCreateConstraints'
     TableCreateInput:
@@ -10525,6 +10601,7 @@ components:
           - LikertField
           - MatrixField
           - MatrixScaleField
+          - MultipleBlanksField
           - GoodsField
           - FormulaField
           - ReservationField
@@ -10572,6 +10649,7 @@ components:
           LikertField: "#/components/schemas/LikertFieldInput"
           MatrixField: "#/components/schemas/MatrixFieldInput"
           MatrixScaleField: "#/components/schemas/MatrixScaleFieldInput"
+          MultipleBlanksField: "#/components/schemas/MultipleBlanksFieldInput"
           GoodsField: "#/components/schemas/GoodsFieldInput"
           FormulaField: "#/components/schemas/FormulaFieldInput"
           ReservationField: "#/components/schemas/ReservationFieldInput"
@@ -10612,6 +10690,7 @@ components:
       - $ref: '#/components/schemas/LikertFieldInput'
       - $ref: '#/components/schemas/MatrixFieldInput'
       - $ref: '#/components/schemas/MatrixScaleFieldInput'
+      - $ref: '#/components/schemas/MultipleBlanksFieldInput'
       - $ref: '#/components/schemas/GoodsFieldInput'
       - $ref: '#/components/schemas/FormulaFieldInput'
       - $ref: '#/components/schemas/ReservationFieldInput'
@@ -10647,8 +10726,8 @@ components:
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
         quota:
           type: integer
-          minimum: 1
-          description: Maximum number of places; leave out for no limit
+          minimum: 0
+          description: Maximum number of places; 0 opens the choice already full; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -10713,7 +10792,7 @@ components:
       type: object
       title: GoodsItemInput
       additionalProperties: false
-      description: A goods item
+      description: A goods item; a price_only or text_options item is the only item of its field, and an images item takes at most 5 images across image_urls, image_base64s and attachment_ids
       required:
       - name
       - layout
@@ -10837,6 +10916,7 @@ components:
                 - number
                 - 'null'
                 minimum: 0
+                description: From 0.01 to 99999999 on a price_only item
               original_price:
                 type:
                 - number
@@ -10975,7 +11055,7 @@ components:
     FormSettingWriteInput:
       type: object
       description: |
-        The `setting` used when creating / editing a form. Only the keys below are accepted; other keys are ignored. A write describes the resulting state: omitted keys keep their current values, and `null` clears a key.
+        The `setting` used when creating / editing a form. Only the keys below are accepted. A write describes the resulting state: omitted keys keep their current values.
         - Passing only `success_message` automatically sets `success_message_style` to `text`; passing only `success_message_rich_text` sets it to `rich_text`.
         - Changing `success_message_rich_text` requires a plan that includes "Success page rich text". Writing `success_message_style` as `rich_text` (passed, written back as read, or implied by passing only `success_message_rich_text`) also needs "Distribution poster" and "Certificate"; on other plans with "Success page rich text" pass `text`. Otherwise the request is refused with 400. A plan without "Success page rich text" may still write back the `rich_text` style it read; it is saved as `text`.
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
@@ -11033,8 +11113,9 @@ components:
           type: boolean
         show_close_count_down:
           type: boolean
-        show_form_before_open:
+        show_form_when_unavailable:
           type: boolean
+          description: Show the questions without a submit button while the form is not open yet or has stopped; otherwise show the not_open_hide_form text
         manually_close_rule:
           type:
           - object
@@ -11068,6 +11149,7 @@ components:
               description: Pass false to delete the rule
             limit:
               type: integer
+              minimum: 0
               maximum: 2147483647
           additionalProperties: false
         fill_frequency:
@@ -11234,27 +11316,27 @@ components:
         already_closed:
           type: string
           maxLength: 40
-          description: Shown when the form no longer accepts entries
+          description: Shown on the respondent's my-entries page after the form stops accepting entries
         not_open:
           type: string
           maxLength: 40
-          description: Shown before the form opens when the matching text below is empty
+          description: Shown on the respondent's my-entries page before the form opens
         not_open_show_form:
           type: string
-          description: Rich text shown before the form opens while `show_form_before_open` is on; embedded iframe domains must be on the allowlist
+          description: Rich text shown while the form cannot be filled in (not open yet or stopped) and `show_form_when_unavailable` is on; at most 40 characters of text, an inserted open / close time counting as 20 and a countdown as 10; embedded iframe domains must be on the allowlist
         not_open_hide_form:
           type: string
-          description: Rich text shown before the form opens while `show_form_before_open` is off; embedded iframe domains must be on the allowlist
+          description: Rich text shown while the form cannot be filled in (not open yet or stopped) and `show_form_when_unavailable` is off; at most 10000 characters of text, counted as in not_open_show_form; embedded iframe domains must be on the allowlist
         fill_frequency_limited:
           type: string
           maxLength: 40
           description: Shown once the submitter reaches the fill frequency limit when the matching text below is empty
         fill_frequency_limited_show_form:
           type: string
-          description: Rich text shown at the fill frequency limit when the form stays visible; embedded iframe domains must be on the allowlist
+          description: Rich text shown at the fill frequency limit when the form stays visible; at most 40 characters of text; embedded iframe domains must be on the allowlist
         fill_frequency_limited_hide_form:
           type: string
-          description: Rich text shown at the fill frequency limit when the form is hidden; embedded iframe domains must be on the allowlist
+          description: Rich text shown at the fill frequency limit when the form is hidden; at most 10000 characters of text; embedded iframe domains must be on the allowlist
       additionalProperties: false
     GenCodeRule:
       type: object
@@ -11783,8 +11865,10 @@ components:
           format: date-time
     FormUpdateInput:
       type: object
-      description: Contains at least one of `name` / `description` / `fields` / `setting` / `field_rules`
+      description: Contains at least one of `name` / `description` / `fields` / `setting` / `field_rules` / `layout`
       properties:
+        layout:
+          $ref: '#/components/schemas/FormLayoutUpdate'
         name:
           type: string
         description:
@@ -11864,6 +11948,7 @@ components:
           - LikertField
           - MatrixField
           - MatrixScaleField
+          - MultipleBlanksField
           - GoodsField
           - FormulaField
           - ReservationField
@@ -11897,10 +11982,11 @@ components:
           - Timer
           - ImageGroup
           - WidgetVideo
-          - MultipleBlanksField
           - BooleanField
           - RelationField
           - SequenceField
+          - LookupField
+          - RollupField
           description: Change the field to this type, keeping its api_code and entries and converting the values; a change that would clear data needs confirm_data_loss. The target is a FieldInput type (a TableColumnInput type on a table); the field's current type changes nothing. Exam questions and customized fields (Department / Grade) cannot change type in place; remove the field and add a new one instead
         confirm_data_loss:
           type: boolean
@@ -11933,7 +12019,8 @@ components:
           description: Target position of the field in the form, from 0; appended at the end by default
         rating_max:
           type: integer
-          minimum: 1
+          minimum: 3
+          maximum: 10
         choices:
           type: array
           items:
@@ -12028,6 +12115,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -12051,7 +12153,7 @@ components:
           minimum: 0
           description: Maximum number of choices; for a LikertField with likert_choice_style=multiple, the maximum per statement
         predefined_value:
-          description: 'Default value: a string for text fields, a date string matching the precision or today / yesterday / tomorrow for DateTimeField, an {"hour", "minute"} object for TimeField, an address object for AddressField'
+          description: 'Default value: a string for text fields, a link starting with http:// or https:// for LinkField, a mainland China mobile number for MobileField, a number with no more decimal places than precision for NumberField, a date string matching the precision or today / yesterday / tomorrow for DateTimeField, an {"hour", "minute", "second"} object for TimeField (hour 0-23, minute and second 0-59), an address object for AddressField'
         placeholder:
           type:
           - string
@@ -12142,7 +12244,6 @@ components:
           - formula-2
           - date-2
           - sum
-          - text
           - text2
           -
           description: Field icon
@@ -12160,14 +12261,16 @@ components:
           type:
           - number
           - 'null'
-          exclusiveMinimum: 0
+          minimum: 0.01
           maximum: 500
+          multipleOf: 0.01
           description: Maximum size of one file, in MB
         max_file_quantity:
           type:
           - integer
           - 'null'
           minimum: 1
+          maximum: 15
           description: Maximum number of files
         media_type:
           type:
@@ -12261,12 +12364,19 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 20
           description: Text shown at the lowest rating
         maximum_ratings_display_text:
           type:
           - string
           - 'null'
+          maxLength: 20
           description: Text shown at the highest rating
+        rating_type:
+          type:
+          - string
+          - 'null'
+          description: 'Rating icon of a RatingField: star, happy, heart, thumb; null resets it to star, and the icon it has is taken as no change. A form with the beautiform look, which a form created through the CLI, MCP or Jiri has, draws no thumb and refuses it. On a MatrixScaleField it is not writable, so a write may only repeat the current value'
         include_second:
           type: boolean
           description: Include seconds
@@ -12282,6 +12392,7 @@ components:
           - integer
           - 'null'
           minimum: 2
+          maximum: 4
           description: Number of levels of the cascading drop-down; every choice path must reach this depth
         choice_filterable:
           type: boolean
@@ -12315,6 +12426,7 @@ components:
           - integer
           - 'null'
           minimum: 1
+          maximum: 2
           description: Goods per row on mobile
         formula:
           type:
@@ -12386,6 +12498,65 @@ components:
           - string
           - 'null'
           description: Name of the reverse column, used only when the reverse column is created; defaults to the name of this table
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of a relation column of this table that is already linked; the lookup or rollup reads the rows linked through it
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code, in the related table, of the column whose values are shown or computed
+        scope_conditions:
+          type: array
+          description: Reads only the linked rows that match. Conditions sharing a `group_index` must all hold, different groups are alternatives; an empty array removes the conditions
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        aggregation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sum
+          - count
+          - avg
+          - max
+          - min
+          -
+          description: How the rollup computes the values; count is the number of linked rows whose source column is not empty
         show_split_line:
           type: boolean
           description: Show a divider line
@@ -12399,12 +12570,12 @@ components:
           type:
           - string
           - 'null'
-          description: Text of the "Previous" button
+          description: 'Text of the "Previous" button; at most 16 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
         next_page_text:
           type:
           - string
           - 'null'
-          description: Text of the "Next" button
+          description: 'Text of the "Next" button; at most 16 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
         count_down:
           type:
           - integer
@@ -12499,11 +12670,6 @@ components:
           - string
           - 'null'
           description: Latest date that can be picked; not writable, so a write may only repeat the current value
-        rating_type:
-          type:
-          - string
-          - 'null'
-          description: Rating icon; not writable, so a write may only repeat the current value
         highlight_color:
           type:
           - string
@@ -12632,6 +12798,7 @@ components:
             type: object
             required:
             - trigger
+            - value
             properties:
               trigger:
                 type: string
@@ -12640,7 +12807,15 @@ components:
                 type: string
                 description: Comparator, defaults to the first one the field supports; an unsupported one returns 400 listing the available comparators
               value:
-                description: Value to compare with
+                type:
+                - string
+                - number
+                - array
+                items:
+                  type:
+                  - string
+                  - number
+                description: 'Value to compare with: a choice value or an array of them (on a cascading drop-down, a choice of its first level), a text for like / not_like, [low, high] for between'
             additionalProperties: false
       additionalProperties: false
     FormSettingSaveOk:
@@ -12819,7 +12994,7 @@ components:
       - show_submit_again
       - hide_login_and_signup
       - show_close_count_down
-      - show_form_before_open
+      - show_form_when_unavailable
       - open_entry_action
       - open_entry_message
       - open_entry_cancel_reservation
@@ -12839,6 +13014,9 @@ components:
       - entry_post_url
       - post_new_entry
       - post_updated_entry
+      - merchant_account_id
+      - wxpay_account_id
+      - alipay_account_id
       - payment_expirable
       - payment_expiration_time
       - daily_repeat_close_rule
@@ -12916,11 +13094,11 @@ components:
           - boolean
           - 'null'
           description: Show a countdown before closing
-        show_form_before_open:
+        show_form_when_unavailable:
           type:
           - boolean
           - 'null'
-          description: Whether to show the form before it opens
+          description: Show the questions without a submit button while the form is not open yet or has stopped
         open_entry_action:
           type: string
           enum:
@@ -13047,6 +13225,21 @@ components:
           - boolean
           - 'null'
           description: Whether entry updates are pushed
+        merchant_account_id:
+          type:
+          - string
+          - 'null'
+          description: The jin merchant (小金商户) account the form collects payments through; `null` when none is bound
+        wxpay_account_id:
+          type:
+          - string
+          - 'null'
+          description: The WeChat Pay account the form collects payments through; `null` when none is bound
+        alipay_account_id:
+          type:
+          - string
+          - 'null'
+          description: The Alipay account the form collects payments through; `null` when none is bound
         payment_expirable:
           type:
           - boolean
@@ -13195,8 +13388,9 @@ components:
           type: boolean
         show_close_count_down:
           type: boolean
-        show_form_before_open:
+        show_form_when_unavailable:
           type: boolean
+          description: Show the questions without a submit button while the form is not open yet or has stopped
         show_field_number:
           type: boolean
           description: Whether to show field numbers (not echoed in the GET response)
@@ -13273,6 +13467,7 @@ components:
           properties:
             limit:
               type: integer
+              minimum: 0
               maximum: 2147483647
           additionalProperties: false
         gen_code_enabled:
@@ -14516,10 +14711,10 @@ components:
       description: Request body of PATCH /forms/{form_token}/theme; contains at least one theme operation key
       properties:
         primary_color:
-          type: string
+          $ref: '#/components/schemas/ThemeColor'
           description: Theme color of the buttons and of selected choices, e.g. "#FBBF24"
         secondary_color:
-          type: string
+          $ref: '#/components/schemas/ThemeColor'
           deprecated: true
           description: Deprecated; not shown on the form.
         dominant_color:
@@ -14533,7 +14728,7 @@ components:
           description: Page background, either a color or an image; setting only one of them removes the other, along with the preset background image that comes with the theme template
           properties:
             background_color:
-              type: string
+              $ref: '#/components/schemas/ThemeColor'
             background_image_url:
               type: string
               description: The server fetches this URL and uses it as the background image
@@ -14559,7 +14754,7 @@ components:
               type: string
               description: Header text
             background_color:
-              type: string
+              $ref: '#/components/schemas/ThemeColor'
             text_style:
               type: object
               description: Text style; keys use underscores (e.g. font_size, text_align) and are merged into the existing style
@@ -14594,46 +14789,83 @@ components:
           additionalProperties: false
         typography:
           type: object
-          description: Typography; keys use underscores and are merged into the existing style. A color given here wins over the one `dominant_color` sets
+          description: Typography; each style is merged into the existing one. A color given here wins over the one `dominant_color` sets
           properties:
             form_header:
               type: object
-              additionalProperties:
-                type: string
+              description: font_size is one of 14px-20px / 22px / 24px, or of 14px / 15px / 16px / 20px / 24px / 28px / 36px / 40px on a beautiform-look form
+              properties:
+                font_size:
+                  type: string
+                  enum:
+                  - 14px
+                  - 15px
+                  - 16px
+                  - 17px
+                  - 18px
+                  - 19px
+                  - 20px
+                  - 22px
+                  - 24px
+                  - 28px
+                  - 36px
+                  - 40px
+                font_weight:
+                  type: string
+                  enum:
+                  - normal
+                  - bold
+                color:
+                  $ref: '#/components/schemas/ThemeColor'
+                font_family:
+                  $ref: '#/components/schemas/ThemeFontFamily'
+                text_align:
+                  type: string
+                  enum:
+                  - left
+                  - center
+                  - right
+              additionalProperties: false
             field_label:
-              type: object
-              additionalProperties:
-                type: string
+              $ref: '#/components/schemas/ThemeTextStyleInput'
             choice_style:
-              type: object
-              additionalProperties:
-                type: string
+              $ref: '#/components/schemas/ThemeTextStyleInput'
           additionalProperties: false
         form_container:
           type: object
           properties:
             background_color:
-              type: string
+              $ref: '#/components/schemas/ThemeColor'
             border_color:
-              type: string
+              $ref: '#/components/schemas/ThemeColor'
               description: Border color of the form container, e.g. "#E5E7EB"
             border_width:
               type: string
-              description: Border width of the form container, e.g. "1px"
+              enum:
+              - '0'
+              - 0px
+              - 1px
+              - 2px
+              - 3px
+              - 4px
+              - 5px
+              description: Border width of the form container
+            shadow:
+              type: boolean
+              description: Shadow around the form container; `false` turns it off. Shows only where the web editor offers this switch, on a classic-layout form without the beautiform look; a card layout or a beautiform-look form never shows one
           additionalProperties: false
         submit_button:
           type: object
           description: Buttons; color and font size apply to every button on the form. The submit button's text is set through the form setting's `wording.submit`
           properties:
             background_color:
-              type: string
+              $ref: '#/components/schemas/ThemeColor'
               deprecated: true
               description: Deprecated alias of `primary_color`; use `primary_color`.
             color:
-              type: string
+              $ref: '#/components/schemas/ThemeColor'
             font_size:
-              type: string
-              description: e.g. "16px"
+              $ref: '#/components/schemas/ThemeFontSize'
           additionalProperties: false
         generate_header_image:
           type: object
@@ -14644,6 +14876,51 @@ components:
               description: Prompt for the image; when omitted, AI writes one from the form's content
           additionalProperties: false
       additionalProperties: false
+    ThemeColor:
+      type: string
+      pattern: "^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*(,\\s*\\d{1,3}\\s*){2}(,\\s*\\d*\\.?\\d+\\s*)?\\))$"
+      not:
+        pattern: "\n"
+      description: A hex color such as "#FBBF24", or rgb() / rgba() such as "rgba(251, 191, 36, 0.5)"
+    ThemeFontSize:
+      type: string
+      enum:
+      - 14px
+      - 15px
+      - 16px
+      - 17px
+      - 18px
+      - 19px
+      - 20px
+      - 22px
+      - 24px
+    ThemeTextStyleInput:
+      type: object
+      properties:
+        font_size:
+          $ref: '#/components/schemas/ThemeFontSize'
+        font_weight:
+          type: string
+          enum:
+          - normal
+          - bold
+        color:
+          $ref: '#/components/schemas/ThemeColor'
+        font_family:
+          $ref: '#/components/schemas/ThemeFontFamily'
+      additionalProperties: false
+    ThemeFontFamily:
+      type: string
+      enum:
+      - inherit
+      - tahoma
+      - helvetica
+      - verdana
+      - georgia
+      - heiti
+      - kaiti
+      - songti
+      description: Font, as the theme editor names it; inherit uses the form's default font
     FormTheme:
       type: object
       description: Response after the theme is updated
@@ -14777,6 +15054,7 @@ components:
               - 'null'
             shadow:
               type: boolean
+              description: Whether the shadow around the form container is on; a card layout or a beautiform-look form never shows one
             indent_on_large_phone:
               type: boolean
         submit_button:
@@ -15116,7 +15394,7 @@ components:
           description: The artifact's id; the share endpoints' path takes it to mean its latest version, `version_id` does not
         title:
           type: string
-          description: The latest version's file name
+          description: The latest version's file name, under the user's own name for the artifact once they renamed it
         versions_count:
           type: integer
           description: How many versions it has
@@ -15719,9 +15997,9 @@ components:
           description: Field api_code (api_code / trigger are also accepted as the key name)
         operator:
           type: string
-          description: 'Operator, the same as the entry list filters: eq, ne, any_in, none_in, between, not_between, null, not_null, gte, gt, lte, lt, like, not_like, match, within_last; the aliases start / end / equal / not_equal are equivalent to gte / lte / eq / ne respectively. The server decides which subset each field type supports. On choice fields, eq / ne are saved as any_in / none_in and the value is turned into an array.'
+          description: 'Operator, the same as the entry list filters: eq, ne, any_in, none_in, between, not_between, null, not_null, gte, gt, lte, lt, like, not_like, match, within_last; the aliases start / end / equal / not_equal are equivalent to gte / lte / eq / ne respectively. The server decides which subset each field type supports. On choice fields, eq / ne are saved as any_in / none_in and the value is turned into an array. within_last is saved as between with the matching rolling range, see value.'
         value:
-          description: 'Condition value; its type depends on the field and the operator: a two-element array for between; {"unit": "day", "n": 30} for within_last (unit can be minute / day / week / month); on choice fields, pass choice api_codes or choice texts, with "null" meaning not filled in; null / not_null take no value.'
+          description: 'Condition value; its type depends on the field and the operator: a two-element array for between / not_between, or on a date field one of the rolling ranges the data page offers: today, yesterday, tomorrow, this_week, last_week, this_month, last_month, next_month, last_1, last_3, last_7, last_30 (last_N runs from N days ago at 00:00 to the end of today, counted again each time the view is read); {"unit": "day", "n": 30} for within_last, where n is 1, 3, 7 or 30 and the condition is saved as between last_N; on choice fields, pass choice api_codes or choice texts, with "null" meaning not filled in; null / not_null take no value.'
         scope_attr:
           type: string
           enum:
@@ -15860,6 +16138,22 @@ components:
           type: string
           format: date-time
           description: Updated at
+        allowed_audience:
+          type: string
+          enum:
+          - private
+          - public
+          description: Who can read the view's entries through the page SDK; public is anyone holding the view token. Omitted, with search_field_api_codes and privacy_protected_field_api_codes, on a form whose account does not have public views yet
+        search_field_api_codes:
+          type: array
+          description: Fields a reader must all match exactly to read rows; empty means the rows are listed
+          items:
+            type: string
+        privacy_protected_field_api_codes:
+          type: array
+          description: Columns a visitor reads masked
+          items:
+            type: string
         title:
           type:
           - string
@@ -15944,7 +16238,7 @@ components:
             additionalProperties: false
         filter:
           type: array
-          description: Array of filters, replaced as a whole; an empty array clears the filters; returns 422 when it is not an array
+          description: Array of filters, replaced as a whole; an empty array clears the filters; returns 422 when it is not an array or has a serial_number or creator_id condition, which a view cannot keep
           items:
             $ref: '#/components/schemas/FormViewFilterCondition'
         title:
@@ -15959,6 +16253,24 @@ components:
         published:
           type: boolean
           description: Whether the fill page is published, defaults to false on create. Form views (view_type=form) only; on other view types it returns 422.
+        allowed_audience:
+          type: string
+          enum:
+          - private
+          - public
+          description: Who can read the view's entries through the page SDK; public (anyone holding the view token) takes a grid or stats view with non-empty prefer_columns, all fields a public query can display
+        search_field_api_codes:
+          type: array
+          description: Fields of a grid view, ones a public query can search on, that a reader must all fill in exactly to read rows; empty lists the rows
+          uniqueItems: true
+          items:
+            type: string
+        privacy_protected_field_api_codes:
+          type: array
+          description: Columns a visitor reads masked; they cannot be filtered, sorted or aggregated on
+          uniqueItems: true
+          items:
+            type: string
         field_overrides:
           type: array
           description: Fill item settings, replaced as a whole; when omitted on create, every fillable column is checked in the current column order. Form views (view_type=form) only; on other view types it returns 422.
@@ -16692,7 +17004,7 @@ components:
           - number
           - string
           - 'null'
-          description: Default value
+          description: Default value, with no more decimal places than precision
         placeholder:
           type:
           - string
@@ -16866,7 +17178,7 @@ components:
           type:
           - string
           - 'null'
-          description: Default value
+          description: Default mobile number, a mainland China one
         placeholder:
           type:
           - string
@@ -17005,6 +17317,11 @@ components:
         unique:
           type: boolean
           description: Refuse a value an existing entry already has
+        placeholder:
+          type:
+          - string
+          - 'null'
+          description: Grey hint inside the empty input box, gone once the filler types
         access_control_list_limit:
           type: boolean
           description: Check each submitted value against acl_values; needs a non-empty acl_values
@@ -17076,6 +17393,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -17090,6 +17408,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -17157,6 +17490,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -17183,6 +17517,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -17250,6 +17599,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -17259,6 +17609,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -17379,8 +17744,20 @@ components:
           description: Target position of the field in the form, from 0; appended at the end by default
         rating_max:
           type: integer
-          minimum: 1
+          minimum: 3
+          maximum: 10
           description: Rating scale, such as 3 / 5 / 10; 5 by default
+        rating_type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - star
+          - happy
+          - heart
+          - thumb
+          -
+          description: Rating icon; star by default. A form with the beautiform look, which a form created through the CLI, MCP or Jiri has, draws no thumb and refuses it
     TableFieldInput:
       type: object
       title: TableFieldInput
@@ -17579,14 +17956,16 @@ components:
           type:
           - number
           - 'null'
-          exclusiveMinimum: 0
+          minimum: 0.01
           maximum: 500
+          multipleOf: 0.01
           description: Maximum size of one file, in MB
         max_file_quantity:
           type:
           - integer
           - 'null'
           minimum: 1
+          maximum: 15
           description: Maximum number of files
         media_type:
           type:
@@ -17751,7 +18130,7 @@ components:
           type:
           - string
           - 'null'
-          description: Default value
+          description: Default link, starting with http:// or https://
         placeholder:
           type:
           - string
@@ -17805,11 +18184,13 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 20
           description: Text shown at the lowest rating
         maximum_ratings_display_text:
           type:
           - string
           - 'null'
+          maxLength: 20
           description: Text shown at the highest rating
     TimeFieldInput:
       type: object
@@ -17849,7 +18230,7 @@ components:
           type:
           - object
           - 'null'
-          description: 'Default time, such as {"hour": 9, "minute": 30}'
+          description: 'Default time, such as {"hour": 9, "minute": 30}; hour 0-23, minute and second 0-59, no other key'
           properties:
             hour:
               type: integer
@@ -17910,6 +18291,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
@@ -18033,6 +18415,7 @@ components:
           - integer
           - 'null'
           minimum: 2
+          maximum: 4
           description: Number of levels of the cascading drop-down; every choice path must reach this depth
         choice_filterable:
           type: boolean
@@ -18046,6 +18429,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -18096,6 +18494,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         statements:
           type: array
           minItems: 1
@@ -18245,7 +18644,8 @@ components:
           description: Target position of the field in the form, from 0; appended at the end by default
         rating_max:
           type: integer
-          minimum: 1
+          minimum: 3
+          maximum: 10
           description: Rating scale, such as 3 / 5 / 10; 5 by default
         statements:
           type: array
@@ -18310,6 +18710,7 @@ components:
           - integer
           - 'null'
           minimum: 1
+          maximum: 2
           description: Goods per row on mobile
     FormulaFieldInput:
       type: object
@@ -18416,7 +18817,6 @@ components:
           - dollar1
           - cny1
           - sum
-          - text
           - text2
           -
           description: Field icon
@@ -18609,6 +19009,7 @@ components:
           items:
             $ref: '#/components/schemas/ImageChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -18623,6 +19024,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -18677,6 +19093,7 @@ components:
           items:
             $ref: '#/components/schemas/ImageChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -18703,6 +19120,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
       allOf:
       - description: With calculable=true, every choice needs an operand_value
         if:
@@ -18798,12 +19230,12 @@ components:
           type:
           - string
           - 'null'
-          description: Text of the "Previous" button
+          description: 'Text of the "Previous" button; at most 16 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
         next_page_text:
           type:
           - string
           - 'null'
-          description: Text of the "Next" button
+          description: 'Text of the "Next" button; at most 16 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
         count_down:
           type:
           - integer
@@ -19080,6 +19512,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -19094,6 +19527,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -19191,6 +19639,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -19217,6 +19666,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -19331,6 +19795,7 @@ components:
           items:
             $ref: '#/components/schemas/ImageChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -19345,6 +19810,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         answers:
           type: array
           minItems: 1
@@ -19429,6 +19909,7 @@ components:
           items:
             $ref: '#/components/schemas/ImageChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -19455,6 +19936,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         answers:
           type: array
           minItems: 1
@@ -19562,6 +20058,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -19576,6 +20073,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -19673,6 +20185,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -19682,6 +20195,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -19972,7 +20500,7 @@ components:
           - number
           - string
           - 'null'
-          description: Default value
+          description: Default value, with no more decimal places than precision
         placeholder:
           type:
           - string
@@ -20118,8 +20646,20 @@ components:
           description: Target position of the field in the form, from 0; appended at the end by default
         rating_max:
           type: integer
-          minimum: 1
+          minimum: 3
+          maximum: 10
           description: Rating scale, such as 3 / 5 / 10; 5 by default
+        rating_type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - star
+          - happy
+          - heart
+          - thumb
+          -
+          description: Rating icon; star by default. A form with the beautiform look, which a form created through the CLI, MCP or Jiri has, draws no thumb and refuses it
         answers:
           type: array
           minItems: 1
@@ -20188,11 +20728,13 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 20
           description: Text shown at the lowest rating
         maximum_ratings_display_text:
           type:
           - string
           - 'null'
+          maxLength: 20
           description: Text shown at the highest rating
         answers:
           type: array
@@ -20266,6 +20808,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -20280,6 +20823,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -20347,6 +20905,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -20361,6 +20920,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -20408,6 +20982,8 @@ components:
           - FormulaField
           - RelationField
           - SequenceField
+          - LookupField
+          - RollupField
         label:
           type:
           - string
@@ -20429,6 +21005,8 @@ components:
           FormulaField: "#/components/schemas/FormulaFieldColumnInput"
           RelationField: "#/components/schemas/RelationFieldColumnInput"
           SequenceField: "#/components/schemas/SequenceFieldColumnInput"
+          LookupField: "#/components/schemas/LookupFieldColumnInput"
+          RollupField: "#/components/schemas/RollupFieldColumnInput"
       oneOf:
       - $ref: '#/components/schemas/TextAreaColumnInput'
       - $ref: '#/components/schemas/RadioButtonColumnInput'
@@ -20443,6 +21021,8 @@ components:
       - $ref: '#/components/schemas/FormulaFieldColumnInput'
       - $ref: '#/components/schemas/RelationFieldColumnInput'
       - $ref: '#/components/schemas/SequenceFieldColumnInput'
+      - $ref: '#/components/schemas/LookupFieldColumnInput'
+      - $ref: '#/components/schemas/RollupFieldColumnInput'
       title: TableColumnInput
     ImageChoiceInput:
       type: object
@@ -20474,8 +21054,8 @@ components:
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
         quota:
           type: integer
-          minimum: 1
-          description: Maximum number of places; leave out for no limit
+          minimum: 0
+          description: Maximum number of places; 0 opens the choice already full; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -20514,8 +21094,8 @@ components:
           description: The choice api_code; generated by the server when left out, and keeps the identity of the choice on edit
         quota:
           type: integer
-          minimum: 1
-          description: Maximum number of places; leave out for no limit
+          minimum: 0
+          description: Maximum number of places; 0 opens the choice already full; leave out for no limit
         operand_value:
           type: number
           description: Numeric value of the choice
@@ -20804,6 +21384,9 @@ components:
               start_time:
                 type: object
                 additionalProperties: false
+                required:
+                - hour
+                - minute
                 properties:
                   hour:
                     type:
@@ -20821,6 +21404,9 @@ components:
               end_time:
                 type: object
                 additionalProperties: false
+                required:
+                - hour
+                - minute
                 properties:
                   hour:
                     type:
@@ -20913,7 +21499,7 @@ components:
       title: FormCreateConstraints
       description: Constraints between fields and scene / layout when creating a form
       allOf:
-      - description: The card layout cannot hold field types the paged layout cannot render, nor a field width
+      - description: The card layout cannot hold field types the paged layout cannot render
         if:
           properties:
             layout:
@@ -20929,13 +21515,8 @@ components:
                     not:
                       enum:
                       - PageBreak
-                      - MultipleBlanksField
                       - WidgetContact
                       - WidgetVideo
-                  grids_to_occupy:
-                    type: 'null'
-                  start_new_row:
-                    const: false
       - description: scene=exam takes ExamFieldInput
         if:
           properties:
@@ -20974,6 +21555,23 @@ components:
             fields:
               items:
                 $ref: '#/components/schemas/FieldInput'
+      - description: scene=exam / quickpay takes no MultipleBlanksField
+        if:
+          properties:
+            scene:
+              enum:
+              - exam
+              - quickpay
+          required:
+          - scene
+        then:
+          properties:
+            fields:
+              items:
+                properties:
+                  type:
+                    not:
+                      const: MultipleBlanksField
     WidgetButtonItemInput:
       type: object
       title: WidgetButtonItemInput
@@ -23000,6 +23598,8 @@ components:
           description: Pass false to delete the rule; omit it when passing `time_periods`
         time_periods:
           type: array
+          minItems: 1
+          maxItems: 3
           description: One daily open period per item
           items:
             type: object
@@ -25647,6 +26247,7 @@ components:
                 - number
                 - 'null'
                 minimum: 0
+                description: From 0.01 to 99999999 on a price_only item
               original_price:
                 type:
                 - number
@@ -25849,7 +26450,7 @@ components:
                 - delete_authorization_page_only
                 description: |
                   What kind of reason it is: `active_limit` 20 routines are enabled already; `once_passed` a one-off's time has passed; `object_unavailable` an object or the data trigger's source does not exist or you cannot reach it;
-                  `field_unavailable` a trigger field does not exist, cannot be seen, cannot be watched (formula and association fields) or cannot be used in a condition; `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else, such as a condition's operator or value its field type does not take.
+                  `field_unavailable` a trigger field does not exist, cannot be seen, cannot be watched (formula and form association fields) or cannot be used in a condition; `delete_authorization_page_only` the body named `delete_authorized`; `invalid` anything else, such as a condition's operator or value its field type does not take.
               message:
                 type: string
                 description: The message the routines page shows, word for word
@@ -26062,7 +26663,7 @@ components:
           type: array
           items:
             type: string
-          description: "`updated`: the api_codes of the fields watched, 1–10; fields the system computes (formula, association) cannot be watched"
+          description: "`updated`: the api_codes of the fields watched, 1–10; formula and form association fields cannot be watched; relation, lookup and rollup columns can"
         scope_conditions:
           type: array
           description: Data conditions, written as the routines page saves them. Conditions with the same `group_index` are joined by AND or OR by its sign; groups are joined by OR. A condition on an operator or value its field type does not take returns `422` saying what the field takes.
@@ -26439,6 +27040,7 @@ components:
       - title
       - summary
       - severity
+      - attention
       - url
       properties:
         id:
@@ -26509,6 +27111,11 @@ components:
           - warning
           - critical
           -
+        attention:
+          type:
+          - string
+          - 'null'
+          description: What to look at, in a sentence; only a warning or critical result Jiri reported has it, so it is null otherwise
         url:
           type: string
           description: The run's page
@@ -26905,7 +27512,7 @@ components:
         description: 'YEAR(date): Four-digit year'
     ExamFieldInput:
       type: object
-      description: 'A field definition for scene=exam, branched on type: the FieldInput types plus the ones only this scene takes'
+      description: 'A field definition for scene=exam, branched on type: the FieldInput types this scene takes plus the ones only it takes'
       required:
       - type
       - label
@@ -27075,7 +27682,7 @@ components:
       title: ExamFieldInput
     EvaluationFieldInput:
       type: object
-      description: 'A field definition for scene=evaluation, branched on type: the FieldInput types plus the ones only this scene takes'
+      description: 'A field definition for scene=evaluation, branched on type: the FieldInput types this scene takes plus the ones only it takes'
       required:
       - type
       - label
@@ -27110,6 +27717,7 @@ components:
           - LikertField
           - MatrixField
           - MatrixScaleField
+          - MultipleBlanksField
           - GoodsField
           - FormulaField
           - ReservationField
@@ -27164,6 +27772,7 @@ components:
           LikertField: "#/components/schemas/LikertFieldInput"
           MatrixField: "#/components/schemas/MatrixFieldInput"
           MatrixScaleField: "#/components/schemas/MatrixScaleFieldInput"
+          MultipleBlanksField: "#/components/schemas/MultipleBlanksFieldInput"
           GoodsField: "#/components/schemas/GoodsFieldInput"
           FormulaField: "#/components/schemas/FormulaFieldInput"
           ReservationField: "#/components/schemas/ReservationFieldInput"
@@ -27211,6 +27820,7 @@ components:
       - $ref: '#/components/schemas/LikertFieldInput'
       - $ref: '#/components/schemas/MatrixFieldInput'
       - $ref: '#/components/schemas/MatrixScaleFieldInput'
+      - $ref: '#/components/schemas/MultipleBlanksFieldInput'
       - $ref: '#/components/schemas/GoodsFieldInput'
       - $ref: '#/components/schemas/FormulaFieldInput'
       - $ref: '#/components/schemas/ReservationFieldInput'
@@ -27653,6 +28263,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -27667,6 +28278,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -27728,6 +28354,7 @@ components:
           items:
             $ref: '#/components/schemas/ChoiceInput'
           description: Choices
+          maxItems: 1000
         calculable:
           type: boolean
           description: Give each choice a numeric value; when on, every (leaf) choice must carry operand_value
@@ -27742,6 +28369,21 @@ components:
         hide_choice_when_quota_empty:
           type: boolean
           description: Hide a choice from fillers once its places run out, instead of showing it as full
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+          description: 'Text a choice shows once its places run out, and the prompt of a drop-down whose choices are all full; null keeps the default text. At most 20 units: a Chinese character is one unit, any other character makes one unit with the character after it, and a line feed (\n, not \r) is skipped and ends the unit before it'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
+          description: 'When every choice gets its full quota back: never (fixed), at the start of each day (per_day) or of each Monday (per_week); null for fixed'
         grids_to_occupy:
           type:
           - integer
@@ -27832,7 +28474,7 @@ components:
           type:
           - string
           - 'null'
-          description: Default value
+          description: Default mobile number, a mainland China one
         placeholder:
           type:
           - string
@@ -27887,7 +28529,7 @@ components:
           - number
           - string
           - 'null'
-          description: Default value
+          description: Default value, with no more decimal places than precision
         placeholder:
           type:
           - string
@@ -28096,7 +28738,7 @@ components:
           type:
           - string
           - 'null'
-          description: Default value
+          description: Default link, starting with http:// or https://
         placeholder:
           type:
           - string
@@ -28234,7 +28876,7 @@ components:
     FormulaFieldColumnInput:
       type: object
       title: FormulaFieldColumnInput
-      description: FormulaField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      description: FormulaField column; its values are computed, and an entry does not write it
       additionalProperties: false
       required:
       - type
@@ -28333,7 +28975,6 @@ components:
           - dollar1
           - cny1
           - sum
-          - text
           - text2
           -
           description: Field icon
@@ -28403,7 +29044,7 @@ components:
     SequenceFieldColumnInput:
       type: object
       title: SequenceFieldColumnInput
-      description: SequenceField column; a column takes no validations, so to make it required on a fill page, give it validations ["presence"] in the field_overrides of a form view
+      description: SequenceField column; its values are computed, and an entry does not write it
       additionalProperties: false
       required:
       - type
@@ -28502,15 +29143,12 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         minimum_length:
@@ -28582,8 +29220,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         minimum_length:
@@ -28671,13 +29307,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -28708,8 +29341,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -28764,8 +29395,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -28839,15 +29468,12 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -28908,15 +29534,12 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -28939,6 +29562,7 @@ components:
       - private
       - required
       - unique
+      - placeholder
       - access_control_list_limit
       - access_control_type
       - acl_values
@@ -28965,6 +29589,10 @@ components:
           type: boolean
         unique:
           type: boolean
+        placeholder:
+          type:
+          - string
+          - 'null'
         access_control_list_limit:
           type: boolean
         access_control_type:
@@ -28977,15 +29605,12 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -29012,6 +29637,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -29046,12 +29673,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -29084,6 +29722,8 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -29120,20 +29760,29 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -29163,6 +29812,8 @@ components:
       - calculable
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -29193,12 +29844,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -29267,8 +29929,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         start_date:
@@ -29300,8 +29960,8 @@ components:
       - notes
       - private
       - required
-      - rating_max
       - rating_type
+      - rating_max
       - range_max
       - api_code_alias
       - analytics
@@ -29322,14 +29982,12 @@ components:
           type: boolean
         required:
           type: boolean
-        rating_max:
-          type: integer
-          minimum: 1
         rating_type:
           type:
           - string
           - 'null'
-          description: Rating icon; not writable, so a write may only repeat the current value
+        rating_max:
+          type: integer
         range_max:
           type:
           - integer
@@ -29383,7 +30041,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
         api_code_alias:
           type:
           - string
@@ -29441,8 +30098,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -29504,8 +30159,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 2
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -29554,13 +30207,10 @@ components:
           type:
           - number
           - 'null'
-          exclusiveMinimum: 0
-          maximum: 500
         max_file_quantity:
           type:
           - integer
           - 'null'
-          minimum: 1
         media_type:
           type:
           - object
@@ -29691,8 +30341,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -29808,8 +30456,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -29951,8 +30597,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 5
         api_code_alias:
           type:
           - string
@@ -29977,6 +30621,8 @@ components:
       - random_choices
       - calculable
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -30003,7 +30649,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 2
         choice_filterable:
           type: boolean
         random_choices:
@@ -30012,12 +30657,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -30083,12 +30739,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         calculable:
           type: boolean
         choices:
@@ -30203,7 +30857,6 @@ components:
             $ref: '#/components/schemas/FieldStatement'
         rating_max:
           type: integer
-          minimum: 1
         rating_type:
           type:
           - string
@@ -30255,14 +30908,12 @@ components:
           type:
           - string
           - 'null'
-          maxLength: 2
         collapse_on_mobile:
           type: boolean
         columns_on_mobile:
           type:
           - integer
           - 'null'
-          minimum: 1
         goods_items:
           type: array
           items:
@@ -30342,13 +30993,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -30384,8 +31032,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -30496,8 +31142,6 @@ components:
           type: string
         associated_field_api_codes:
           type: array
-          minItems: 1
-          maxItems: 4
           items:
             type: string
         privacy_safe:
@@ -30512,13 +31156,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         display_field_api_codes:
           type: array
-          maxItems: 20
           items:
             type: string
         api_code_alias:
@@ -30544,6 +31185,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - api_code_alias
       - analytics
@@ -30574,6 +31217,19 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -30603,6 +31259,8 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - api_code_alias
       - analytics
@@ -30635,14 +31293,25 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -30747,7 +31416,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         api_code_alias:
           type:
           - string
@@ -30793,7 +31461,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
         fixed_to_bottom:
           type: boolean
         buttons:
@@ -30845,7 +31512,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         phones:
           type: array
           items:
@@ -30972,12 +31638,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
         entries_init_number:
           type:
           - integer
           - 'null'
-          minimum: 0
         entries_number_visible:
           type: boolean
         marquee_data_type:
@@ -31012,6 +31676,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31049,12 +31715,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -31103,6 +31780,8 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31142,20 +31821,29 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -31202,6 +31890,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - answers
       - answer_setting_mode
@@ -31235,6 +31925,19 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -31280,6 +31983,8 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - answers
       - answer_setting_mode
@@ -31315,14 +32020,25 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -31368,6 +32084,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31405,12 +32123,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -31456,6 +32185,8 @@ components:
       - calculable
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -31489,12 +32220,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -31593,15 +32335,12 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         answers:
@@ -31692,8 +32431,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         answers:
@@ -31800,13 +32537,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -31837,8 +32571,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         answers:
@@ -31876,11 +32608,11 @@ components:
       - notes
       - private
       - required
+      - rating_type
       - rating_max
       - answers
       - answer_setting_mode
       - answer_explanation
-      - rating_type
       - range_max
       - api_code_alias
       - analytics
@@ -31901,9 +32633,12 @@ components:
           type: boolean
         required:
           type: boolean
+        rating_type:
+          type:
+          - string
+          - 'null'
         rating_max:
           type: integer
-          minimum: 1
         answers:
           type: array
           items:
@@ -31920,11 +32655,6 @@ components:
           type:
           - string
           - 'null'
-        rating_type:
-          type:
-          - string
-          - 'null'
-          description: Rating icon; not writable, so a write may only repeat the current value
         range_max:
           type:
           - integer
@@ -32027,6 +32757,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32061,12 +32793,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -32097,6 +32840,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32131,12 +32876,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -32495,7 +33251,6 @@ components:
           type:
           - string
           - 'null'
-          description: Question text, in which each ${api_code}$ marks where the blank of that api_code sits; not writable, so a write may only repeat the current value
         api_code_alias:
           type:
           - string
@@ -32547,8 +33302,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -32573,6 +33326,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32603,12 +33358,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -32637,6 +33403,8 @@ components:
       - choices_layout
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - grids_to_occupy
       - start_new_row
       - choices
@@ -32667,12 +33435,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         grids_to_occupy:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         choices:
@@ -32768,8 +33547,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -32831,13 +33608,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -32868,8 +33642,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -32931,8 +33703,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         start_date:
@@ -32991,8 +33761,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -33046,8 +33814,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -33194,13 +33960,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -33236,8 +33999,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 1
-          maximum: 3
         start_new_row:
           type: boolean
         api_code_alias:
@@ -33371,6 +34132,7 @@ components:
           LikertField: "#/components/schemas/LikertField"
           MatrixField: "#/components/schemas/MatrixField"
           MatrixScaleField: "#/components/schemas/MatrixScaleField"
+          MultipleBlanksField: "#/components/schemas/MultipleBlanksField"
           GoodsField: "#/components/schemas/GoodsField"
           FormulaField: "#/components/schemas/FormulaField"
           ReservationField: "#/components/schemas/ReservationField"
@@ -33404,7 +34166,6 @@ components:
           Timer: "#/components/schemas/Timer"
           ImageGroup: "#/components/schemas/ImageGroup"
           WidgetVideo: "#/components/schemas/WidgetVideo"
-          MultipleBlanksField: "#/components/schemas/MultipleBlanksField"
       oneOf:
       - $ref: '#/components/schemas/TextField'
       - $ref: '#/components/schemas/TextArea'
@@ -33433,6 +34194,7 @@ components:
       - $ref: '#/components/schemas/LikertField'
       - $ref: '#/components/schemas/MatrixField'
       - $ref: '#/components/schemas/MatrixScaleField'
+      - $ref: '#/components/schemas/MultipleBlanksField'
       - $ref: '#/components/schemas/GoodsField'
       - $ref: '#/components/schemas/FormulaField'
       - $ref: '#/components/schemas/ReservationField'
@@ -33466,7 +34228,6 @@ components:
       - $ref: '#/components/schemas/Timer'
       - $ref: '#/components/schemas/ImageGroup'
       - $ref: '#/components/schemas/WidgetVideo'
-      - $ref: '#/components/schemas/MultipleBlanksField'
     TableColumn:
       type: object
       title: TableColumn
@@ -33490,6 +34251,8 @@ components:
           FormulaField: "#/components/schemas/FormulaFieldColumn"
           RelationField: "#/components/schemas/RelationFieldColumn"
           SequenceField: "#/components/schemas/SequenceFieldColumn"
+          LookupField: "#/components/schemas/LookupFieldColumn"
+          RollupField: "#/components/schemas/RollupFieldColumn"
       oneOf:
       - $ref: '#/components/schemas/TextAreaColumn'
       - $ref: '#/components/schemas/RadioButtonColumn'
@@ -33504,6 +34267,8 @@ components:
       - $ref: '#/components/schemas/FormulaFieldColumn'
       - $ref: '#/components/schemas/RelationFieldColumn'
       - $ref: '#/components/schemas/SequenceFieldColumn'
+      - $ref: '#/components/schemas/LookupFieldColumn'
+      - $ref: '#/components/schemas/RollupFieldColumn'
     FieldChoice:
       type: object
       title: FieldChoice
@@ -33876,19 +34641,16 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         minimum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         api_code_alias:
           type:
           - string
@@ -33905,11 +34667,23 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         levels:
           type:
           - integer
           - 'null'
-          minimum: 2
         choice_filterable:
           type: boolean
         range_min:
@@ -33936,7 +34710,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -33965,7 +34738,6 @@ components:
           - formula-2
           - date-2
           - sum
-          - text
           - text2
           -
         formula:
@@ -34002,13 +34774,10 @@ components:
           type:
           - number
           - 'null'
-          exclusiveMinimum: 0
-          maximum: 500
         max_file_quantity:
           type:
           - integer
           - 'null'
-          minimum: 1
         media_type:
           type:
           - object
@@ -34100,7 +34869,6 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         minimum_length:
@@ -34223,7 +34991,6 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         api_code_alias:
@@ -34246,6 +35013,8 @@ components:
       - minimum_length
       - maximum_length
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - api_code_alias
       properties:
@@ -34275,14 +35044,25 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
         maximum_length:
           type:
           - integer
           - 'null'
-          minimum: 0
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -34304,6 +35084,8 @@ components:
       - calculable
       - random_choices
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - api_code_alias
       properties:
@@ -34327,6 +35109,19 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -34350,6 +35145,8 @@ components:
       - random_choices
       - calculable
       - hide_choice_when_quota_empty
+      - quota_blank_warning
+      - quota_cycle_rule
       - choices
       - api_code_alias
       properties:
@@ -34371,7 +35168,6 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 2
         choice_filterable:
           type: boolean
         random_choices:
@@ -34380,6 +35176,19 @@ components:
           type: boolean
         hide_choice_when_quota_empty:
           type: boolean
+        quota_blank_warning:
+          type:
+          - string
+          - 'null'
+        quota_cycle_rule:
+          type:
+          - string
+          - 'null'
+          enum:
+          - fixed
+          - per_day
+          - per_week
+          -
         choices:
           type: array
           items:
@@ -34446,13 +35255,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -34544,13 +35350,10 @@ components:
           type:
           - integer
           - 'null'
-          minimum: 0
-          maximum: 14
         display_precision:
           type:
           - integer
           - 'null'
-          minimum: 0
         display_as_percentage:
           type: boolean
         thousands_separator:
@@ -34723,13 +35526,10 @@ components:
           type:
           - number
           - 'null'
-          exclusiveMinimum: 0
-          maximum: 500
         max_file_quantity:
           type:
           - integer
           - 'null'
-          minimum: 1
         media_type:
           type:
           - object
@@ -34810,7 +35610,6 @@ components:
           -
         acl_values:
           type: array
-          maxItems: 5000
           items:
             type: string
         api_code_alias:
@@ -35511,3 +36310,531 @@ components:
           - 'null'
           minimum: 1
           maximum: 12
+    LookupFieldColumnInput:
+      type: object
+      title: LookupFieldColumnInput
+      description: LookupField column; its values are computed, and an entry does not write it
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: LookupField
+        label:
+          type:
+          - string
+          - 'null'
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type:
+          - string
+          - 'null'
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of a relation column of this table that is already linked; the lookup or rollup reads the rows linked through it
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code, in the related table, of the column whose values are shown or computed
+        scope_conditions:
+          type: array
+          description: Reads only the linked rows that match. Conditions sharing a `group_index` must all hold, different groups are alternatives; an empty array removes the conditions
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+    LookupFieldColumn:
+      type: object
+      title: LookupFieldColumn
+      additionalProperties: false
+      required:
+      - api_code
+      - type
+      - label
+      - notes
+      - private
+      - relation_field_api_code
+      - source_field_api_code
+      - scope_conditions
+      - api_code_alias
+      - analytics
+      properties:
+        api_code:
+          type: string
+        type:
+          const: LookupField
+        label:
+          type:
+          - string
+          - 'null'
+        notes:
+          type:
+          - string
+          - 'null'
+        private:
+          type: boolean
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+        scope_conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        api_code_alias:
+          type:
+          - string
+          - 'null'
+        analytics:
+          anyOf:
+          - $ref: '#/components/schemas/FieldAnalytics'
+          - type: 'null'
+    RollupFieldColumnInput:
+      type: object
+      title: RollupFieldColumnInput
+      description: RollupField column; its values are computed, and an entry does not write it
+      additionalProperties: false
+      required:
+      - type
+      - label
+      properties:
+        type:
+          const: RollupField
+        label:
+          type:
+          - string
+          - 'null'
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type:
+          - string
+          - 'null'
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code of a relation column of this table that is already linked; the lookup or rollup reads the rows linked through it
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+          description: api_code, in the related table, of the column whose values are shown or computed
+        aggregation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sum
+          - count
+          - avg
+          - max
+          - min
+          -
+          description: How the rollup computes the values; count is the number of linked rows whose source column is not empty
+        scope_conditions:
+          type: array
+          description: Reads only the linked rows that match. Conditions sharing a `group_index` must all hold, different groups are alternatives; an empty array removes the conditions
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        display_precision:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          description: Decimal places shown, for a table column only; refused on a form field, which takes precision
+        display_as_percentage:
+          type: boolean
+          description: Show as a percentage; cannot be combined with thousands_separator
+        thousands_separator:
+          type: boolean
+          description: Show a thousands separator; cannot be combined with display_as_percentage
+        currency_symbol:
+          type:
+          - string
+          - 'null'
+          description: Currency symbol
+        currency_symbol_position:
+          type:
+          - string
+          - 'null'
+          enum:
+          - prefix
+          - suffix
+          -
+          description: Where the currency symbol goes
+      allOf:
+      - description: display_as_percentage and thousands_separator cannot both be true
+        not:
+          properties:
+            display_as_percentage:
+              const: true
+            thousands_separator:
+              const: true
+          required:
+          - display_as_percentage
+          - thousands_separator
+    RollupFieldColumn:
+      type: object
+      title: RollupFieldColumn
+      additionalProperties: false
+      required:
+      - api_code
+      - type
+      - label
+      - notes
+      - private
+      - relation_field_api_code
+      - source_field_api_code
+      - aggregation
+      - scope_conditions
+      - display_precision
+      - display_as_percentage
+      - thousands_separator
+      - currency_symbol
+      - currency_symbol_position
+      - result_display_type
+      - api_code_alias
+      - analytics
+      properties:
+        api_code:
+          type: string
+        type:
+          const: RollupField
+        label:
+          type:
+          - string
+          - 'null'
+        notes:
+          type:
+          - string
+          - 'null'
+        private:
+          type: boolean
+        relation_field_api_code:
+          type:
+          - string
+          - 'null'
+        source_field_api_code:
+          type:
+          - string
+          - 'null'
+        aggregation:
+          type:
+          - string
+          - 'null'
+          enum:
+          - sum
+          - count
+          - avg
+          - max
+          - min
+          -
+        scope_conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - trigger
+            - operator
+            properties:
+              trigger:
+                type: string
+                description: api_code of a column of the related table; a relation column is refused
+              operator:
+                type: string
+                enum:
+                - eq
+                - ne
+                - any_in
+                - none_in
+                - between
+                - not_between
+                - gte
+                - gt
+                - lte
+                - lt
+                - 'null'
+                - not_null
+                - like
+                - and
+                - or
+                - not_like
+                - match
+              value:
+                description: Value in the shape the column type and operator take; a relative date such as today is refused
+              group_index:
+                type: integer
+        display_precision:
+          type:
+          - integer
+          - 'null'
+        display_as_percentage:
+          type: boolean
+        thousands_separator:
+          type: boolean
+        currency_symbol:
+          type:
+          - string
+          - 'null'
+        currency_symbol_position:
+          type:
+          - string
+          - 'null'
+          enum:
+          - prefix
+          - suffix
+          -
+        result_display_type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - numeric
+          - datetime
+          -
+          description: 'What a value is: a number, or a date for the max or min of a date column; ignored on write'
+        api_code_alias:
+          type:
+          - string
+          - 'null'
+        analytics:
+          anyOf:
+          - $ref: '#/components/schemas/FieldAnalytics'
+          - type: 'null'
+    FormLayoutUpdate:
+      type: string
+      enum:
+      - classic
+      - card
+      description: Switches the layout; only a form of scene survey / form / exam / evaluation takes card, a table never. Switching keeps the fields and the theme as they are, PageBreak / WidgetContact / WidgetVideo and grids_to_occupy / start_new_row included, which the paged fill page may leave out; a card form takes no new field of those types
+    MultipleBlanksFieldInput:
+      type: object
+      title: MultipleBlanksFieldInput
+      description: MultipleBlanksField field; a form of scene exam / quickpay takes none, on create or in fields.add
+      additionalProperties: false
+      required:
+      - type
+      - label
+      - placeholder
+      properties:
+        type:
+          const: MultipleBlanksField
+        label:
+          type:
+          - string
+          - 'null'
+          description: Field label
+        cid:
+          type: string
+          description: Temporary id within this request, for formulas and the like to refer to
+        notes:
+          type:
+          - string
+          - 'null'
+          description: Text shown under the field label
+        private:
+          type: boolean
+          description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
+        required:
+          type: boolean
+          description: Required
+        position:
+          type: integer
+          minimum: 0
+          description: Target position of the field in the form, from 0; appended at the end by default
+        placeholder:
+          type: string
+          description: Question text, with ${name}$ where each blank goes, e.g. "Room ${room}$, guest ${guest}$"; a name takes letters, digits, _ and -, and appears once. It may hold the HTML a form description takes; scripts and event attributes are removed. Read back, each blank is marked by its api_code; fixed once the field is created, so an update may only repeat it
+        dimensions:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/BlankInput'
+          description: The blanks, one per ${name}$; an item whose cid is a name in placeholder fills that blank, then one whose api_code is, and the others fill the rest in order. Left out, each ${name}$ makes a blank
+    BlankInput:
+      type: object
+      title: BlankInput
+      additionalProperties: false
+      description: 'A blank of a MultipleBlanksField. A blank read from another form can be sent as read: a write sets type, label, placeholder, cid, api_code, and takes every other key a blank reads only empty or false, since a blank does not keep it'
+      properties:
+        type:
+          type: string
+          enum:
+          - TextField
+        label:
+          type:
+          - string
+          - 'null'
+          description: Name of the blank; may be empty
+        placeholder:
+          type:
+          - string
+          - 'null'
+          description: Hint shown in the empty blank
+        cid:
+          type: string
+          description: The name its ${name}$ in placeholder uses
+        api_code:
+          type: string
+          description: The name its ${name}$ in placeholder uses, as in a field read from another form; the blank gets a new api_code
+        notes:
+          type:
+          - string
+          - 'null'
+        private:
+          type: boolean
+        predefined_value: {}
+        scannable:
+          type: boolean
+        access_control_list_limit:
+          type: boolean
+        access_control_type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - white
+          - black
+          -
+        acl_values:
+          type: array
+          items:
+            type: string
+        minimum_length:
+          type:
+          - integer
+          - 'null'
+        maximum_length:
+          type:
+          - integer
+          - 'null'
+        api_code_alias:
+          type:
+          - string
+          - 'null'
