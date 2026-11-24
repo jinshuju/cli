@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-18';
+export const SPEC_DATE: string | undefined = '2026-11-24';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -34,11 +34,13 @@ export type OperationId =
   | 'createFillViewEntry'
   | 'createFolder'
   | 'createForm'
+  | 'createFormCooperators'
   | 'createFormView'
   | 'createFormWebhook'
   | 'createMemoryNote'
   | 'createMessageChannel'
   | 'createNotificationRule'
+  | 'createOpenResult'
   | 'createOpensearchQuery'
   | 'createRoutine'
   | 'createSmsSignature'
@@ -59,6 +61,7 @@ export type OperationId =
   | 'deleteMemoryNotes'
   | 'deleteMessageChannel'
   | 'deleteNotificationRule'
+  | 'deleteOpenResult'
   | 'deleteRoutine'
   | 'deleteSmsSignature'
   | 'deleteSmsTemplate'
@@ -95,6 +98,7 @@ export type OperationId =
   | 'getMessage'
   | 'getMessageChannel'
   | 'getNotificationRule'
+  | 'getOpenResult'
   | 'getOpensearchQuery'
   | 'getPublishedArtifact'
   | 'getQuickpaySetting'
@@ -104,7 +108,9 @@ export type OperationId =
   | 'getTableEntry'
   | 'getTableView'
   | 'getTradeMerchant'
+  | 'getUserFormSetting'
   | 'getWheelFortune'
+  | 'listArtifactDataSources'
   | 'listArtifacts'
   | 'listBillingAccountInvoices'
   | 'listBillingAccountPaidFeatures'
@@ -122,6 +128,7 @@ export type OperationId =
   | 'listFolders'
   | 'listFormConditionTriggerableFields'
   | 'listFormCooperators'
+  | 'listFormPublishedArtifacts'
   | 'listFormViewEntries'
   | 'listFormViews'
   | 'listForms'
@@ -131,8 +138,10 @@ export type OperationId =
   | 'listMySubmittedEntries'
   | 'listNotificationRuleNotifications'
   | 'listNotificationRules'
+  | 'listOpenResults'
   | 'listOpensearchQueries'
   | 'listOpensearchQuerySuggestions'
+  | 'listRedirectRules'
   | 'listRoutineRuns'
   | 'listRoutines'
   | 'listSmsAuditStatuses'
@@ -144,6 +153,7 @@ export type OperationId =
   | 'listTableConditionTriggerableFields'
   | 'listTableEntries'
   | 'listTableEntryComments'
+  | 'listTablePublishedArtifacts'
   | 'listTableViewEntries'
   | 'listTableViews'
   | 'listTables'
@@ -166,7 +176,11 @@ export type OperationId =
   | 'replaceTableEntry'
   | 'resendEmailTask'
   | 'resendSmsTask'
+  | 'restoreFormPublishedArtifactDataGrant'
+  | 'restoreTablePublishedArtifactDataGrant'
   | 'resumeRoutine'
+  | 'revokeFormPublishedArtifactDataGrant'
+  | 'revokeTablePublishedArtifactDataGrant'
   | 'runRoutine'
   | 'searchEntriesAcrossForms'
   | 'searchMySubmittedEntries'
@@ -191,6 +205,7 @@ export type OperationId =
   | 'updateManuallyCloseRule'
   | 'updateMemoryNote'
   | 'updateNotificationRule'
+  | 'updateOpenResult'
   | 'updateOpensearchQuery'
   | 'updatePublishedArtifact'
   | 'updateQuickpaySetting'
@@ -203,6 +218,7 @@ export type OperationId =
   | 'updateTableEntryComment'
   | 'updateTableEntryViaPost'
   | 'updateTableView'
+  | 'updateUserFormSetting'
   | 'updateWheelFortune'
   | 'uploadEntryAttachment'
   | 'uploadFormImage'
@@ -531,6 +547,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [],
     body: { required: true, content: { 'application/json': { $ref: 'FormCreateInput' } } }
   },
+  createFormCooperators: {
+    method: 'POST',
+    path: '/forms/{form_token}/cooperators',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'CooperatorCreateInput' } } }
+  },
   createFormView: {
     method: 'POST',
     path: '/forms/{form_token}/views',
@@ -598,6 +620,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         }
       }
     }
+  },
+  createOpenResult: {
+    method: 'POST',
+    path: '/forms/{form_token}/open_results',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'OpenResultInput' } } }
   },
   createOpensearchQuery: {
     method: 'POST',
@@ -754,6 +782,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
+  deleteOpenResult: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/open_results/{token}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'token', in: 'path', required: true, schema: { type: 'string' } }
     ]
   },
   deleteRoutine: {
@@ -991,6 +1027,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'include_analytics', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_theme', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_field_rules', in: 'query', schema: { type: 'boolean' } },
+      { name: 'include_redirect_rules', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_extended_attributes', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_exam_setting', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_transactions', in: 'query', schema: { type: 'boolean' } }
@@ -1031,6 +1068,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
+  getOpenResult: {
+    method: 'GET',
+    path: '/forms/{form_token}/open_results/{token}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'token', in: 'path', required: true, schema: { type: 'string' } }
     ]
   },
   getOpensearchQuery: {
@@ -1088,10 +1133,20 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     ]
   },
   getTradeMerchant: { method: 'GET', path: '/trade/merchant', parameters: [] },
+  getUserFormSetting: {
+    method: 'GET',
+    path: '/forms/{form_token}/user_form_setting',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   getWheelFortune: {
     method: 'GET',
     path: '/forms/{form_token}/wheel_fortune',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  listArtifactDataSources: {
+    method: 'GET',
+    path: '/artifacts/{artifact_id}/data_sources',
+    parameters: [{ name: 'artifact_id', in: 'path', required: true, schema: { type: 'string' } }]
   },
   listArtifacts: {
     method: 'GET',
@@ -1249,6 +1304,17 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/cooperators',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
+  listFormPublishedArtifacts: {
+    method: 'GET',
+    path: '/forms/{form_token}/published_artifacts',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
+  },
   listFormViewEntries: {
     method: 'GET',
     path: '/forms/{form_token}/views/{view_token}/entries',
@@ -1375,6 +1441,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/notification_rules',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
+  listOpenResults: {
+    method: 'GET',
+    path: '/forms/{form_token}/open_results',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   listOpensearchQueries: {
     method: 'GET',
     path: '/opensearch/queries',
@@ -1384,6 +1455,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/opensearch/query_suggestions',
     parameters: [{ name: 'form_token', in: 'query', required: true, schema: { type: 'string' } }]
+  },
+  listRedirectRules: {
+    method: 'GET',
+    path: '/forms/{form_token}/redirect_rules',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
   listRoutineRuns: {
     method: 'GET',
@@ -1523,6 +1599,17 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [
       { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'serial_number', in: 'path', required: true, schema: { type: 'integer' } }
+    ]
+  },
+  listTablePublishedArtifacts: {
+    method: 'GET',
+    path: '/tables/{table_token}/published_artifacts',
+    parameters: [
+      { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
     ]
   },
   listTableViewEntries: {
@@ -1699,7 +1786,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
                 'goods_item',
                 'contact_widget',
                 'reservation_item',
-                'wheel_fortune_prize'
+                'wheel_fortune_prize',
+                'weixin_share_icon'
               ]
             }
           },
@@ -1792,10 +1880,42 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     ],
     body: { required: true, content: { 'application/json': { $ref: 'EntryTaskResendInput' } } }
   },
+  restoreFormPublishedArtifactDataGrant: {
+    method: 'POST',
+    path: '/forms/{form_token}/published_artifacts/{published_artifact_token}/data_grant',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'published_artifact_token', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
+  restoreTablePublishedArtifactDataGrant: {
+    method: 'POST',
+    path: '/tables/{table_token}/published_artifacts/{published_artifact_token}/data_grant',
+    parameters: [
+      { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'published_artifact_token', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
   resumeRoutine: {
     method: 'POST',
     path: '/routines/{routine_id}/resume',
     parameters: [{ name: 'routine_id', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  revokeFormPublishedArtifactDataGrant: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/published_artifacts/{published_artifact_token}/data_grant',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'published_artifact_token', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
+  revokeTablePublishedArtifactDataGrant: {
+    method: 'DELETE',
+    path: '/tables/{table_token}/published_artifacts/{published_artifact_token}/data_grant',
+    parameters: [
+      { name: 'table_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'published_artifact_token', in: 'path', required: true, schema: { type: 'string' } }
+    ]
   },
   runRoutine: {
     method: 'POST',
@@ -2055,6 +2175,15 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       }
     }
   },
+  updateOpenResult: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/open_results/{token}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'token', in: 'path', required: true, schema: { type: 'string' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'OpenResultInput' } } }
+  },
   updateOpensearchQuery: {
     method: 'PATCH',
     path: '/opensearch/queries/{query_token}',
@@ -2153,6 +2282,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     ],
     body: { required: true, content: { 'application/json': { $ref: 'FormViewInput' } } }
   },
+  updateUserFormSetting: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/user_form_setting',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'UserFormSettingInput' } } }
+  },
   updateWheelFortune: {
     method: 'PATCH',
     path: '/forms/{form_token}/wheel_fortune',
@@ -2206,7 +2341,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
                 'goods_item',
                 'contact_widget',
                 'reservation_item',
-                'wheel_fortune_prize'
+                'wheel_fortune_prize',
+                'weixin_share_icon'
               ]
             },
             file: { type: 'string' }
@@ -2384,8 +2520,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      max_size: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 500 },
-      max_file_quantity: { type: ['integer', 'null'], minimum: 1 },
+      max_size: { type: ['number', 'null'], minimum: 0.01, maximum: 500, multipleOf: 0.01 },
+      max_file_quantity: { type: ['integer', 'null'], minimum: 1, maximum: 15 },
       media_type: {
         type: ['object', 'null'],
         additionalProperties: false,
@@ -2426,6 +2562,40 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       reset_rule_type: { type: 'string', enum: ['none', 'daily', 'weekly', 'monthly'] }
     }
   },
+  BlankInput: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      type: { type: 'string', enum: ['TextField'] },
+      label: { type: ['string', 'null'] },
+      placeholder: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      api_code: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      predefined_value: {},
+      minimum_length: { type: ['integer', 'null'] },
+      maximum_length: { type: ['integer', 'null'] },
+      scannable: { type: 'boolean' },
+      access_control_list_limit: { type: 'boolean' },
+      access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
+      acl_values: { type: 'array', items: { type: 'string' } },
+      format_validation_type: {
+        type: ['string', 'null'],
+        enum: [
+          'chinese_only',
+          'custom_regex_format',
+          'english_only',
+          'id_card_format',
+          'plate_number_format',
+          'qq_number_format',
+          null
+        ]
+      },
+      custom_validation_regex: { type: ['string', 'null'] },
+      api_code_alias: { type: ['string', 'null'] }
+    }
+  },
   BooleanFieldColumnInput: {
     type: 'object',
     additionalProperties: false,
@@ -2447,9 +2617,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
-      quota: { type: 'integer', minimum: 1 },
+      quota: { type: 'integer', minimum: 0 },
       operand_value: { type: 'number' },
-      selected: { type: 'boolean' },
       sub_choices: { type: 'array', items: { $ref: 'CascadeChoiceInput' } }
     }
   },
@@ -2466,11 +2635,13 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       choices: { type: 'array', minItems: 1, items: { $ref: 'CascadeChoiceInput' } },
-      levels: { type: ['integer', 'null'], minimum: 2 },
-      choice_filterable: { type: 'boolean' },
+      levels: { type: ['integer', 'null'], minimum: 2, maximum: 4 },
       random_choices: { type: 'boolean' },
       calculable: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -2486,11 +2657,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2514,13 +2688,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
+      with_exclusive_choice: { type: 'boolean' },
+      exclusive_choice_api_codes: { type: 'array', items: { type: 'string' } },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2540,6 +2719,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       name: { type: 'string', minLength: 1 },
       display_field_api_code: { type: ['string', 'null'] },
       enable_checkin_code: { type: 'boolean' },
+      success_message: { type: ['string', 'null'] },
       checkin_field_required_unique: { type: 'boolean' },
       date_settings: { type: 'array', items: { $ref: 'CheckinDateSetting' } },
       geo_location: { oneOf: [{ type: 'null' }, { $ref: 'CheckinGeoLocation' }] }
@@ -2553,6 +2733,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       name: { type: 'string', minLength: 1 },
       display_field_api_code: { type: ['string', 'null'] },
       enable_checkin_code: { type: 'boolean' },
+      success_message: { type: ['string', 'null'] },
       checkin_field_required_unique: { type: 'boolean' },
       date_settings: { type: 'array', items: { $ref: 'CheckinDateSetting' } },
       geo_location: { oneOf: [{ type: 'null' }, { $ref: 'CheckinGeoLocation' }] }
@@ -2607,9 +2788,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
-      quota: { type: 'integer', minimum: 1 },
+      quota: { type: 'integer', minimum: 0 },
       operand_value: { type: 'number' },
       selected: { type: 'boolean' },
+      description_text: { type: ['string', 'null'] },
+      description_url: { type: ['string', 'null'] },
       is_other: { type: 'boolean' }
     }
   },
@@ -2631,14 +2814,25 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           properties: {
             api_code: { type: 'string' },
             value: { type: 'string' },
-            operand_value: { type: 'number' },
+            operand_value: { type: ['number', 'null'] },
             selected: { type: 'boolean' },
             quota: { type: ['integer', 'null'], minimum: 0 },
-            recover_quota: { type: 'integer', minimum: 1 }
+            recover_quota: { type: 'integer', minimum: 1 },
+            description_text: { type: ['string', 'null'] },
+            description_url: { type: ['string', 'null'] }
           },
           additionalProperties: false
         }
       }
+    },
+    additionalProperties: false
+  },
+  CooperatorCreateInput: {
+    type: 'object',
+    required: ['user_ids', 'role'],
+    properties: {
+      user_ids: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string', pattern: '^[0-9a-f]{24}$' } },
+      role: { type: 'string', enum: ['manager', 'data_maintainer', 'data_viewer'] }
     },
     additionalProperties: false
   },
@@ -2657,6 +2851,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       enabled: { type: 'boolean' },
       time_periods: {
         type: 'array',
+        minItems: 1,
+        maxItems: 3,
         items: {
           type: 'object',
           required: ['start_time', 'end_time'],
@@ -2698,6 +2894,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       predefined_value: { type: ['string', 'null'] },
       precision: { type: ['string', 'null'], enum: ['month', 'day', 'minute', 'second', null] },
+      start_date: { type: ['string', 'null'] },
+      end_date: { type: ['string', 'null'] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -2715,11 +2913,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2796,10 +2997,13 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -2823,10 +3027,13 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -3034,6 +3241,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'LikertField',
           'MatrixField',
           'MatrixScaleField',
+          'MultipleBlanksField',
           'GoodsField',
           'FormulaField',
           'ReservationField',
@@ -3087,6 +3295,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         LikertField: 'LikertFieldInput',
         MatrixField: 'MatrixFieldInput',
         MatrixScaleField: 'MatrixScaleFieldInput',
+        MultipleBlanksField: 'MultipleBlanksFieldInput',
         GoodsField: 'GoodsFieldInput',
         FormulaField: 'FormulaFieldInput',
         ReservationField: 'ReservationFieldInput',
@@ -3136,6 +3345,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       { $ref: 'LikertFieldInput' },
       { $ref: 'MatrixFieldInput' },
       { $ref: 'MatrixScaleFieldInput' },
+      { $ref: 'MultipleBlanksFieldInput' },
       { $ref: 'GoodsFieldInput' },
       { $ref: 'FormulaFieldInput' },
       { $ref: 'ReservationFieldInput' },
@@ -3166,6 +3376,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_indicator_comments: { type: 'boolean' },
       show_comments: { type: 'boolean' },
       need_attention: { type: 'string' },
+      show_dispatcher_structure: { type: 'boolean' },
+      show_question_settings_structure: { type: 'boolean' },
       success_message_rich_text: { type: 'string' },
       evaluation_comments: { type: 'array', items: { $ref: 'FormEvaluationCommentInput' } },
       indicator_setting: {
@@ -3385,6 +3597,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_timeout: { type: 'boolean' },
       limited_time: { type: 'integer', minimum: 1, maximum: 9999 },
       need_attention: { type: 'string' },
+      show_dispatcher_structure: { type: 'boolean' },
+      show_question_settings_structure: { type: 'boolean' },
       success_message_rich_text: { type: 'string' },
       interval_comments: { type: 'array', items: { $ref: 'FormIntervalCommentInput' } },
       random_questions: {
@@ -3458,6 +3672,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       hidden: { type: 'boolean' },
       allow_extended_text: { type: 'boolean' },
       extended_text_required: { type: 'boolean' },
+      description_text: { type: ['string', 'null'] },
+      description_url: { type: ['string', 'null'] },
       attachment_id: { type: 'string' },
       image_url: { type: ['string', 'null'] },
       sub_choices: { type: 'array', items: { $ref: 'FieldChoiceInput' } },
@@ -3510,20 +3726,35 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       predefined_value: {},
       placeholder: { type: ['string', 'null'] },
+      minimum_length: { type: ['integer', 'null'] },
+      maximum_length: { type: ['integer', 'null'] },
       scannable: { type: 'boolean' },
       access_control_list_limit: { type: 'boolean' },
       access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
-      acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
-      minimum_length: { type: ['integer', 'null'], minimum: 0 },
-      maximum_length: { type: ['integer', 'null'], minimum: 0 },
+      acl_values: { type: 'array', items: { type: 'string' } },
+      format_validation_type: {
+        type: ['string', 'null'],
+        enum: [
+          'chinese_only',
+          'custom_regex_format',
+          'english_only',
+          'id_card_format',
+          'plate_number_format',
+          'qq_number_format',
+          null
+        ]
+      },
+      custom_validation_regex: { type: ['string', 'null'] },
       api_code_alias: { type: ['string', 'null'] },
       sms_verification: { type: 'boolean' },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
-      levels: { type: ['integer', 'null'], minimum: 2 },
-      choice_filterable: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
+      levels: { type: ['integer', 'null'] },
       range_min: { type: ['number', 'null'] },
       range_max: { type: ['number', 'null'] },
       precision: {
@@ -3533,14 +3764,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           { type: 'null' }
         ]
       },
-      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: ['string', 'null'] },
-      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: {
         type: ['string', 'null'],
-        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text', 'text2', null]
+        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text2', null]
       },
       formula: { type: ['string', 'null'] },
       formula_display: { type: ['string', 'null'] },
@@ -3549,8 +3777,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       start_date: { type: ['string', 'null'] },
       end_date: { type: ['string', 'null'] },
       include_second: { type: 'boolean' },
-      max_size: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 500 },
-      max_file_quantity: { type: ['integer', 'null'], minimum: 1 },
+      max_size: { type: ['number', 'null'] },
+      max_file_quantity: { type: ['integer', 'null'] },
       media_type: {
         type: ['object', 'null'],
         additionalProperties: false,
@@ -3598,6 +3826,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'LikertField',
           'MatrixField',
           'MatrixScaleField',
+          'MultipleBlanksField',
           'GoodsField',
           'FormulaField',
           'ReservationField',
@@ -3644,6 +3873,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         LikertField: 'LikertFieldInput',
         MatrixField: 'MatrixFieldInput',
         MatrixScaleField: 'MatrixScaleFieldInput',
+        MultipleBlanksField: 'MultipleBlanksFieldInput',
         GoodsField: 'GoodsFieldInput',
         FormulaField: 'FormulaFieldInput',
         ReservationField: 'ReservationFieldInput',
@@ -3686,6 +3916,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       { $ref: 'LikertFieldInput' },
       { $ref: 'MatrixFieldInput' },
       { $ref: 'MatrixScaleFieldInput' },
+      { $ref: 'MultipleBlanksFieldInput' },
       { $ref: 'GoodsFieldInput' },
       { $ref: 'FormulaFieldInput' },
       { $ref: 'ReservationFieldInput' },
@@ -3716,15 +3947,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       targets: { type: 'array', items: { type: 'string' } },
       targets_display_mode: { type: 'string', enum: ['show', 'abort'] },
       operator: { type: 'string', enum: ['or', 'and'] },
-      conditions: {
-        type: 'array',
-        items: {
-          type: 'object',
-          required: ['trigger'],
-          properties: { trigger: { type: 'string' }, comparator: { type: 'string' }, value: {} },
-          additionalProperties: false
-        }
-      }
+      conditions: { type: 'array', items: { $ref: 'RuleConditionInput' } }
     },
     additionalProperties: false
   },
@@ -3773,6 +3996,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'LikertField',
           'MatrixField',
           'MatrixScaleField',
+          'MultipleBlanksField',
           'GoodsField',
           'FormulaField',
           'ReservationField',
@@ -3806,10 +4030,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'Timer',
           'ImageGroup',
           'WidgetVideo',
-          'MultipleBlanksField',
           'BooleanField',
           'RelationField',
-          'SequenceField'
+          'SequenceField',
+          'LookupField',
+          'RollupField'
         ]
       },
       confirm_data_loss: { type: 'boolean' },
@@ -3820,7 +4045,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       other_choice_required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      rating_max: { type: 'integer', minimum: 1 },
+      rating_max: { type: 'integer', minimum: 3, maximum: 10 },
       choices: { type: 'array', items: { $ref: 'FieldChoiceInput' } },
       dimensions: { type: 'array', items: { $ref: 'FieldDimensionInput' } },
       statements: { type: 'array', items: { $ref: 'StatementInput' } },
@@ -3840,16 +4065,34 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
+      with_exclusive_choice: { type: 'boolean' },
+      exclusive_choice_api_codes: { type: 'array', items: { type: 'string' } },
       predefined_value: {},
       placeholder: { type: ['string', 'null'] },
       scannable: { type: 'boolean' },
       access_control_list_limit: { type: 'boolean' },
       access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
       acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
+      format_validation_type: {
+        type: ['string', 'null'],
+        enum: [
+          'chinese_only',
+          'custom_regex_format',
+          'english_only',
+          'id_card_format',
+          'plate_number_format',
+          'qq_number_format',
+          null
+        ]
+      },
+      custom_validation_regex: { type: ['string', 'null'], maxLength: 1215 },
       sms_verification: { type: 'boolean' },
       range_min: { type: ['number', 'null'] },
       range_max: { type: ['number', 'null'] },
@@ -3867,12 +4110,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: {
         type: ['string', 'null'],
-        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text', 'text2', null]
+        enum: ['none', 'number-2', 'dollar1', 'cny1', 'formula-2', 'date-2', 'sum', 'text2', null]
       },
+      start_date: { type: ['string', 'null'] },
+      end_date: { type: ['string', 'null'] },
       changeable: { type: ['object', 'null'], additionalProperties: { type: 'boolean' } },
       enable_auto_position: { type: 'boolean' },
-      max_size: { type: ['number', 'null'], exclusiveMinimum: 0, maximum: 500 },
-      max_file_quantity: { type: ['integer', 'null'], minimum: 1 },
+      max_size: { type: ['number', 'null'], minimum: 0.01, maximum: 500, multipleOf: 0.01 },
+      max_file_quantity: { type: ['integer', 'null'], minimum: 1, maximum: 15 },
       media_type: {
         type: ['object', 'null'],
         additionalProperties: false,
@@ -3884,18 +4129,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         then: { required: ['value'], properties: { value: { minItems: 1 } } }
       },
       mobile_camera_only: { type: 'boolean' },
-      minimum_ratings_display_text: { type: ['string', 'null'] },
-      maximum_ratings_display_text: { type: ['string', 'null'] },
+      minimum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
+      maximum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
+      rating_type: { type: ['string', 'null'] },
       include_second: { type: 'boolean' },
       max_duration: { type: ['integer', 'null'], minimum: 1, maximum: 5 },
-      levels: { type: ['integer', 'null'], minimum: 2 },
-      choice_filterable: { type: 'boolean' },
+      levels: { type: ['integer', 'null'], minimum: 2, maximum: 4 },
       horizontal_on_mobile: { type: 'boolean' },
       likert_choice_style: { type: ['string', 'null'], enum: ['single', 'multiple', null] },
-      advanced_feature: { type: 'boolean' },
       unit: { type: ['string', 'null'], maxLength: 2 },
-      collapse_on_mobile: { type: 'boolean' },
-      columns_on_mobile: { type: ['integer', 'null'], minimum: 1 },
+      columns_on_mobile: { type: ['integer', 'null'], minimum: 1, maximum: 2 },
       formula: { type: ['string', 'null'] },
       formula_display: { type: ['string', 'null'] },
       result_display_type: { type: ['string', 'null'], enum: ['string', 'numeric', 'datetime', 'boolean', null] },
@@ -3903,15 +4146,53 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       allow_multiple_items: { type: 'boolean' },
       item_allow_multiple_reservations: { type: 'boolean' },
       allow_multiple_number: { type: 'boolean' },
-      use_daily_time_range: { type: 'boolean' },
       associated_form_token: { type: 'string' },
       associated_field_api_codes: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string' } },
       privacy_safe: { type: 'boolean' },
-      allow_reverse_association: { type: 'boolean' },
-      reverse_display_field_api_codes: { type: 'array', items: { type: 'string' } },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'equal',
+                'not_equal',
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer' },
+            scope_attr: { type: ['string', 'null'], enum: ['date_time', 'api_code', null] }
+          }
+        }
+      },
       related_form_token: { type: 'string' },
       paired: { type: 'boolean' },
       related_label: { type: ['string', 'null'] },
+      relation_field_api_code: { type: ['string', 'null'] },
+      source_field_api_code: { type: ['string', 'null'] },
+      aggregation: { type: ['string', 'null'], enum: ['sum', 'count', 'avg', 'max', 'min', null] },
       show_split_line: { type: 'boolean' },
       show_part_description: { type: 'boolean' },
       disable_previous_page: { type: 'boolean' },
@@ -3919,8 +4200,6 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       next_page_text: { type: ['string', 'null'] },
       count_down: { type: ['integer', 'null'], minimum: 0 },
       buttons_number: { type: ['integer', 'null'], minimum: 1 },
-      fixed_to_bottom: { type: 'boolean' },
-      widget_max_images_number: { type: ['integer', 'null'], minimum: 0 },
       phones: {
         type: 'array',
         items: {
@@ -3933,15 +4212,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       nav_address: { type: ['string', 'null'] },
       longitude: { type: ['number', 'null'] },
       latitude: { type: ['number', 'null'] },
-      value: { type: ['string', 'null'] },
-      localizable_on_mobile: { type: 'boolean' },
-      lines: { type: ['integer', 'null'], minimum: 1 },
       entries_init_number: { type: ['integer', 'null'], minimum: 0 },
       entries_number_visible: { type: 'boolean' },
-      marquee_data_type: { type: ['string', 'null'], enum: ['fake', 'real', null] },
-      start_date: { type: ['string', 'null'] },
-      end_date: { type: ['string', 'null'] },
-      rating_type: { type: ['string', 'null'] },
       highlight_color: { type: ['string', 'null'] }
     },
     allOf: [
@@ -3977,10 +4249,25 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       predefined_value: { type: ['string', 'null'] },
       placeholder: { type: ['string', 'null'] },
+      minimum_length: { type: ['integer', 'null'], minimum: 0, maximum: 300 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0, maximum: 300 },
       scannable: { type: 'boolean' },
       access_control_list_limit: { type: 'boolean' },
       access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
       acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
+      format_validation_type: {
+        type: ['string', 'null'],
+        enum: [
+          'chinese_only',
+          'custom_regex_format',
+          'english_only',
+          'id_card_format',
+          'plate_number_format',
+          'qq_number_format',
+          null
+        ]
+      },
+      custom_validation_regex: { type: ['string', 'null'], maxLength: 1215 },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -4017,11 +4304,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       range_min: { type: ['number', 'null'] },
       range_max: { type: ['number', 'null'] },
       precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
-      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: ['string', 'null'] },
-      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: { type: ['string', 'null'], enum: ['none', 'number-2', 'dollar1', 'cny1', null] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
@@ -4082,8 +4366,44 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       associated_form_token: { type: 'string' },
       associated_field_api_codes: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string' } },
       privacy_safe: { type: 'boolean' },
-      allow_reverse_association: { type: 'boolean' },
-      reverse_display_field_api_codes: { type: 'array', items: { type: 'string' } },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'equal',
+                'not_equal',
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer', minimum: -2147483648, maximum: 2147483647 },
+            scope_attr: { type: ['string', 'null'], enum: ['date_time', 'api_code', null] }
+          }
+        }
+      },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -4095,13 +4415,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         then: {
           properties: {
             fields: {
-              items: {
-                properties: {
-                  type: { not: { enum: ['PageBreak', 'MultipleBlanksField', 'WidgetContact', 'WidgetVideo'] } },
-                  grids_to_occupy: { type: 'null' },
-                  start_new_row: { const: false }
-                }
-              }
+              items: { properties: { type: { not: { enum: ['PageBreak', 'WidgetContact', 'WidgetVideo'] } } } }
             }
           }
         }
@@ -4117,6 +4431,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       {
         if: { properties: { scene: { enum: ['exam', 'evaluation'] } }, required: ['scene'] },
         else: { properties: { fields: { items: { $ref: 'FieldInput' } } } }
+      },
+      {
+        if: { properties: { scene: { enum: ['exam', 'quickpay'] } }, required: ['scene'] },
+        then: { properties: { fields: { items: { properties: { type: { not: { const: 'MultipleBlanksField' } } } } } } }
       }
     ]
   },
@@ -4201,6 +4519,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       retry: { type: 'boolean' }
     }
   },
+  FormLayoutUpdate: { type: 'string', enum: ['classic', 'card'] },
   FormManuallyCloseRuleInput: {
     type: 'object',
     required: ['open'],
@@ -4224,20 +4543,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_submit_again: { type: 'boolean' },
       hide_login_and_signup: { type: 'boolean' },
       show_close_count_down: { type: 'boolean' },
-      show_form_before_open: { type: 'boolean' },
+      show_form_when_unavailable: { type: 'boolean' },
       show_field_number: { type: 'boolean' },
+      show_progress: { type: 'boolean' },
       password_required: { type: 'boolean' },
       access_password: { type: 'string' },
       allowed_audience: {
-        type: 'string',
-        enum: [
-          'public',
-          'internal',
-          'private',
-          'weixin_qiye_followers_only',
-          'weixin_followers_only',
-          'submitter_only',
-          'gd_user_only'
+        anyOf: [
+          { type: 'string', enum: ['public', 'gd_user_only'] },
+          {
+            type: 'string',
+            enum: ['internal', 'private', 'weixin_qiye_followers_only', 'weixin_followers_only', 'submitter_only']
+          }
         ]
       },
       weixin_limited: { type: 'boolean' },
@@ -4255,7 +4572,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       by_entries_close_rule: {
         type: 'object',
-        properties: { limit: { type: 'integer', maximum: 2147483647 } },
+        properties: { limit: { type: 'integer', minimum: 0, maximum: 2147483647 } },
         additionalProperties: false
       },
       gen_code_enabled: { type: 'boolean' },
@@ -4263,7 +4580,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       gen_code_format: { type: 'string', enum: ['d8', 'd12', 'custom'] },
       gen_code_rules: { type: 'array', items: { $ref: 'GenCodeRuleInput' } },
       fill_frequency: { $ref: 'FormFillFrequencyInput' },
-      wording: { $ref: 'FormWordingInput' }
+      wording: { $ref: 'FormWordingInput' },
+      weixin_share: { $ref: 'WeixinShareInput' }
     },
     additionalProperties: false
   },
@@ -4286,7 +4604,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_submit_again: { type: 'boolean' },
       hide_login_and_signup: { type: 'boolean' },
       show_close_count_down: { type: 'boolean' },
-      show_form_before_open: { type: 'boolean' },
+      show_form_when_unavailable: { type: 'boolean' },
       manually_close_rule: {
         type: ['object', 'null'],
         properties: { closed: { type: 'boolean' } },
@@ -4299,7 +4617,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       },
       by_entries_close_rule: {
         type: ['object', 'null'],
-        properties: { enabled: { type: 'boolean' }, limit: { type: 'integer', maximum: 2147483647 } },
+        properties: { enabled: { type: 'boolean' }, limit: { type: 'integer', minimum: 0, maximum: 2147483647 } },
         additionalProperties: false
       },
       fill_frequency: {
@@ -4321,15 +4639,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       password_required: { type: 'boolean' },
       access_password: { type: 'string' },
       allowed_audience: {
-        type: 'string',
-        enum: [
-          'public',
-          'internal',
-          'private',
-          'weixin_qiye_followers_only',
-          'weixin_followers_only',
-          'submitter_only',
-          'gd_user_only'
+        anyOf: [
+          { type: 'string', enum: ['public', 'gd_user_only'] },
+          {
+            type: 'string',
+            enum: ['internal', 'private', 'weixin_qiye_followers_only', 'weixin_followers_only', 'submitter_only']
+          }
         ]
       },
       weixin_limited: { type: 'boolean' },
@@ -4364,6 +4679,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
   FormUpdateInput: {
     type: 'object',
     properties: {
+      layout: { $ref: 'FormLayoutUpdate' },
       name: { type: 'string' },
       description: { type: ['string', 'null'] },
       setting: { $ref: 'FormSettingWriteInput' },
@@ -4382,7 +4698,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         },
         additionalProperties: false
       },
-      field_rules: { $ref: 'FieldRuleOperations' }
+      field_rules: { $ref: 'FieldRuleOperations' },
+      redirect_rules: { $ref: 'RedirectRuleOperations' }
     },
     additionalProperties: false
   },
@@ -4493,7 +4810,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: {
         type: ['string', 'null'],
-        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text', 'text2', null]
+        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text2', null]
       },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
@@ -4524,14 +4841,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       result_display_type: { type: ['string', 'null'], enum: ['string', 'numeric', 'datetime', 'boolean', null] },
       result_display_as_date: { type: 'boolean' },
       precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
-      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: ['string', 'null'] },
-      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: {
         type: ['string', 'null'],
-        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text', 'text2', null]
+        enum: ['none', 'formula-2', 'date-2', 'number-2', 'dollar1', 'cny1', 'sum', 'text2', null]
       },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
@@ -4583,8 +4897,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       goods_items: { type: 'array', minItems: 1, items: { $ref: 'GoodsItemInput' } },
       unit: { type: ['string', 'null'], maxLength: 2 },
-      collapse_on_mobile: { type: 'boolean' },
-      columns_on_mobile: { type: ['integer', 'null'], minimum: 1 }
+      columns_on_mobile: { type: ['integer', 'null'], minimum: 1, maximum: 2 }
     }
   },
   GoodsItemInput: {
@@ -4767,11 +5080,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -4814,13 +5130,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
-      hide_choice_when_quota_empty: { type: 'boolean' }
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
+      with_exclusive_choice: { type: 'boolean' },
+      exclusive_choice_api_codes: { type: 'array', items: { type: 'string' } }
     },
     allOf: [
       {
@@ -4840,9 +5161,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       value: { type: 'string' },
       name: { type: 'string' },
       api_code: { type: 'string' },
-      quota: { type: 'integer', minimum: 1 },
+      quota: { type: 'integer', minimum: 0 },
       operand_value: { type: 'number' },
       selected: { type: 'boolean' },
+      description_text: { type: ['string', 'null'] },
+      description_url: { type: ['string', 'null'] },
       image_url: { type: 'string' },
       image_base64: { type: 'string' },
       attachment_id: { type: 'string' }
@@ -4860,13 +5183,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'partial_absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -4912,11 +5238,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
-      hide_choice_when_quota_empty: { type: 'boolean' }
+      hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' }
     },
     allOf: [
       {
@@ -4937,11 +5266,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ImageChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -4974,7 +5306,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       statements: { type: 'array', minItems: 1, items: { $ref: 'StatementInput' } },
       horizontal_on_mobile: { type: 'boolean' },
       likert_choice_style: { type: ['string', 'null'], enum: ['single', 'multiple', null] },
@@ -5029,6 +5361,56 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       start_new_row: { type: 'boolean' }
     }
   },
+  LookupFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'LookupField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      relation_field_api_code: { type: ['string', 'null'] },
+      source_field_api_code: { type: ['string', 'null'] },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer' }
+          }
+        }
+      }
+    }
+  },
   MatrixFieldInput: {
     type: 'object',
     additionalProperties: false,
@@ -5043,8 +5425,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       position: { type: 'integer', minimum: 0 },
       dimensions: { type: 'array', minItems: 1, items: { $ref: 'DimensionInput' } },
       statements: { type: 'array', minItems: 1, items: { $ref: 'StatementInput' } },
-      horizontal_on_mobile: { type: 'boolean' },
-      advanced_feature: { type: 'boolean' }
+      horizontal_on_mobile: { type: 'boolean' }
     }
   },
   MatrixScaleFieldInput: {
@@ -5059,7 +5440,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      rating_max: { type: 'integer', minimum: 1 },
+      rating_max: { type: 'integer', minimum: 3, maximum: 10 },
       statements: { type: 'array', minItems: 1, items: { $ref: 'StatementInput' } },
       horizontal_on_mobile: { type: 'boolean' }
     }
@@ -5223,13 +5604,16 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -5265,6 +5649,22 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
+  MultipleBlanksFieldInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label', 'placeholder'],
+    properties: {
+      type: { const: 'MultipleBlanksField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      required: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      placeholder: { type: 'string' },
+      dimensions: { type: 'array', minItems: 1, maxItems: 30, items: { $ref: 'BlankInput' } }
+    }
+  },
   NameFieldInput: {
     type: 'object',
     additionalProperties: false,
@@ -5278,9 +5678,15 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       unique: { type: 'boolean' },
+      placeholder: { type: ['string', 'null'] },
       access_control_list_limit: { type: 'boolean' },
       access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
       acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
+      format_validation_type: {
+        type: ['string', 'null'],
+        enum: ['chinese_only', 'custom_regex_format', 'english_only', null]
+      },
+      custom_validation_regex: { type: ['string', 'null'], maxLength: 1215 },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -5359,8 +5765,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      minimum_ratings_display_text: { type: ['string', 'null'] },
-      maximum_ratings_display_text: { type: ['string', 'null'] }
+      minimum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
+      maximum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 }
     }
   },
   NpsInput: {
@@ -5375,8 +5781,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      minimum_ratings_display_text: { type: ['string', 'null'] },
-      maximum_ratings_display_text: { type: ['string', 'null'] },
+      minimum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
+      maximum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -5443,11 +5849,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       range_min: { type: ['number', 'null'] },
       range_max: { type: ['number', 'null'] },
       precision: { type: ['integer', 'null'], minimum: 0, maximum: 14 },
-      display_precision: { type: ['integer', 'null'], minimum: 0 },
       display_as_percentage: { type: 'boolean' },
       thousands_separator: { type: 'boolean' },
-      currency_symbol: { type: ['string', 'null'] },
-      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] },
       icon_type: { type: ['string', 'null'], enum: ['none', 'number-2', 'dollar1', 'cny1', null] },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
@@ -5460,6 +5863,20 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         }
       }
     ]
+  },
+  OpenResultInput: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', maxLength: 20 },
+      enabled: { type: 'boolean' },
+      allowed_audience: { type: 'string', enum: ['public', 'private'] },
+      password_required: { type: 'boolean' },
+      access_password: { type: 'string' },
+      readable_field_api_codes: { type: 'array', items: { type: 'string' } },
+      report_field_api_codes: { type: 'array', items: { type: 'string' } },
+      privacy_protected_field_api_codes: { type: 'array', items: { type: 'string' } }
+    },
+    additionalProperties: false
   },
   OpensearchDisplayFieldRule: {
     type: 'object',
@@ -5609,11 +6026,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       notes: { type: ['string', 'null'] },
       private: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -5637,11 +6057,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     },
@@ -5664,7 +6087,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      rating_max: { type: 'integer', minimum: 1 }
+      rating_max: { type: 'integer', minimum: 3, maximum: 10 },
+      rating_type: { type: ['string', 'null'], enum: ['star', 'happy', 'heart', 'thumb', null] },
+      minimum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
+      maximum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 }
     }
   },
   RatingInput: {
@@ -5679,7 +6105,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      rating_max: { type: 'integer', minimum: 1 },
+      rating_max: { type: 'integer', minimum: 3, maximum: 10 },
+      rating_type: { type: ['string', 'null'], enum: ['star', 'happy', 'heart', 'thumb', null] },
+      minimum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
+      maximum_ratings_display_text: { type: ['string', 'null'], maxLength: 20 },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
       answer_setting_mode: { type: 'string', enum: ['absolute', 'relative'] },
       answer_explanation: { type: 'string' }
@@ -5695,6 +6124,25 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         then: { properties: { answers: { maxItems: 1 } } }
       }
     ]
+  },
+  RedirectRuleOperations: {
+    type: 'object',
+    properties: {
+      add: { type: 'array', items: { $ref: 'RedirectRuleWriteInput' } },
+      remove: { type: 'array', items: { type: 'integer' } },
+      update: { type: 'array', items: { $ref: 'RedirectRuleWriteInput' } }
+    },
+    additionalProperties: false
+  },
+  RedirectRuleWriteInput: {
+    type: 'object',
+    properties: {
+      index: { type: 'integer' },
+      redirect_url: { type: 'string' },
+      operator: { type: 'string', enum: ['or', 'and'] },
+      conditions: { type: 'array', items: { $ref: 'RuleConditionInput' } }
+    },
+    additionalProperties: false
   },
   RelationFieldColumnInput: {
     type: 'object',
@@ -5825,6 +6273,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             start_time: {
               type: 'object',
               additionalProperties: false,
+              required: ['hour', 'minute'],
               properties: {
                 hour: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
                 minute: { type: ['integer', 'null'], minimum: 0, maximum: 59 }
@@ -5833,6 +6282,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             end_time: {
               type: 'object',
               additionalProperties: false,
+              required: ['hour', 'minute'],
               properties: {
                 hour: { type: ['integer', 'null'], minimum: 0, maximum: 23 },
                 minute: { type: ['integer', 'null'], minimum: 0, maximum: 59 }
@@ -5883,8 +6333,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       reservation_items: { type: 'array', minItems: 1, items: { $ref: 'ReservationItemInput' } },
       allow_multiple_items: { type: 'boolean' },
       item_allow_multiple_reservations: { type: 'boolean' },
-      allow_multiple_number: { type: 'boolean' },
-      use_daily_time_range: { type: 'boolean' }
+      allow_multiple_number: { type: 'boolean' }
     }
   },
   ReservationItemImageInput: {
@@ -5940,6 +6389,70 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       mentioned_mobile_list: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'string' } },
       idempotency_key: { type: 'string', maxLength: 255 }
     }
+  },
+  RollupFieldColumnInput: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'label'],
+    properties: {
+      type: { const: 'RollupField' },
+      label: { type: ['string', 'null'] },
+      cid: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      private: { type: 'boolean' },
+      position: { type: 'integer', minimum: 0 },
+      relation_field_api_code: { type: ['string', 'null'] },
+      source_field_api_code: { type: ['string', 'null'] },
+      aggregation: { type: ['string', 'null'], enum: ['sum', 'count', 'avg', 'max', 'min', null] },
+      scope_conditions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['trigger', 'operator'],
+          properties: {
+            trigger: { type: 'string' },
+            operator: {
+              type: 'string',
+              enum: [
+                'eq',
+                'ne',
+                'any_in',
+                'none_in',
+                'between',
+                'not_between',
+                'gte',
+                'gt',
+                'lte',
+                'lt',
+                'null',
+                'not_null',
+                'like',
+                'and',
+                'or',
+                'not_like',
+                'match'
+              ]
+            },
+            value: {},
+            group_index: { type: 'integer' }
+          }
+        }
+      },
+      display_precision: { type: ['integer', 'null'], minimum: 0 },
+      display_as_percentage: { type: 'boolean' },
+      thousands_separator: { type: 'boolean' },
+      currency_symbol: { type: ['string', 'null'] },
+      currency_symbol_position: { type: ['string', 'null'], enum: ['prefix', 'suffix', null] }
+    },
+    allOf: [
+      {
+        not: {
+          properties: { display_as_percentage: { const: true }, thousands_separator: { const: true } },
+          required: ['display_as_percentage', 'thousands_separator']
+        }
+      }
+    ]
   },
   RoutineDataConditionInput: {
     type: 'object',
@@ -6120,6 +6633,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       title: { type: 'string', maxLength: 200 },
       content: { type: 'string' }
     }
+  },
+  RuleConditionInput: {
+    type: 'object',
+    required: ['trigger', 'value'],
+    properties: {
+      trigger: { type: 'string' },
+      comparator: { type: 'string' },
+      value: { type: ['string', 'number', 'array'], items: { type: ['string', 'number'] } },
+      parent_choices: { type: 'array', items: { type: 'string' } }
+    },
+    additionalProperties: false
   },
   SMSMessageChannelInput: {
     type: 'object',
@@ -6371,6 +6895,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       predefined_value: { type: ['string', 'null'] },
       placeholder: { type: ['string', 'null'] },
+      minimum_length: { type: ['integer', 'null'], minimum: 0, maximum: 10000 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0, maximum: 10000 },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -6402,11 +6928,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -6429,6 +6958,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       }
     ]
   },
+  SortChoiceInput: {
+    type: 'object',
+    additionalProperties: false,
+    anyOf: [{ required: ['value'] }, { required: ['name'] }],
+    properties: { value: { type: 'string' }, name: { type: 'string' }, api_code: { type: 'string' } }
+  },
   SortFieldInput: {
     type: 'object',
     additionalProperties: false,
@@ -6441,8 +6976,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
-      random_choices: { type: 'boolean' }
+      choices: { type: 'array', minItems: 1, items: { $ref: 'SortChoiceInput' }, maxItems: 1000 },
+      random_choices: { type: 'boolean' },
+      minimum_length: { type: ['integer', 'null'], minimum: 0 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0 }
     }
   },
   SortRule: {
@@ -6483,7 +7020,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           'AttachmentField',
           'FormulaField',
           'RelationField',
-          'SequenceField'
+          'SequenceField',
+          'LookupField',
+          'RollupField'
         ]
       },
       label: { type: ['string', 'null'] }
@@ -6503,7 +7042,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         AttachmentField: 'AttachmentFieldColumnInput',
         FormulaField: 'FormulaFieldColumnInput',
         RelationField: 'RelationFieldColumnInput',
-        SequenceField: 'SequenceFieldColumnInput'
+        SequenceField: 'SequenceFieldColumnInput',
+        LookupField: 'LookupFieldColumnInput',
+        RollupField: 'RollupFieldColumnInput'
       }
     },
     oneOf: [
@@ -6519,7 +7060,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       { $ref: 'AttachmentFieldColumnInput' },
       { $ref: 'FormulaFieldColumnInput' },
       { $ref: 'RelationFieldColumnInput' },
-      { $ref: 'SequenceFieldColumnInput' }
+      { $ref: 'SequenceFieldColumnInput' },
+      { $ref: 'LookupFieldColumnInput' },
+      { $ref: 'RollupFieldColumnInput' }
     ]
   },
   TableCreateInput: {
@@ -6635,6 +7178,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       predefined_value: { type: ['string', 'null'] },
       placeholder: { type: ['string', 'null'] },
+      minimum_length: { type: ['integer', 'null'], minimum: 0, maximum: 10000 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0, maximum: 10000 },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
@@ -6654,24 +7199,49 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       unique: { type: 'boolean' },
       predefined_value: { type: ['string', 'null'] },
       placeholder: { type: ['string', 'null'] },
+      minimum_length: { type: ['integer', 'null'], minimum: 0, maximum: 300 },
+      maximum_length: { type: ['integer', 'null'], minimum: 0, maximum: 300 },
       scannable: { type: 'boolean' },
       access_control_list_limit: { type: 'boolean' },
       access_control_type: { type: ['string', 'null'], enum: ['white', 'black', null] },
       acl_values: { type: 'array', maxItems: 5000, items: { type: 'string' } },
+      format_validation_type: {
+        type: ['string', 'null'],
+        enum: [
+          'chinese_only',
+          'custom_regex_format',
+          'english_only',
+          'id_card_format',
+          'plate_number_format',
+          'qq_number_format',
+          null
+        ]
+      },
+      custom_validation_regex: { type: ['string', 'null'], maxLength: 1215 },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' }
     }
   },
+  ThemeColor: {
+    type: 'string',
+    pattern:
+      '^(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*(,\\s*\\d{1,3}\\s*){2}(,\\s*\\d*\\.?\\d+\\s*)?\\))$',
+    not: { pattern: '\n' }
+  },
+  ThemeFontFamily: {
+    type: 'string',
+    enum: ['inherit', 'tahoma', 'helvetica', 'verdana', 'georgia', 'heiti', 'kaiti', 'songti']
+  },
+  ThemeFontSize: { type: 'string', enum: ['14px', '15px', '16px', '17px', '18px', '19px', '20px', '22px', '24px'] },
   ThemeInput: {
     type: 'object',
     properties: {
-      primary_color: { type: 'string' },
-      secondary_color: { type: 'string' },
+      primary_color: { $ref: 'ThemeColor' },
       dominant_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
       wallpaper: {
         type: 'object',
         properties: {
-          background_color: { type: 'string' },
+          background_color: { $ref: 'ThemeColor' },
           background_image_url: { type: 'string' },
           background_image_attachment_id: { type: ['string', 'null'] }
         },
@@ -6682,7 +7252,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         properties: {
           type: { type: 'string', enum: ['none', 'text', 'image', 'carousel'] },
           text: { type: 'string' },
-          background_color: { type: 'string' },
+          background_color: { $ref: 'ThemeColor' },
           text_style: { type: 'object', additionalProperties: { type: 'string' } },
           header_image_url: { type: 'string' },
           header_image_base64: { type: 'string' },
@@ -6703,27 +7273,51 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       typography: {
         type: 'object',
         properties: {
-          form_header: { type: 'object', additionalProperties: { type: 'string' } },
-          field_label: { type: 'object', additionalProperties: { type: 'string' } },
-          choice_style: { type: 'object', additionalProperties: { type: 'string' } }
+          form_header: {
+            type: 'object',
+            properties: {
+              font_size: {
+                type: 'string',
+                enum: ['14px', '15px', '16px', '17px', '18px', '19px', '20px', '22px', '24px', '28px', '36px', '40px']
+              },
+              font_weight: { type: 'string', enum: ['normal', 'bold'] },
+              color: { $ref: 'ThemeColor' },
+              font_family: { $ref: 'ThemeFontFamily' },
+              text_align: { type: 'string', enum: ['left', 'center', 'right'] }
+            },
+            additionalProperties: false
+          },
+          field_label: { $ref: 'ThemeTextStyleInput' },
+          choice_style: { $ref: 'ThemeTextStyleInput' }
         },
         additionalProperties: false
       },
       form_container: {
         type: 'object',
         properties: {
-          background_color: { type: 'string' },
-          border_color: { type: 'string' },
-          border_width: { type: 'string' }
+          background_color: { $ref: 'ThemeColor' },
+          border_color: { $ref: 'ThemeColor' },
+          border_width: { type: 'string', enum: ['0', '0px', '1px', '2px', '3px', '4px', '5px'] },
+          shadow: { type: 'boolean' }
         },
         additionalProperties: false
       },
       submit_button: {
         type: 'object',
-        properties: { background_color: { type: 'string' }, color: { type: 'string' }, font_size: { type: 'string' } },
+        properties: { color: { $ref: 'ThemeColor' }, font_size: { $ref: 'ThemeFontSize' } },
         additionalProperties: false
       },
       generate_header_image: { type: 'object', properties: { prompt: { type: 'string' } }, additionalProperties: false }
+    },
+    additionalProperties: false
+  },
+  ThemeTextStyleInput: {
+    type: 'object',
+    properties: {
+      font_size: { $ref: 'ThemeFontSize' },
+      font_weight: { type: 'string', enum: ['normal', 'bold'] },
+      color: { $ref: 'ThemeColor' },
+      font_family: { $ref: 'ThemeFontFamily' }
     },
     additionalProperties: false
   },
@@ -6770,11 +7364,14 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       other_choice_required: { type: 'boolean' },
-      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' } },
+      choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
+      quota_blank_warning: { type: ['string', 'null'] },
+      quota_cycle_rule: { type: ['string', 'null'], enum: ['fixed', 'per_day', 'per_week', null] },
+      hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
       answers: { type: 'array', minItems: 1, items: { $ref: 'AnswerInput' } },
@@ -6796,6 +7393,18 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
         then: { properties: { answers: { maxItems: 1 } } }
       }
     ]
+  },
+  UserFormSettingInput: {
+    type: 'object',
+    minProperties: 1,
+    properties: {
+      weixin_notification: { type: 'boolean' },
+      weixin_payment_notification: { type: 'boolean' },
+      email_notification: { type: 'boolean' },
+      favored: { type: 'boolean' },
+      view_token: { type: 'string' }
+    },
+    additionalProperties: false
   },
   WebhookInput: { type: 'object', properties: { entry_post_url: { type: 'string' } }, additionalProperties: false },
   WebhookMessageChannelInput: {
@@ -6846,6 +7455,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       subject: { type: 'string', maxLength: 15 },
       content: { type: 'string', maxLength: 200 },
       weixin_onetime_url: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  WeixinShareInput: {
+    type: 'object',
+    properties: {
+      title: { type: ['string', 'null'], maxLength: 200 },
+      description: { type: ['string', 'null'], maxLength: 500 },
+      predefined_icon: { type: 'integer', minimum: 1, maximum: 35 },
+      icon_image_url: { type: 'string' },
+      icon_attachment_id: { type: 'string' }
     },
     additionalProperties: false
   },
@@ -6980,13 +7600,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       type: { const: 'WidgetButton' },
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
-      notes: { type: ['string', 'null'] },
-      private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       buttons: { type: 'array', minItems: 1, items: { $ref: 'WidgetButtonItemInput' } },
-      buttons_number: { type: ['integer', 'null'], minimum: 1 },
-      fixed_to_bottom: { type: 'boolean' }
+      buttons_number: { type: ['integer', 'null'], minimum: 1 }
     }
   },
   WidgetButtonItemInput: {
@@ -7010,11 +7626,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
-      private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      widget_images: { type: 'array', items: { $ref: 'WidgetImageInput' } },
-      widget_max_images_number: { type: ['integer', 'null'], minimum: 0 },
+      widget_images: { type: 'array', maxItems: 1, items: { $ref: 'WidgetImageInput' } },
       phones: {
         type: 'array',
         items: {
@@ -7045,14 +7658,10 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
-      private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
       nav_address: { type: ['string', 'null'] },
       longitude: { type: ['number', 'null'] },
-      latitude: { type: ['number', 'null'] },
-      value: { type: ['string', 'null'] },
-      localizable_on_mobile: { type: 'boolean' }
+      latitude: { type: ['number', 'null'] }
     }
   },
   WidgetMarqueeInput: {
@@ -7064,13 +7673,9 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
-      private: { type: 'boolean' },
-      required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
-      lines: { type: ['integer', 'null'], minimum: 1 },
       entries_init_number: { type: ['integer', 'null'], minimum: 0 },
-      entries_number_visible: { type: 'boolean' },
-      marquee_data_type: { type: ['string', 'null'], enum: ['fake', 'real', null] }
+      entries_number_visible: { type: 'boolean' }
     }
   },
   WxworkMessageChannelInput: {
