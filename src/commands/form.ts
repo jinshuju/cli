@@ -422,10 +422,7 @@ const SETTING_PAYLOAD: readonly string[] = [
 
 function themeBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
-  return overriding(rest, {
-    primary_color: input.options.primary_color,
-    secondary_color: input.options.secondary_color
-  });
+  return overriding(rest, { primary_color: input.options.primary_color });
 }
 
 /** The scenes a form can be created for, as the API names them. */
@@ -711,13 +708,12 @@ export const FORM: readonly Command[] = [
     path: ['form', 'theme', 'set'],
     summary: "Set a form's theme",
     description:
-      'The colours have flags of their own, and --wallpaper and --header each upload an image and ' +
+      'The primary colour has a flag of its own, and --wallpaper and --header each upload an image and ' +
       'bind it to the theme in one command. Everything else the theme takes — typography, ' +
       'form_container, submit_button — goes through --json.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [
       { name: '--primary-color', type: 'string', placeholder: '<hex>', description: 'Primary colour, e.g. #1F6FEB' },
-      { name: '--secondary-color', type: 'string', placeholder: '<hex>', description: 'Secondary colour' },
       {
         name: '--wallpaper',
         type: 'string',
