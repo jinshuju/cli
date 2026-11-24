@@ -18,7 +18,7 @@ const FIELD_PAYLOAD: readonly string[] = [
   '  choices are changed with `field update-choices`; `field update` takes them as read,',
   '    which changes nothing, and replaces them only on a CascadeDropDown or with a `type`',
   '    that turns a text field into a choice field',
-  "  a key no write can change, like minimum_length or a choice's hidden, goes back only as",
+  "  a key no write can change, like api_code_alias or a choice's hidden, goes back only as",
   '    it was read; the API answers which key when one differs',
   '',
   'Field types: jinshuju field types'
