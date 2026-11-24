@@ -496,8 +496,9 @@ export const FORM: readonly Command[] = [
     path: ['form', 'edit'],
     summary: 'Edit a form',
     description:
-      'The payload carries the operations to apply: name, description, setting, and fields as ' +
-      '{add, update, update_choices, remove}. Only what is named changes. `form create --help` ' +
+      'The payload carries the operations to apply: name, description, setting, layout, and fields as ' +
+      '{add, update, update_choices, remove}. Only what is named changes. Switching layout keeps every ' +
+      'field; the card layout hides the ones it cannot show and the classic layout shows them again. `form create --help` ' +
       'shows what setting takes, the close rules among it.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
@@ -534,6 +535,7 @@ export const FORM: readonly Command[] = [
       'jinshuju form edit Kp7mQ2 --json \'{"name":"2026 活动报名"}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"setting":{"daily_repeat_close_rule":{"time_periods":[{"start_time":{"hour":11,"minute":0},"end_time":{"hour":12,"minute":40}}]}}}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"setting":{"wording":{"submit":"立即报名"}}}\'',
+      'jinshuju form edit Kp7mQ2 --json \'{"layout":"card"}\'',
       'jinshuju form edit Kp7mQ2 --json \'{"exam_setting":{"limited_time":30}}\''
     ]
   },
