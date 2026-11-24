@@ -14,6 +14,15 @@ const DISPLAY_FIELD_OPTION = {
   description: 'Field shown to staff when they verify a check-in, usually the name'
 } as const;
 
+const SUCCESS_MESSAGE_OPTION = {
+  name: '--success-message',
+  type: 'string',
+  placeholder: '<html>',
+  description:
+    'What registrants see once checked in, HTML allowed: $(field_1) puts in their answer to that field ' +
+    'and $(checkin_time) the time; any other $(...) is refused. Takes the admin role on the form'
+} as const;
+
 const TIMES_EXAMPLE =
   'jinshuju checkin edit 42 --json \'{"date_settings":[{"start_date":"2026-10-20","end_date":"2026-10-21",' +
   '"periods":["Tuesday"],"durations":[{"start":"09:00","end":"12:00"}]}]}\'';
@@ -65,6 +74,7 @@ export const CHECKIN: readonly Command[] = [
         type: 'boolean',
         description: 'Also make the check-in field required and unique, so every registrant can be found'
       },
+      SUCCESS_MESSAGE_OPTION,
       JSON_OPTION
     ],
     request: (input) =>
@@ -75,7 +85,8 @@ export const CHECKIN: readonly Command[] = [
           checkin_field_api_code: input.options.check_in_field,
           display_field_api_code: input.options.display_field,
           enable_checkin_code: input.options.no_check_in_code ? false : undefined,
-          checkin_field_required_unique: input.options.unique_check_in_field || undefined
+          checkin_field_required_unique: input.options.unique_check_in_field || undefined,
+          success_message: input.options.success_message
         })
       }),
     examples: [
@@ -94,6 +105,7 @@ export const CHECKIN: readonly Command[] = [
       DISPLAY_FIELD_OPTION,
       { name: '--enable', type: 'boolean', description: 'Resume check-in' },
       { name: '--disable', type: 'boolean', description: 'Pause check-in; records are kept' },
+      SUCCESS_MESSAGE_OPTION,
       JSON_OPTION
     ],
     request: (input) => {
@@ -105,12 +117,14 @@ export const CHECKIN: readonly Command[] = [
         body: overriding(rest(input), {
           name: input.options.name,
           display_field_api_code: input.options.display_field,
-          enabled: input.options.enable ? true : input.options.disable ? false : undefined
+          enabled: input.options.enable ? true : input.options.disable ? false : undefined,
+          success_message: input.options.success_message
         })
       });
     },
     examples: [
       'jinshuju checkin edit 42 --disable',
+      "jinshuju checkin edit 42 --success-message '签到成功，$(field_1)，请到 $(field_3) 入座'",
       TIMES_EXAMPLE,
       'jinshuju checkin edit 42 --json \'{"geo_location":null}\''
     ]

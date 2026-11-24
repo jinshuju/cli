@@ -13,6 +13,7 @@ import {
   LISTING,
   PREVIEW_OPTION,
   YES_OPTION,
+  confirmed,
   filters,
   given,
   keywords,
@@ -93,6 +94,7 @@ const FORM_INCLUDES: Record<string, string> = {
   setting: '',
   theme: 'include_theme',
   rules: 'include_field_rules',
+  redirect_rules: 'include_redirect_rules',
   extended: 'include_extended_attributes',
   transactions: 'include_transactions',
   analytics: 'include_analytics',
@@ -302,6 +304,121 @@ const DELIVERABLE_FILE_OPTION: OptionSpec = {
   description: 'Upload a file for the deliverable of this name in the payload, repeatable'
 };
 
+/**
+ * What `form redirect-rule edit --json` takes, shown rather than described: the
+ * three operations side by side, as `form rule edit` takes them for display rules.
+ */
+const REDIRECT_RULE_PAYLOAD: readonly string[] = [
+  '{',
+  '  "add": [',
+  '    { "redirect_url": "https://example.com/paper-b", "operator": "or",',
+  '      "conditions": [ { "trigger": "field_3", "value": "B 卷" } ] }',
+  '  ],',
+  '  "update": [ { "index": 0, "redirect_url": "https://example.com/next" } ],',
+  '  "remove": [ 1 ]',
+  '}',
+  '',
+  "A submission that meets a rule's conditions goes to its redirect_url instead",
+  'of the success page; "operator" combines the conditions with or (the default)',
+  'or and. A condition names its trigger field by api_code and the choice it',
+  'compares with by value; "comparator" defaults to the first the field takes,',
+  'and one it does not take is answered with those it does. update and remove',
+  'name a rule by the index `form redirect-rule get` shows, and one index cannot',
+  'be both. Adding or changing a rule needs a plan with field_redirect_rules;',
+  'removing one does not. A table has no redirect rules.',
+  '',
+  'Trigger fields and their choices: jinshuju field list --form <token>'
+];
+
+/**
+ * The flags of a result share, beside `--json` for the rest. The three lists are
+ * what a share is for, and a list left out on create shows nothing of its kind,
+ * so they are the ones worth a flag each.
+ */
+const RESULT_SHARE_OPTIONS: readonly OptionSpec[] = [
+  { name: '--title', type: 'string', placeholder: '<title>', description: "Page title; the form's name when empty" },
+  {
+    name: '--fields',
+    type: 'list',
+    placeholder: '<api-code,...>',
+    description: 'Fields whose values visitors see entry by entry'
+  },
+  {
+    name: '--stats',
+    type: 'list',
+    placeholder: '<api-code,...>',
+    description: "Fields whose statistics visitors see; only fields the form's report has statistics for"
+  },
+  {
+    name: '--masked',
+    type: 'list',
+    placeholder: '<api-code,...>',
+    description: "Fields shown partly hidden, such as names and mobile numbers; --masked '' hides none"
+  },
+  { name: '--password', type: 'string', placeholder: '<password>', description: 'Ask visitors for this password' },
+  JSON_OPTION
+];
+
+const RESULT_SHARE_ARG = {
+  name: 'share',
+  required: true,
+  description: 'Result share token, from `form result-share list`'
+} as const;
+
+/** A result share's body: `--json`, with the flags that were given laid over it. */
+function resultShareBody(input: CommandInput): Record<string, unknown> {
+  const json = input.options.json;
+  if (json !== undefined && !isRecord(json)) throw new UsageError('--json must be a JSON object');
+  if (input.options.enable && input.options.disable) {
+    throw new UsageError('--enable and --disable are opposites, pass one');
+  }
+  const password = input.options.password as string | undefined;
+  if (password !== undefined && input.options.no_password) {
+    throw new UsageError('--password and --no-password are opposites, pass one');
+  }
+  return overriding(json ?? {}, {
+    title: input.options.title,
+    enabled: input.options.enable ? true : input.options.disable ? false : undefined,
+    readable_field_api_codes: input.options.fields,
+    report_field_api_codes: input.options.stats,
+    privacy_protected_field_api_codes: input.options.masked,
+    // The API takes a password only beside the switch that asks for it, and
+    // turning the switch off is what clears one.
+    password_required: password !== undefined ? true : input.options.no_password ? false : undefined,
+    access_password: password
+  });
+}
+
+/**
+ * What `form setting edit --json` takes, shown rather than described: the
+ * WeChat share card, which is the reason the command exists, and one setting
+ * `form edit` writes as well, to say the two overlap.
+ */
+const SETTING_PAYLOAD: readonly string[] = [
+  '{',
+  '  "weixin_share": {',
+  '    "title": "2026 年会报名",',
+  '    "description": "点开填写，三分钟搞定",',
+  '    "predefined_icon": 3',
+  '  },',
+  '  "show_progress": true',
+  '}',
+  '',
+  'Only the keys present are written. weixin_share is the card a link to the form',
+  'shows when shared in WeChat: a null or empty title or description shows the',
+  "form's own, and the icon is one of predefined_icon (1 to 35, the settings",
+  "page's), icon_image_url or icon_attachment_id, at most one of them; a custom",
+  'icon needs customized_weixin_thumbnail in the plan. --share-icon uploads an',
+  'image and sets icon_attachment_id.',
+  '',
+  'Most keys here go in the setting of a `form edit` payload too. weixin_share,',
+  'enable_qrcode, show_progress and the data push (entry_post_url, post_new_entry,',
+  'post_updated_entry) go only here; the payment accounts, payment expiry and',
+  'submission regions only there.',
+  '',
+  'The fields success_redirect_fields names by api_code: jinshuju field list --form <token>'
+];
+
 function themeBody(input: CommandInput): Record<string, unknown> {
   const rest = (input.options.json as Record<string, unknown> | undefined) ?? {};
   return overriding(rest, {
@@ -318,7 +435,7 @@ const FORM_SCENES = bodyChoices('createForm', 'scene');
  * that belongs to it. Those settings live behind their own endpoint, so a
  * payload carrying one is two requests, not one — and a generic edit would
  * drop the block on the floor, since the form update only reads name,
- * description, setting, fields and field_rules.
+ * description, setting, fields, field_rules, redirect_rules and layout.
  */
 const FORM_TYPES: Record<string, { scene?: string; settingKey?: string; operation?: OperationId }> = {
   normal: {},
@@ -499,7 +616,9 @@ export const FORM: readonly Command[] = [
       'The payload carries the operations to apply: name, description, setting, layout, and fields as ' +
       '{add, update, update_choices, remove}. Only what is named changes. Switching layout keeps every ' +
       'field; the card layout hides the ones it cannot show and the classic layout shows them again. `form create --help` ' +
-      'shows what setting takes, the close rules among it.',
+      'shows what setting takes, the close rules among it; `form setting edit` writes the few settings this ' +
+      'payload cannot, the WeChat share card among them. Display and redirect rules have commands of their ' +
+      'own: `form rule edit` and `form redirect-rule edit`.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     options: [JSON_OPTION],
     run: async (input, client) => {
@@ -630,6 +749,69 @@ export const FORM: readonly Command[] = [
     ]
   },
   {
+    path: ['form', 'setting', 'get'],
+    summary: "Show a form's settings, the WeChat share card among them",
+    description:
+      'What happens after submitting, when the form takes entries, its access policy and WeChat limits, the ' +
+      'card a link to it shows when shared in WeChat (weixin_share) and its data push. `form get` carries ' +
+      'most of them under setting as well.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    request: (input) => call('getFormSetting', { path: { form_token: input.args.form } }),
+    examples: ['jinshuju form setting get Kp7mQ2']
+  },
+  {
+    path: ['form', 'setting', 'edit'],
+    summary: "Edit a form's settings, the WeChat share card among them",
+    description:
+      'Writes the settings through their own endpoint, which takes the few that a `form edit` payload ' +
+      'cannot: the WeChat share card above all. --share-icon uploads an image and makes it the icon of ' +
+      'that card in one command.',
+    payload: SETTING_PAYLOAD,
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [
+      JSON_OPTION,
+      {
+        name: '--share-icon',
+        type: 'string',
+        placeholder: '<file>',
+        description: 'Image file to use as the icon of the card a link to the form shows in WeChat'
+      }
+    ],
+    run: async (input, client) => {
+      const json = input.options.json;
+      const icon = input.options.share_icon as string | undefined;
+      if (json === undefined && icon === undefined) throw new UsageError('pass --json, --share-icon or both');
+      if (json !== undefined && !isRecord(json)) throw new UsageError('--json must be a JSON object');
+      const path = { form_token: input.args.form as string };
+      const body: Record<string, unknown> = { ...json };
+      if (icon === undefined) return client.request(call('updateFormSetting', { path, body }));
+
+      const share = isRecord(body.weixin_share) ? body.weixin_share : {};
+      // The other two icon keys would be refused beside the uploaded one, so
+      // they are said to clash before an image goes up for nothing.
+      for (const key of ['predefined_icon', 'icon_image_url', 'icon_attachment_id']) {
+        if (share[key] !== undefined) throw new UsageError(`--share-icon sets the icon, so weixin_share.${key} cannot`);
+      }
+      client.check?.(call('updateFormSetting', { path, body: { ...body, weixin_share: { ...share } } }));
+      const attachment = await uploadFormImage(client, icon, 'weixin_share_icon');
+      const saved = { ...body, weixin_share: { ...share, icon_attachment_id: attachment } };
+      try {
+        return await client.request(call('updateFormSetting', { path, body: saved }));
+      } catch (error) {
+        throw new Error(
+          `uploaded ${icon} as icon_attachment_id ${attachment}, but saving the settings failed: ` +
+            `${(error as Error).message}. Put the id in weixin_share to run again without uploading it again.`,
+          { cause: error }
+        );
+      }
+    },
+    examples: [
+      'jinshuju form setting edit Kp7mQ2 --json \'{"weixin_share":{"title":"2026 年会报名","description":"点开填写，三分钟搞定"}}\'',
+      'jinshuju form setting edit Kp7mQ2 --json \'{"weixin_share":{"predefined_icon":3}}\'',
+      'jinshuju form setting edit Kp7mQ2 --share-icon ./logo.png'
+    ]
+  },
+  {
     path: ['form', 'image', 'upload'],
     summary: 'Upload an image for a form or field description',
     description:
@@ -654,6 +836,100 @@ export const FORM: readonly Command[] = [
     options: [JSON_OPTION],
     request: (input) =>
       call('updateForm', { path: { form_token: input.args.form }, body: { field_rules: payload(input) } })
+  },
+  {
+    path: ['form', 'redirect-rule', 'get'],
+    summary: 'Show where a form sends a submission that meets conditions, instead of its success page',
+    description:
+      'Each rule with the index `form redirect-rule edit` names it by. They take effect on a plan with ' +
+      'field_redirect_rules; `form get --include redirect_rules` reads them along with the form.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    request: (input) => call('listRedirectRules', { path: { form_token: input.args.form } }),
+    examples: ['jinshuju form redirect-rule get Kp7mQ2']
+  },
+  {
+    path: ['form', 'redirect-rule', 'edit'],
+    summary: 'Edit where a form sends a submission that meets conditions, instead of its success page',
+    description:
+      'The payload is {add, update, remove}; a rule is targeted by the index `form redirect-rule get` shows. ' +
+      'One redirect for every submission is the setting instead: entry_submit_mode and success_redirect_url ' +
+      'in a `form edit` payload.',
+    payload: REDIRECT_RULE_PAYLOAD,
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [JSON_OPTION],
+    request: (input) =>
+      call('updateForm', { path: { form_token: input.args.form }, body: { redirect_rules: payload(input) } }),
+    examples: [
+      'jinshuju form redirect-rule edit Kp7mQ2 --json \'{"add":[{"redirect_url":"https://example.com/paper-b","conditions":[{"trigger":"field_3","value":"B 卷"}]}]}\'',
+      'jinshuju form redirect-rule edit Kp7mQ2 --json \'{"remove":[0]}\''
+    ]
+  },
+  {
+    path: ['form', 'result-share', 'list'],
+    summary: "List a form's result shares (结果分享), newest first",
+    description: "Links that show the form's entries and statistics to whoever opens them, each with its url.",
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    request: (input) => call('listOpenResults', { path: { form_token: input.args.form } }),
+    examples: ['jinshuju form result-share list Kp7mQ2']
+  },
+  {
+    path: ['form', 'result-share', 'get'],
+    summary: 'Show a result share and its link',
+    args: [{ name: 'form', required: true, description: 'Form token' }, RESULT_SHARE_ARG],
+    request: (input) => call('getOpenResult', { path: { form_token: input.args.form, token: input.args.share } }),
+    examples: ['jinshuju form result-share get Kp7mQ2 Rs8kT2']
+  },
+  {
+    path: ['form', 'result-share', 'create'],
+    summary: "Share a form's results through a link, answered in url",
+    description:
+      'Visitors see the values of --fields entry by entry and the statistics of --stats; a list left out ' +
+      "shows nothing of its kind. The rest takes the settings page's defaults: anyone with the link gets in, " +
+      'without a password, and every field that can be partly hidden is, which --masked replaces. ' +
+      'Forms only, not quick payment forms; the plan must include 结果分享, and caps how many a form has.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: RESULT_SHARE_OPTIONS,
+    request: (input) =>
+      call('createOpenResult', { path: { form_token: input.args.form }, body: resultShareBody(input) }),
+    examples: [
+      'jinshuju form result-share create Kp7mQ2 --title 积分公示 --fields field_2,field_3 --stats field_3',
+      'jinshuju form result-share create Kp7mQ2 --stats field_4 --password 2026'
+    ]
+  },
+  {
+    path: ['form', 'result-share', 'edit'],
+    summary: 'Edit a result share, or turn it off and on',
+    description:
+      'Only what is named changes, and a list given replaces the one stored; the link stays the same. ' +
+      'A share open only to submitters or behind SMS verification keeps that audience, and is changed ' +
+      'on the settings page.',
+    args: [{ name: 'form', required: true, description: 'Form token' }, RESULT_SHARE_ARG],
+    options: [
+      ...RESULT_SHARE_OPTIONS,
+      { name: '--no-password', type: 'boolean', description: 'Let visitors in without a password again' },
+      { name: '--enable', type: 'boolean', description: 'Turn the link back on' },
+      { name: '--disable', type: 'boolean', description: 'Keep the link, showing visitors that nothing is shared' }
+    ],
+    request: (input) => {
+      const body = resultShareBody(input);
+      if (Object.keys(body).length === 0) throw new UsageError('name something to change, with a flag or --json');
+      return call('updateOpenResult', { path: { form_token: input.args.form, token: input.args.share }, body });
+    },
+    examples: [
+      'jinshuju form result-share edit Kp7mQ2 Rs8kT2 --fields field_2,field_3,field_5',
+      'jinshuju form result-share edit Kp7mQ2 Rs8kT2 --disable'
+    ]
+  },
+  {
+    path: ['form', 'result-share', 'delete'],
+    summary: 'Delete a result share; its link stops working',
+    args: [{ name: 'form', required: true, description: 'Form token' }, RESULT_SHARE_ARG],
+    options: [YES_OPTION],
+    request: (input) => {
+      confirmed(input, `Deleting result share ${input.args.share as string}`, 'stops its link for good');
+      return call('deleteOpenResult', { path: { form_token: input.args.form, token: input.args.share } });
+    },
+    examples: ['jinshuju form result-share delete Kp7mQ2 Rs8kT2 --yes']
   },
   {
     path: ['form', 'wheel-fortune', 'get'],
@@ -792,5 +1068,47 @@ export const FORM: readonly Command[] = [
     summary: 'List the cooperators of a form',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     request: (input) => call('listFormCooperators', { path: { form_token: input.args.form } })
+  },
+  {
+    path: ['form', 'cooperator', 'add'],
+    summary: 'Add account members to a form as cooperators, all with one role',
+    description:
+      "As adding team members on the form's cooperation page does; no invitation is sent. Only active " +
+      'members of the account can be added, by the id `account member list` shows. One deactivated, ' +
+      'outside the account or a cooperator already (through a folder too) adds nobody, and so does ' +
+      'needing more seats than the form has left outside the Enterprise plans.',
+    args: [{ name: 'form', required: true, description: 'Form token' }],
+    options: [
+      {
+        name: '--user',
+        type: 'string',
+        repeatable: true,
+        placeholder: '<id>',
+        description: 'Account member id, from `jinshuju account member list`; repeatable, up to 100'
+      },
+      {
+        name: '--role',
+        type: 'string',
+        choices: bodyChoices('createFormCooperators', 'role'),
+        placeholder: '<role>',
+        description:
+          'manager administers the form, data_maintainer adds, edits, deletes and exports entries, ' +
+          'data_viewer reads and exports them'
+      }
+    ],
+    request: (input) => {
+      const users = (input.options.user as string[] | undefined) ?? [];
+      if (users.length === 0) {
+        throw new UsageError('--user is required: an account member id, from `jinshuju account member list`');
+      }
+      return call('createFormCooperators', {
+        path: { form_token: input.args.form },
+        body: { user_ids: users, role: requiredOption(input, 'role') }
+      });
+    },
+    examples: [
+      'jinshuju form cooperator add Kp7mQ2 --user 6512a1c2d3e4f5a6b7c8d9d3 --role data_viewer',
+      'jinshuju form cooperator add Kp7mQ2 --user 6512a1c2d3e4f5a6b7c8d9d3 --user 6512a1c2d3e4f5a6b7c8d9d4 --role manager'
+    ]
   }
 ];
