@@ -5,13 +5,15 @@ import { call, type CallParts, type OperationId } from '../spec.js';
 import type { ArgSpec, Command, CommandInput } from './types.js';
 
 /**
- * The two kinds of fill page: `/f/<token>` for a form, `/v/<token>` for a
- * table's form view. The API mirrors them as two operations each, so a link is
- * all it takes to know which.
+ * The kinds of fill page: `/f/<token>` for a form, `/v/<token>` for a table's
+ * form view, `/pf/<token>` for a pseudo form, a form with some fields preset.
+ * The API mirrors them as two operations each, so a link is all it takes to
+ * know which.
  */
 const ROUTES: Record<string, { token: string; page: OperationId; submit: OperationId }> = {
   f: { token: 'form_token', page: 'getFillFormPage', submit: 'createFillFormEntry' },
-  v: { token: 'view_token', page: 'getFillViewPage', submit: 'createFillViewEntry' }
+  v: { token: 'view_token', page: 'getFillViewPage', submit: 'createFillViewEntry' },
+  pf: { token: 'pseudo_form_token', page: 'getFillPseudoFormPage', submit: 'createFillPseudoFormEntry' }
 };
 
 const PAGE_ARG: ArgSpec = {
@@ -20,7 +22,7 @@ const PAGE_ARG: ArgSpec = {
   description: 'The fill link as shared, e.g. https://example.jinshuju.net/v/aB3dE9, or just its path: v/aB3dE9'
 };
 
-/** The page's or the submit's request for a fill link, or for the `f/…` / `v/…` path of one. */
+/** The page's or the submit's request for a fill link, or for the `f/…` / `v/…` / `pf/…` path of one. */
 function fillPage(input: CommandInput, what: 'page' | 'submit', parts: CallParts = {}): HttpRequest {
   const page = input.args.page.trim();
   let path = page;
@@ -34,7 +36,7 @@ function fillPage(input: CommandInput, what: 'page' | 'submit', parts: CallParts
   const [route, token] = path.split('/').filter(Boolean);
   const kind = route !== undefined && Object.hasOwn(ROUTES, route) ? ROUTES[route] : undefined;
   if (!kind || !token) {
-    throw new UsageError(`Not a fill link: ${page}. A fill link ends in /f/<token> or /v/<token>.`);
+    throw new UsageError(`Not a fill link: ${page}. A fill link ends in /f/<token>, /v/<token> or /pf/<token>.`);
   }
   return call(kind[what], { ...parts, path: { [kind.token]: token } });
 }
@@ -48,7 +50,8 @@ export const FILL: readonly Command[] = [
       'the page shows its fillers comes back. `status.key` is `open` when you can submit. `blockers` lists ' +
       'what only the person at the page can do — a captcha, an SMS code, WeChat, a payment — and while it is ' +
       'not empty the page has to be filled in a browser. `manageable` appears only when you could already ' +
-      'read the form or table behind the page.',
+      'read the form or table behind the page. A `/pf/` link answers `predefined_values`: the fields already ' +
+      'filled in, which a submission keeps whatever it says.',
     args: [PAGE_ARG],
     request: (input) => fillPage(input, 'page'),
     examples: ['jinshuju fill get https://example.jinshuju.net/v/aB3dE9', 'jinshuju fill get f/Kp7mQ2']
