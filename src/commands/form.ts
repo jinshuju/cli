@@ -320,12 +320,13 @@ const REDIRECT_RULE_PAYLOAD: readonly string[] = [
   '',
   "A submission that meets a rule's conditions goes to its redirect_url instead",
   'of the success page; "operator" combines the conditions with or (the default)',
-  'or and. A condition names its trigger field by api_code and the choice it',
-  'compares with by value; "comparator" defaults to the first the field takes,',
-  'and one it does not take is answered with those it does. update and remove',
-  'name a rule by the index `form redirect-rule get` shows, and one index cannot',
-  'be both. Adding or changing a rule needs a plan with field_redirect_rules;',
-  'removing one does not. A table has no redirect rules.',
+  'or and. A condition names its trigger field by api_code, and the choice it',
+  'compares with by its value or its api_code, which is how it reads back.',
+  '"comparator" defaults to the first the field takes, and one it does not take',
+  'is answered with those it does. update and remove name a rule by the index',
+  '`form redirect-rule get` shows, and one index cannot be both. Adding or',
+  'changing a rule needs a plan with field_redirect_rules; removing one does',
+  'not. A table has no redirect rules.',
   '',
   'Trigger fields and their choices: jinshuju field list --form <token>'
 ];
@@ -826,7 +827,8 @@ export const FORM: readonly Command[] = [
     path: ['form', 'rule', 'get'],
     summary: 'Show the field display rules of a form',
     args: [{ name: 'form', required: true, description: 'Form token' }],
-    request: (input) => call('listFieldRules', { path: { form_token: input.args.form } })
+    request: (input) => call('listFieldRules', { path: { form_token: input.args.form } }),
+    text: { essentialLists: ['conditions'] }
   },
   {
     path: ['form', 'rule', 'edit'],
@@ -845,6 +847,9 @@ export const FORM: readonly Command[] = [
       'field_redirect_rules; `form get --include redirect_rules` reads them along with the form.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
     request: (input) => call('listRedirectRules', { path: { form_token: input.args.form } }),
+    // A rule without its conditions says where a submission goes but not when,
+    // and a table of rules has no room for them.
+    text: { essentialLists: ['conditions'] },
     examples: ['jinshuju form redirect-rule get Kp7mQ2']
   },
   {

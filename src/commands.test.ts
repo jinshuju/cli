@@ -3161,6 +3161,31 @@ test('form redirect-rule get reads the rules, and edit sends them as redirect_ru
   assert.deepEqual(mock.requests[1].body, { redirect_rules: rules });
 });
 
+test('form redirect-rule get and form rule get show each rule with its conditions in text output', async () => {
+  const conditions = [{ trigger: 'field_3', comparator: 'equal', value: 'aIxQ', parent_choices: [] }];
+  const answering = (rule: Record<string, unknown>) => ({
+    async request<T>(): Promise<T> {
+      return { count: 1, data: [{ index: 0, operator: 'or', conditions, ...rule }] } as T;
+    }
+  });
+
+  const redirect = await cli(['form', 'redirect-rule', 'get', 'Kp7mQ2'], {
+    env: WRITE_ENV,
+    client: answering({ redirect_url: 'https://example.com/next' })
+  });
+  const display = await cli(['form', 'rule', 'get', 'Kp7mQ2'], {
+    env: WRITE_ENV,
+    client: answering({ targets: ['field_5'], targets_display_mode: 'show' })
+  });
+
+  for (const result of [redirect, display]) {
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout, /conditions:\n\s+trigger\s+comparator\s+value/);
+    assert.match(result.stdout, /field_3\s+equal\s+aIxQ/);
+  }
+  assert.match(redirect.stdout, /redirect_url: https:\/\/example.com\/next/);
+});
+
 test('form result-share list, get and delete address the share, and delete wants --yes', async () => {
   const mock = createMockClient();
 
