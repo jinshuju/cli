@@ -19,8 +19,9 @@ const SUCCESS_MESSAGE_OPTION = {
   type: 'string',
   placeholder: '<html>',
   description:
-    'What registrants see once checked in, HTML allowed: $(field_1) puts in their answer to that field ' +
-    'and $(checkin_time) the time; any other $(...) is refused. Takes the admin role on the form'
+    'What registrants see once checked in, HTML allowed: $(field_1) puts in their answer to that field, ' +
+    '$(checkin_time) the time and, while the check-in code is on, $(gen_code) the code; any other $(...) ' +
+    'is refused. Takes the admin role on the form'
 } as const;
 
 const TIMES_EXAMPLE =
