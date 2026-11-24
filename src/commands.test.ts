@@ -3119,6 +3119,23 @@ test('form create carries the scene, layout and folder the design asks for', asy
   assert.equal(unknownScene.exitCode, 2);
 });
 
+test('form edit switches the layout, and a card form is sent with a multiple-blank field', async () => {
+  const edit = createMockClient();
+  const create = createMockClient();
+  const card = {
+    name: '报名',
+    layout: 'card',
+    fields: [{ type: 'MultipleBlanksField', label: '自我介绍', placeholder: '我叫${name}$' }]
+  };
+
+  await cli(['form', 'edit', 'Kp7mQ2', '--json', '{"layout":"card"}'], { env: WRITE_ENV, client: edit.client });
+  await cli(['form', 'create', '--json', JSON.stringify(card)], { env: WRITE_ENV, client: create.client });
+
+  // Both bodies also pass the file's check against openapi.yaml, which refused them before it was synced.
+  assert.deepEqual(edit.requests[0].body, { layout: 'card' });
+  assert.deepEqual(create.requests[0].body, card);
+});
+
 test('--type picks the scene, and refuses a --scene that contradicts it', async () => {
   const exam = createMockClient();
 
