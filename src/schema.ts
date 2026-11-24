@@ -68,6 +68,11 @@ export function validate(schema: Schema | boolean, value: unknown, pointer = '',
     if (s.exclusiveMaximum !== undefined && value >= s.exclusiveMaximum) {
       issue('range', `must be less than ${s.exclusiveMaximum}`);
     }
+    // A decimal step such as 0.01 never divides a float exactly, so a quotient a rounding error off whole is whole.
+    if (s.multipleOf !== undefined) {
+      const steps = value / s.multipleOf;
+      if (Math.abs(steps - Math.round(steps)) > 1e-9) issue('range', `must be a multiple of ${s.multipleOf}`);
+    }
   }
   if (typeof value === 'string') {
     const length = [...value].length;
@@ -117,6 +122,12 @@ function objectIssues(s: Schema, value: Record<string, unknown>, pointer: string
   const missing = (name: string, message: string) =>
     issues.push({ pointer: `${pointer}/${escape(name)}`, kind: 'required', message, value: undefined, certain });
   for (const name of s.required ?? []) if (!(name in value)) missing(name, 'is required');
+  const keys = Object.keys(value).length;
+  const range = (message: string) => issues.push({ pointer, kind: 'range', message, value, certain });
+  if (s.minProperties !== undefined && keys < s.minProperties)
+    range(`must have at least ${s.minProperties} ${s.minProperties === 1 ? 'key' : 'keys'}`);
+  if (s.maxProperties !== undefined && keys > s.maxProperties)
+    range(`must have at most ${s.maxProperties} ${s.maxProperties === 1 ? 'key' : 'keys'}`);
   for (const [name, needs] of Object.entries(s.dependentRequired ?? {})) {
     if (!(name in value)) continue;
     for (const needed of needs) if (!(needed in value)) missing(needed, `is required with ${name}`);

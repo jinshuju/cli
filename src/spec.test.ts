@@ -157,6 +157,7 @@ test('the check the tests hold requests to knows the keywords the generator keep
       kind: { enum: ['a', 'b'] },
       size: { type: 'integer', minimum: 1 },
       ratio: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 },
+      price: { type: 'number', multipleOf: 0.01 },
       tags: { type: 'array', maxItems: 2, uniqueItems: true, items: { type: 'string', pattern: '^[a-z]+$' } },
       shape: { oneOf: [{ type: 'string' }, { type: 'object', required: ['id'] }] }
     },
@@ -183,6 +184,16 @@ test('the check the tests hold requests to knows the keywords the generator keep
   assert.deepEqual(messages({ kind: 'a', ratio: 0.5 }), []);
   assert.deepEqual(messages({ kind: 'a', ratio: 0 }), ['/ratio must be more than 0']);
   assert.deepEqual(messages({ kind: 'a', ratio: 1 }), ['/ratio must be less than 1']);
+  assert.deepEqual(messages({ kind: 'a', price: 0.07 }), []);
+  assert.deepEqual(
+    validate({ type: 'object', minProperties: 1, maxProperties: 1 }, {}).map((i) => i.message),
+    ['must have at least 1 key']
+  );
+  assert.deepEqual(
+    validate({ type: 'object', minProperties: 1, maxProperties: 1 }, { a: 1, b: 2 }).map((i) => i.message),
+    ['must have at most 1 key']
+  );
+  assert.deepEqual(messages({ kind: 'a', price: 0.075 }), ['/price must be a multiple of 0.01']);
   assert.deepEqual(messages({ kind: 'a', shape: {} }), ['/shape/id is required']);
   assert.deepEqual(messages([]), [' must be object']);
 });

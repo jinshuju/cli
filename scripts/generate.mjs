@@ -37,10 +37,13 @@ const KEYWORDS = {
     'maximum',
     'exclusiveMinimum',
     'exclusiveMaximum',
+    'multipleOf',
     'minLength',
     'maxLength',
     'minItems',
     'maxItems',
+    'minProperties',
+    'maxProperties',
     'uniqueItems'
   ],
   schema: ['items', 'not', 'if', 'then', 'else', 'contains'],
