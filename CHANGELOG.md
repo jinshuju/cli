@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.28.0](https://github.com/jinshuju/cli/compare/v0.27.0...v0.28.0) (2026-11-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **form:** drop --secondary-color from form theme set, which API v1 no longer takes ([#120](https://github.com/jinshuju/cli/issues/120))
+
+### Features
+
+* follow openapi.yaml changes to createForm, updateForm and updateTable ([ea06224](https://github.com/jinshuju/cli/commit/ea06224371c78cc81ba32c9597aaa36ef78183ce))
+* **form,checkin:** cooperators, result shares, redirect rules and the share card ([d1634f5](https://github.com/jinshuju/cli/commit/d1634f5feb55dbbd0441320fc81f65b65dba8100))
+
+
+### Fixes
+
+* **form,checkin:** show a rule's conditions, and say what a condition and a check-in message take ([06be31b](https://github.com/jinshuju/cli/commit/06be31b8c864c7668aa1052106836169631ab592))
+* **form:** drop --secondary-color from form theme set, which API v1 no longer takes ([#120](https://github.com/jinshuju/cli/issues/120)) ([8e9df5c](https://github.com/jinshuju/cli/commit/8e9df5c6b30cfefca232c114e3bb9299763cf38e))
+
 ## [0.27.0](https://github.com/jinshuju/cli/compare/v0.26.0...v0.27.0) (2026-11-24)
 
 
