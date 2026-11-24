@@ -40,10 +40,13 @@ export interface Schema {
   readonly maximum?: number;
   readonly exclusiveMinimum?: number;
   readonly exclusiveMaximum?: number;
+  readonly multipleOf?: number;
   readonly minLength?: number;
   readonly maxLength?: number;
   readonly minItems?: number;
   readonly maxItems?: number;
+  readonly minProperties?: number;
+  readonly maxProperties?: number;
   readonly uniqueItems?: boolean;
   readonly pattern?: string;
   /**
