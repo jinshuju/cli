@@ -234,11 +234,13 @@ function unwrapKeyed(row: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * `--labels` answers each field as `{ label, value }`. A cell cannot hold a
- * pair, and a column of pairs is no column at all — which is why the values
- * used to vanish from the table entirely. The pair is split instead: the value
- * becomes the cell, the label becomes the column's heading. Columns stay keyed
- * by api_code, because two fields may carry the same label.
+ * `--labels` answers each field as `{ label, value }`, or `{ label, value, text }`
+ * where the value is in the shape a write takes and `text` is what the data page
+ * shows. A cell cannot hold a pair, and a column of pairs is no column at all —
+ * which is why the values used to vanish from the table entirely. The pair is
+ * split instead: the label becomes the column's heading and the cell is `text`
+ * when there is one, since a table is read by people, else the value. Columns
+ * stay keyed by api_code, because two fields may carry the same label.
  */
 function splitLabels(rows: Record<string, unknown>[]): {
   rows: Record<string, unknown>[];
@@ -252,9 +254,9 @@ function splitLabels(rows: Record<string, unknown>[]): {
         out[key] = value;
         continue;
       }
-      const { label, value: cell } = value as { label: unknown; value: unknown };
+      const { label, value: cell, text } = value as { label: unknown; value: unknown; text?: unknown };
       if (typeof label === 'string' && label !== '') headings.set(key, label);
-      out[key] = cell;
+      out[key] = text === undefined ? cell : text;
     }
     return out;
   });
@@ -264,7 +266,9 @@ function splitLabels(rows: Record<string, unknown>[]): {
 function isLabelled(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const keys = Object.keys(value as Record<string, unknown>);
-  return keys.length === 2 && keys.includes('label') && keys.includes('value');
+  return (
+    keys.includes('label') && keys.includes('value') && keys.every((key) => ['label', 'value', 'text'].includes(key))
+  );
 }
 
 /**

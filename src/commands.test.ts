@@ -265,6 +265,26 @@ test('--labels heads each column with the field label instead of losing the colu
   assert.doesNotMatch(result.stdout, /"label"/);
 });
 
+test('--labels shows the text the data page shows when the value comes with one', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        data: [{ token: 'qGJ3LC', serial_number: 1, field_1: { label: '性别', value: 'code_male', text: '男' } }]
+      } as T;
+    }
+  };
+
+  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--labels', '--output', 'text'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /token\s+serial_number\s+性别/);
+  assert.match(result.stdout, /qGJ3LC\s+1\s+男/);
+  assert.doesNotMatch(result.stdout, /code_male/);
+});
+
 test('a summary keeps its buckets, by giving up the table for the rows that carry one', async () => {
   const client = {
     async request<T>(): Promise<T> {

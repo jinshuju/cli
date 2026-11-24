@@ -61,7 +61,8 @@ const DETAIL_URL =
 const LABELS_OPTION: OptionSpec = {
   name: '--labels',
   type: 'boolean',
-  description: "Pair each value with its field's label, saving a second read of the form"
+  description:
+    "Pair each value with its field's label and the text the data page shows, saving a second read of the form"
 };
 
 /** The flows an entry's state moves through, and the events that move it, as the API names them. */
