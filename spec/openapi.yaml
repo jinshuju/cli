@@ -2988,6 +2988,288 @@ paths:
                   error_description:
                     type: string
                     description: The errmsg returned by WeChat, or "WeChat OAuth failed" / "WeChat userinfo failed"
+  "/forms/{form_token}/pseudo_forms":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    get:
+      tags:
+      - Forms
+      summary: List a form's pseudo forms
+      operationId: listPseudoForms
+      description: |
+        Lists the form's pseudo forms (prefilled links: the fill page with some fields already filled in), newest first, the ones made in the web app included. Takes manage permission on the form.
+        OAuth scope: forms
+      parameters:
+      - $ref: '#/components/parameters/PageLimit'
+      - $ref: '#/components/parameters/OffsetNext'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/EntriesSkip'
+      responses:
+        '200':
+          description: Pseudo forms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PseudoFormListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: The token is not a form (a table or a quick payment page), which has no pseudo forms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+      - Forms
+      summary: Create a pseudo form
+      operationId: createPseudoForm
+      description: |
+        Creates a pseudo form: a fill link (`fill_url`) that opens the form with the fields in `values` already filled in; an entry submitted through it keeps those values whatever the filler types. Takes manage permission on the form.
+        OAuth scope: forms
+        - For one link per row of a list, use `POST /forms/{form_token}/pseudo_forms/batch`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PseudoFormCreateInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PseudoForm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: A key of `values` is not a field the pseudo form can preset, a value is invalid (each named by the key as sent in `error_description`), nothing would be preset, or the token is not a form
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/pseudo_forms/batch":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    post:
+      tags:
+      - Forms
+      summary: Create pseudo forms in batch
+      operationId: createPseudoFormsBatch
+      description: |
+        Creates one pseudo form per item of `pseudo_forms`, up to 200 at a time. Each item is checked on its own: valid ones are created, invalid ones are listed in `errors` by `index` (the position in the request array). Takes manage permission on the form.
+        OAuth scope: forms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - pseudo_forms
+              properties:
+                pseudo_forms:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    description: Written as PseudoFormCreateInput; an item of another type or shape is refused by its index
+              additionalProperties: false
+      responses:
+        '201':
+          description: At least one pseudo form created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PseudoFormBatchCreateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Every item failed, or the token is not a form
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/PseudoFormBatchCreateResult'
+                - $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+      - Forms
+      summary: Delete pseudo forms in batch
+      operationId: deletePseudoFormsBatch
+      description: |
+        Deletes the form's pseudo forms named in `tokens`, up to 200 at a time; their fill links stop working, and this cannot be undone. Tokens that name none of the form's pseudo forms come back in `not_found_tokens`. Takes manage permission on the form.
+        OAuth scope: forms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - tokens
+              properties:
+                tokens:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: string
+              additionalProperties: false
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PseudoFormBatchDeleteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The form does not exist, or none of the tokens names one of its pseudo forms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The token is not a form (a table or a quick payment page), which has no pseudo forms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/pseudo_forms/{pseudo_form_token}":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - name: pseudo_form_token
+      in: path
+      required: true
+      description: Pseudo form token, the last part of its `fill_url` (`/pf/<token>`)
+      schema:
+        type: string
+    patch:
+      tags:
+      - Forms
+      summary: Update a pseudo form
+      operationId: updatePseudoForm
+      description: |
+        Renames a pseudo form or changes its preset values: the fields named in `values` change, a field set to null loses its preset, and the fields left out keep theirs. Takes manage permission on the form.
+        OAuth scope: forms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PseudoFormUpdateInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PseudoForm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The form or the pseudo form does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: A key of `values` is not a field the pseudo form can preset, a value is invalid (each named by the key as sent in `error_description`), nothing would be preset, or the token is not a form
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+      - Forms
+      summary: Delete a pseudo form
+      operationId: deletePseudoForm
+      description: |
+        Deletes a pseudo form; its fill link stops working, and this cannot be undone. Takes manage permission on the form.
+        OAuth scope: forms
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - token
+                properties:
+                  token:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The form or the pseudo form does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The token is not a form (a table or a quick payment page), which has no pseudo forms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   "/forms/{form_token}/views":
     get:
       tags:
@@ -8720,6 +9002,119 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: The fill page has requirements the API cannot fulfil, or a field value is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/fill/pf/{pseudo_form_token}":
+    get:
+      tags:
+      - Fill
+      summary: Show a pseudo form's fill page
+      operationId: getFillPseudoFormPage
+      description: |
+        Reads the fill page behind a prefilled link (`/pf/<token>`): its title, description, the fields to fill in, the values already filled in (`predefined_values`), and whether the current user can submit right now.
+        The caller reads it as a submitter holding the link and needs no permission on the form; only what the fill page shows is returned.
+        - Submit through the API only when `status.key` is `open` and `blockers` is empty; otherwise `status.message` says why, and a non-empty `blockers` means the page must be filled in a browser.
+        - The fields in `predefined_values` need no answer: a submission keeps those values whatever it says.
+        - Needs a personal access token or OAuth: an account access token has no current user.
+
+        OAuth scope: submit_entries
+      parameters:
+      - name: pseudo_form_token
+        in: path
+        required: true
+        description: The token in the prefilled link `/pf/<token>`.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Fill page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FillPage'
+        '400':
+          description: The request is malformed, or it was made with an account access token, which has no current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The fill page does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error_description: Fill page not found — check the link.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/fill/pf/{pseudo_form_token}/entries":
+    post:
+      tags:
+      - Fill
+      summary: Submit an entry through a pseudo form's fill page
+      operationId: createFillPseudoFormEntry
+      description: |
+        Submits one entry through the prefilled fill page as the current user, the same as clicking "Submit" on the page: only fields visible on the fill page are accepted, required fields are checked as the fill page sets them, and the submitter is recorded as the current user.
+        - The preset values (`predefined_values` of the fill page) are submitted as they are, whatever `entry` says for those fields.
+        - Each user can submit at most 30 times per hour.
+        - Needs a personal access token or OAuth: an account access token has no current user.
+
+        OAuth scope: submit_entries
+      parameters:
+      - name: pseudo_form_token
+        in: path
+        required: true
+        description: The token in the prefilled link `/pf/<token>`.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FillEntryRequest'
+      responses:
+        '201':
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FillEntryCreated'
+        '400':
+          description: The request is malformed, or it was made with an account access token, which has no current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          description: The fill page is not open; `status` says why
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The fill page does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The fill page has requirements the API cannot fulfil (`blockers` lists them), or a field value is invalid (`errors` explains each by field api_code)
           content:
             application/json:
               schema:
@@ -24185,6 +24580,122 @@ components:
           - integer
           - 'null'
           description: Row offset of the next page; null on the last page
+    PseudoForm:
+      type: object
+      required:
+      - token
+      - name
+      - fill_url
+      - values
+      - created_at
+      properties:
+        token:
+          type: string
+        name:
+          type:
+          - string
+          - 'null'
+        fill_url:
+          type: string
+          description: The prefilled link to hand out
+        values:
+          type: object
+          description: The preset values, keyed by field api_code
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    PseudoFormListResponse:
+      type: object
+      required:
+      - total
+      - count
+      - data
+      - next
+      properties:
+        total:
+          type: integer
+          description: Number of pseudo forms of the form
+        count:
+          type: integer
+          description: Number of items on this page
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PseudoForm'
+        next:
+          type:
+          - integer
+          - 'null'
+          description: Row offset of the next page; null on the last page
+    PseudoFormCreateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name shown in the form's pseudo form list; give each link one that tells it apart, such as who it is for
+        values:
+          $ref: '#/components/schemas/PseudoFormValues'
+      additionalProperties: false
+    PseudoFormUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name shown in the form's pseudo form list
+        values:
+          $ref: '#/components/schemas/PseudoFormValues'
+      additionalProperties: false
+    PseudoFormValues:
+      type: object
+      additionalProperties: true
+      description: Preset values keyed by field api_code or api_code_alias, written as when creating entries; on an update, null clears a field's preset. A new pseudo form has to preset at least one field. Only AddressField / CascadeDropDown / CheckBox / DateTimeField / DropDown / EmailField / IdCardField / ImageCheckBox / ImageRadioButton / LinkField / MobileField / NameField / NumberField / RadioButton / TelephoneField / TextArea / TextField / TimeField fields can be preset
+    PseudoFormBatchCreateResult:
+      type: object
+      required:
+      - created
+      - errors
+      properties:
+        created:
+          type: array
+          items:
+            allOf:
+            - $ref: '#/components/schemas/PseudoForm'
+            - type: object
+              required:
+              - index
+              properties:
+                index:
+                  type: integer
+                  description: Index in the request array
+        errors:
+          type: array
+          items:
+            type: object
+            required:
+            - index
+            - reason
+            properties:
+              index:
+                type: integer
+                description: Index in the request array
+              reason:
+                type: string
+    PseudoFormBatchDeleteResult:
+      type: object
+      required:
+      - deleted_tokens
+      - not_found_tokens
+      properties:
+        deleted_tokens:
+          type: array
+          items:
+            type: string
+        not_found_tokens:
+          type: array
+          description: Tokens that name none of the form's pseudo forms
+          items:
+            type: string
     FillPage:
       type: object
       required:
@@ -24201,7 +24712,8 @@ components:
           enum:
           - form
           - form_view
-          description: "`form` for a `/f/` link, `form_view` for a `/v/` link (a form view of a table)"
+          - pseudo_form
+          description: "`form` for a `/f/` link, `form_view` for a `/v/` link (a form view of a table), `pseudo_form` for a `/pf/` link (a form with some fields preset)"
         token:
           type: string
           description: The token in the link
@@ -24261,6 +24773,10 @@ components:
           description: Fields on the fill page, in fill order; for a form view, labels, descriptions and required flags follow the view; an exam that draws questions at random lists one draw per call, as each opening of the page does
           items:
             $ref: '#/components/schemas/FieldMap'
+        predefined_values:
+          type: object
+          description: For a `/pf/` link whose page is open (`status.key` is `open`), the preset values of the fields the page shows, keyed by field api_code; a submission keeps them whatever it says
+          additionalProperties: true
         manageable:
           type: object
           description: Returned only when the current user can already read the form or table behind the page

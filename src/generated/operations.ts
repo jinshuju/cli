@@ -31,6 +31,7 @@ export type OperationId =
   | 'createEntryImport'
   | 'createEntryLegacy'
   | 'createFillFormEntry'
+  | 'createFillPseudoFormEntry'
   | 'createFillViewEntry'
   | 'createFolder'
   | 'createForm'
@@ -42,6 +43,8 @@ export type OperationId =
   | 'createNotificationRule'
   | 'createOpenResult'
   | 'createOpensearchQuery'
+  | 'createPseudoForm'
+  | 'createPseudoFormsBatch'
   | 'createRoutine'
   | 'createSmsSignature'
   | 'createSmsTask'
@@ -62,6 +65,8 @@ export type OperationId =
   | 'deleteMessageChannel'
   | 'deleteNotificationRule'
   | 'deleteOpenResult'
+  | 'deletePseudoForm'
+  | 'deletePseudoFormsBatch'
   | 'deleteRoutine'
   | 'deleteSmsSignature'
   | 'deleteSmsTemplate'
@@ -88,6 +93,7 @@ export type OperationId =
   | 'getExamSetting'
   | 'getFieldType'
   | 'getFillFormPage'
+  | 'getFillPseudoFormPage'
   | 'getFillViewPage'
   | 'getFolder'
   | 'getForm'
@@ -141,6 +147,7 @@ export type OperationId =
   | 'listOpenResults'
   | 'listOpensearchQueries'
   | 'listOpensearchQuerySuggestions'
+  | 'listPseudoForms'
   | 'listRedirectRules'
   | 'listRoutineRuns'
   | 'listRoutines'
@@ -207,6 +214,7 @@ export type OperationId =
   | 'updateNotificationRule'
   | 'updateOpenResult'
   | 'updateOpensearchQuery'
+  | 'updatePseudoForm'
   | 'updatePublishedArtifact'
   | 'updateQuickpaySetting'
   | 'updateRoutine'
@@ -529,6 +537,12 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'FillEntryRequest' } } }
   },
+  createFillPseudoFormEntry: {
+    method: 'POST',
+    path: '/fill/pf/{pseudo_form_token}/entries',
+    parameters: [{ name: 'pseudo_form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'FillEntryRequest' } } }
+  },
   createFillViewEntry: {
     method: 'POST',
     path: '/fill/v/{view_token}/entries',
@@ -643,6 +657,28 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
               properties: { form_token: { type: 'string' } }
             }
           ]
+        }
+      }
+    }
+  },
+  createPseudoForm: {
+    method: 'POST',
+    path: '/forms/{form_token}/pseudo_forms',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: { required: true, content: { 'application/json': { $ref: 'PseudoFormCreateInput' } } }
+  },
+  createPseudoFormsBatch: {
+    method: 'POST',
+    path: '/forms/{form_token}/pseudo_forms/batch',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          type: 'object',
+          required: ['pseudo_forms'],
+          properties: { pseudo_forms: { type: 'array', minItems: 1, maxItems: 200, items: {} } },
+          additionalProperties: false
         }
       }
     }
@@ -791,6 +827,30 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'token', in: 'path', required: true, schema: { type: 'string' } }
     ]
+  },
+  deletePseudoForm: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/pseudo_forms/{pseudo_form_token}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'pseudo_form_token', in: 'path', required: true, schema: { type: 'string' } }
+    ]
+  },
+  deletePseudoFormsBatch: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/pseudo_forms/batch',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          type: 'object',
+          required: ['tokens'],
+          properties: { tokens: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string' } } },
+          additionalProperties: false
+        }
+      }
+    }
   },
   deleteRoutine: {
     method: 'DELETE',
@@ -1008,6 +1068,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/fill/f/{form_token}',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  getFillPseudoFormPage: {
+    method: 'GET',
+    path: '/fill/pf/{pseudo_form_token}',
+    parameters: [{ name: 'pseudo_form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
   getFillViewPage: {
     method: 'GET',
@@ -1455,6 +1520,17 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'GET',
     path: '/opensearch/query_suggestions',
     parameters: [{ name: 'form_token', in: 'query', required: true, schema: { type: 'string' } }]
+  },
+  listPseudoForms: {
+    method: 'GET',
+    path: '/forms/{form_token}/pseudo_forms',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'limit', in: 'query', schema: { type: 'integer' } },
+      { name: 'next', in: 'query', schema: { type: 'integer', minimum: 0 } },
+      { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      { name: 'skip', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 10000 } }
+    ]
   },
   listRedirectRules: {
     method: 'GET',
@@ -2189,6 +2265,15 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/opensearch/queries/{query_token}',
     parameters: [{ name: 'query_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'OpensearchQueryInput' } } }
+  },
+  updatePseudoForm: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/pseudo_forms/{pseudo_form_token}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'pseudo_form_token', in: 'path', required: true, schema: { type: 'string' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'PseudoFormUpdateInput' } } }
   },
   updatePublishedArtifact: {
     method: 'PATCH',
@@ -5987,6 +6072,17 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       count_down: { type: ['integer', 'null'], minimum: 0 }
     }
   },
+  PseudoFormCreateInput: {
+    type: 'object',
+    properties: { name: { type: 'string' }, values: { $ref: 'PseudoFormValues' } },
+    additionalProperties: false
+  },
+  PseudoFormUpdateInput: {
+    type: 'object',
+    properties: { name: { type: 'string' }, values: { $ref: 'PseudoFormValues' } },
+    additionalProperties: false
+  },
+  PseudoFormValues: { type: 'object', additionalProperties: true },
   PublishedArtifactInput: {
     type: 'object',
     additionalProperties: false,
