@@ -11610,12 +11610,13 @@ components:
           - number
           - 'null'
           minimum: 0
+          description: With specifications, set it on each sku instead
         original_price:
           type:
           - number
           - 'null'
           minimum: 0
-          description: Original price, shown struck through
+          description: Original price, shown struck through; with specifications, set it on each sku instead
         predefined_number:
           type:
           - integer
@@ -11639,11 +11640,13 @@ components:
           - integer
           - 'null'
           minimum: 0
+          description: With specifications, set it on each sku instead
         max_purchase_quantity:
           type:
           - integer
           - 'null'
           minimum: 0
+          description: With specifications, set it on each sku instead
         dimensions:
           type: array
           items:
@@ -11838,6 +11841,7 @@ components:
         The `setting` used when creating / editing a form. Only the keys below are accepted. A write describes the resulting state: omitted keys keep their current values.
         - Passing only `success_message` automatically sets `success_message_style` to `text`; passing only `success_message_rich_text` sets it to `rich_text`.
         - Changing `success_message_rich_text` requires a plan that includes "Success page rich text". Writing `success_message_style` as `rich_text` (passed, written back as read, or implied by passing only `success_message_rich_text`) also needs "Distribution poster" and "Certificate"; on other plans with "Success page rich text" pass `text`. Otherwise the request is refused with 400. A plan without "Success page rich text" may still write back the `rich_text` style it read; it is saved as `text`.
+        - Switching `entry_submit_mode` to `redirect`, or changing the saved `success_redirect_url` / `success_redirect_fields`, requires a plan that includes "Success redirect", or the request is refused with 400; writing back the values read is accepted. Any other `entry_submit_mode` clears the redirect URL and fields.
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
         - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically and `payment_expirable` turns on unless passed or already `false`.
         - `notification_rules` replaces all notification rules created through the API as a whole (`[]` clears them); rules created in the desktop UI are not affected.
@@ -12954,6 +12958,12 @@ components:
           items:
             type: string
           description: Replaces the display fields; a display field named again keeps its settings
+        masked_display_field_api_codes:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+          description: 'Replaces the masked display fields: api_code of the display fields whose values are masked where the form shows the matched record, e.g. 138****1234; each is one of the display fields (display_field_api_codes, when sent along) and has a value to mask: a mobile, email, name, ID card or telephone field, or a table or matrix holding one; [] unmasks them all'
         init_row_length:
           type: integer
           minimum: 1
@@ -13396,7 +13406,7 @@ components:
           description: api_code of the association key fields
         privacy_safe:
           type: boolean
-          description: Show the associated fields with privacy masking everywhere
+          description: 'Privacy protection of the association: the fill page lists none of the associated form''s records and offers only the ones matching what the filler types, which has to be the exact value when the key is a text, name, mobile, email, telephone or ID card field. It masks nothing; masked_display_field_api_codes masks the values of display fields'
         scope_conditions:
           type: array
           description: Conditions of a LookupField / RollupField (on columns of the related table) or of a FormAssociation (on fields of the associated form). Conditions sharing a `group_index` are joined by AND, or by OR when it is negative, and the groups are joined by OR; leaving it out is group 0. An empty array removes the conditions
@@ -14419,7 +14429,7 @@ components:
           - redirect
           - reports
           - exam_score
-          description: Only show_message while the lucky wheel is on
+          description: Only show_message while the lucky wheel is on; switching to redirect, or changing the saved success_redirect_url / success_redirect_fields, needs a plan that includes "Success redirect" (400 otherwise), and any other mode clears them
         success_redirect_url:
           type: string
           description: Must be a valid URL when entry_submit_mode is redirect
@@ -20417,6 +20427,12 @@ components:
           items:
             type: string
           description: api_code of the fields to display
+        masked_display_field_api_codes:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+          description: 'api_code of the display fields whose values are masked where the form shows the matched record, e.g. 138****1234; each is one of the display fields (display_field_api_codes, when sent along) and has a value to mask: a mobile, email, name, ID card or telephone field, or a table or matrix holding one; none by default'
         associated_form_token:
           type: string
           description: Token of the associated form
@@ -20429,7 +20445,7 @@ components:
           description: api_code of the association key fields
         privacy_safe:
           type: boolean
-          description: Show the associated fields with privacy masking everywhere
+          description: 'Privacy protection of the association: the fill page lists none of the associated form''s records and offers only the ones matching what the filler types, which has to be the exact value when the key is a text, name, mobile, email, telephone or ID card field. It masks nothing; masked_display_field_api_codes masks the values of display fields'
         scope_conditions:
           type: array
           description: Offers only the records of the associated form that match. Conditions sharing a `group_index` are joined by AND, or by OR when it is negative, and the groups are joined by OR; leaving it out is group 0. An empty array removes the conditions and offers every record. While the field keeps conditions, a new `associated_form_token` needs them sent along
@@ -23255,7 +23271,7 @@ components:
           description: How many such tables the caller cannot read
         artifacts:
           type: array
-          description: "The caller's published artifacts whose page writes to or reads from it: those writes and reads fail while it is in the trash, and work again once it is restored"
+          description: 'The caller''s published artifacts whose page writes to or reads from it: those writes and reads fail while it is in the trash, and work again once it is restored'
           items:
             type: object
             required:
@@ -27826,12 +27842,13 @@ components:
           - number
           - 'null'
           minimum: 0
+          description: With specifications, set it on each sku instead
         original_price:
           type:
           - number
           - 'null'
           minimum: 0
-          description: Original price, shown struck through
+          description: Original price, shown struck through; with specifications, set it on each sku instead
         predefined_number:
           type:
           - integer
@@ -27855,11 +27872,13 @@ components:
           - integer
           - 'null'
           minimum: 0
+          description: With specifications, set it on each sku instead
         max_purchase_quantity:
           type:
           - integer
           - 'null'
           minimum: 0
+          description: With specifications, set it on each sku instead
         dimensions:
           type: array
           items:
@@ -32792,6 +32811,7 @@ components:
       - grids_to_occupy
       - start_new_row
       - display_field_api_codes
+      - masked_display_field_api_codes
       - api_code_alias
       - analytics
       properties:
@@ -32878,6 +32898,10 @@ components:
         start_new_row:
           type: boolean
         display_field_api_codes:
+          type: array
+          items:
+            type: string
+        masked_display_field_api_codes:
           type: array
           items:
             type: string
