@@ -1,6 +1,18 @@
 import { FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, PAGINATION_OPTIONS, SORT_OPTION } from '../options.js';
 import { bodyChoices, call } from '../spec.js';
-import { FOLDER_OPTION, LISTING, filters, keywords, overriding, paging, payload, sort } from './shared.js';
+import {
+  FOLDER_OPTION,
+  LISTING,
+  PREVIEW_OPTION,
+  YES_OPTION,
+  filters,
+  keywords,
+  overriding,
+  paging,
+  payload,
+  sort,
+  trash
+} from './shared.js';
 import type { Command } from './types.js';
 import { validateContainerPayload } from '../payload.js';
 
@@ -85,6 +97,19 @@ export const TABLE: readonly Command[] = [
         body: { folder_token: (input.options.folder as string | undefined) ?? '' }
       }),
     examples: ['jinshuju table move Vn4xR8 --folder Nf7mDC', 'jinshuju table move Vn4xR8']
+  },
+  {
+    path: ['table', 'delete'],
+    summary: 'Move tables to the trash',
+    description:
+      'Each table goes to the trash with its entries, and can be restored from there in the web app ' +
+      'within 2 years. Up to 20 at a time, each deleted on its own: one refused leaves the others ' +
+      'deleted, and the error says which went and which did not. --preview reads what deleting each ' +
+      'would take with it instead, and deletes nothing.',
+    args: [{ name: 'table', required: true, variadic: true, description: 'Table token' }],
+    options: [YES_OPTION, PREVIEW_OPTION],
+    run: (input, client) => trash(client, input, 'table'),
+    examples: ['jinshuju table delete Vn4xR8 Qm5tW2 --preview', 'jinshuju table delete Vn4xR8 Qm5tW2 --yes']
   },
   {
     path: ['table', 'edit'],

@@ -1,4 +1,5 @@
-import type { HttpRequest } from '../http.js';
+import { HttpError } from '../errors.js';
+import type { HttpClient, HttpRequest } from '../http.js';
 import {
   FILTER_OPTION,
   FILTERS_OPTION,
@@ -86,8 +87,138 @@ export function sortRules(input: CommandInput): { api_code: string; order: strin
  * — so the confirmation is a flag, and leaving it out is the safe outcome
  * rather than a question nobody is there to answer.
  */
-export function confirmed(input: CommandInput, what: string): void {
-  if (!input.options.yes) throw new UsageError(`${what} is permanent; pass --yes to go ahead`);
+export function confirmed(input: CommandInput, what: string, outcome = 'is permanent'): void {
+  if (!input.options.yes) throw new UsageError(`${what} ${outcome}; pass --yes to go ahead`);
+}
+
+/**
+ * How many forms or tables one delete takes. A delete that has to be confirmed
+ * first, as Jiri's are, reads what each one would take with it before asking,
+ * and one confirmation covers at most this many: taking more would read ahead
+ * for batches nobody is asked about yet.
+ */
+const TRASH_BATCH = 20;
+
+/**
+ * How many of a batch's requests are in flight at once. Each form or table is a
+ * request of its own, and a batch of 20 sent one after another took seconds; a
+ * few at a time stays well inside what the API takes from one caller.
+ */
+const TRASH_CONCURRENCY = 5;
+
+type Outcome<T> = { token: string; value: T } | { token: string; error: Error };
+
+/**
+ * Sends one request per token and answers every outcome, in the order given. The
+ * first goes alone, so a session that has to refresh its token does so once
+ * rather than from several requests at the same moment; the rest a few at a time.
+ */
+async function eachToken<T>(tokens: readonly string[], send: (token: string) => Promise<T>): Promise<Outcome<T>[]> {
+  const settle = (token: string): Promise<Outcome<T>> =>
+    send(token).then(
+      (value) => ({ token, value }),
+      (error: unknown) => ({ token, error: error as Error })
+    );
+  const outcomes = [await settle(tokens[0]!)];
+  let next = 1;
+  const worker = async (): Promise<void> => {
+    while (next < tokens.length) {
+      const index = next++;
+      outcomes[index] = await settle(tokens[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(TRASH_CONCURRENCY, tokens.length - 1) }, worker));
+  return outcomes;
+}
+
+/**
+ * Moves each form or table named to the trash, one request apiece, a few at a
+ * time (`eachToken`). Every one is tried, so one refused does not leave the rest
+ * standing, and the error lists what went beside what did not: read as
+ * all-or-nothing, it would invite the moved ones to be deleted again or the
+ * refused ones to be taken for done. It exits the way the first failure would
+ * have, and under `--output json` its body carries every token's refusal, not
+ * the first one's alone.
+ */
+export async function trash(
+  client: HttpClient,
+  input: CommandInput,
+  kind: 'form' | 'table'
+): Promise<{ deleted: string[] } | { previews: unknown[]; failures?: unknown[] }> {
+  if (input.rest.length > TRASH_BATCH) {
+    throw new UsageError(
+      `${kind} delete takes at most ${TRASH_BATCH} ${kind}s at a time, got ${input.rest.length}; ` +
+        'delete the rest in another call once these are done'
+    );
+  }
+  if (input.options.preview) {
+    if (input.options.yes) throw new UsageError('--preview and --yes are alternatives, not both');
+    return previewTrash(client, input, kind);
+  }
+  const many = input.rest.length > 1;
+  confirmed(
+    input,
+    `Deleting ${kind}${many ? 's' : ''} ${input.rest.join(', ')}`,
+    `moves ${many ? 'them' : 'it'} to the trash`
+  );
+  const outcomes = await eachToken(input.rest, (token) =>
+    client.request(
+      kind === 'form'
+        ? call('deleteForm', { path: { form_token: token } })
+        : call('deleteTable', { path: { table_token: token } })
+    )
+  );
+  const deleted = outcomes.flatMap((outcome) => ('value' in outcome ? [outcome.token] : []));
+  const failures = outcomes.flatMap((outcome) => ('error' in outcome ? [outcome] : []));
+  if (failures.length === 0) return { deleted };
+
+  const lines = failures.map(({ token, error }) => {
+    const outcome = error instanceof HttpError ? 'not deleted' : 'may or may not be deleted';
+    return `  ${token} ${outcome}: ${error.message.replaceAll('\n', '\n    ')}`;
+  });
+  const first = failures[0]!.error;
+  const body = {
+    deleted,
+    failures: failures.map(({ token, error }) =>
+      error instanceof HttpError ? { token, status: error.status, body: error.body } : { token, message: error.message }
+    )
+  };
+  throw new Error([`moved to the trash: ${deleted.join(', ') || 'none'}`, ...lines].join('\n'), {
+    cause: first instanceof HttpError ? new HttpError(first.message, first.status, body) : first
+  });
+}
+
+/**
+ * What deleting each form or table would take with it, nothing deleted, a few at
+ * a time (`eachToken`). A token that cannot be read is listed under `failures`
+ * beside the ones that could, so one wrong token does not hide the rest; only
+ * when none could be read does it fail, as its first failure would. Both keep
+ * the order given.
+ */
+async function previewTrash(
+  client: HttpClient,
+  input: CommandInput,
+  kind: 'form' | 'table'
+): Promise<{ previews: unknown[]; failures?: unknown[] }> {
+  const outcomes = await eachToken(input.rest, (token) =>
+    client.request(
+      kind === 'form'
+        ? call('previewFormDeletion', { path: { form_token: token } })
+        : call('previewTableDeletion', { path: { table_token: token } })
+    )
+  );
+  const previews = outcomes.flatMap((outcome) => ('value' in outcome ? [outcome.value] : []));
+  const failures = outcomes.flatMap((outcome) => ('error' in outcome ? [outcome] : []));
+  if (previews.length === 0) throw failures[0]!.error;
+  if (failures.length === 0) return { previews };
+  return {
+    previews,
+    failures: failures.map(({ token, error }) =>
+      error instanceof HttpError
+        ? { token, status: error.status, message: error.message }
+        : { token, message: error.message }
+    )
+  };
 }
 
 /**
@@ -118,6 +249,13 @@ export function one(value: unknown): unknown[] {
 }
 
 export const YES_OPTION: OptionSpec = { name: '--yes', type: 'boolean', description: 'Confirm the deletion' };
+
+/** `form delete` and `table delete`'s look before they delete. */
+export const PREVIEW_OPTION: OptionSpec = {
+  name: '--preview',
+  type: 'boolean',
+  description: 'Show what deleting each would take with it, and delete nothing'
+};
 
 export const FOLDER_OPTION: OptionSpec = {
   name: '--folder',

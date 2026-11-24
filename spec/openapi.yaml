@@ -309,7 +309,9 @@ paths:
       summary: Delete a form
       operationId: deleteForm
       description: |
-        Moves the form and its entries to the trash, from which the product can restore it; on success, returns the form token.
+        Moves the form and its entries to the trash, from which the product can restore it within 2 years; on success, returns the form token.
+        - `GET /forms/{form_token}/deletion_preview` shows what the delete affects, and whether it would be refused.
+        - A quickpay page (`kind: quickpay` in the preview) has no trash: deleting it cannot be undone.
 
         OAuth scope: forms
       responses:
@@ -367,6 +369,35 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '402':
           $ref: '#/components/responses/EntryCreatePaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/forms/{form_token}/deletion_preview":
+    get:
+      tags:
+      - Forms
+      summary: Preview deleting a form
+      description: |
+        Use before `DELETE /forms/{form_token}`: changes nothing, and tells whether the delete would be refused and what it affects.
+
+        OAuth scope: forms
+      operationId: previewFormDeletion
+      parameters:
+      - $ref: '#/components/parameters/FormToken'
+      responses:
+        '200':
+          description: What deleting the form affects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletionPreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -4210,6 +4241,35 @@ paths:
                     type: string
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  "/tables/{table_token}/deletion_preview":
+    get:
+      tags:
+      - Tables
+      summary: Preview deleting a table
+      description: |
+        Use before `DELETE /tables/{table_token}`: changes nothing, and tells what the delete affects.
+
+        OAuth scope: forms
+      operationId: previewTableDeletion
+      parameters:
+      - $ref: '#/components/parameters/TableToken'
+      responses:
+        '200':
+          description: What deleting the table affects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletionPreview'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -21011,6 +21071,119 @@ components:
           - 'null'
           format: uri
           description: Link URL, used when link_attrs is left out
+    DeletionPreview:
+      type: object
+      required:
+      - token
+      - name
+      - kind
+      - entries_count
+      - undeletable_reasons
+      - opensearch_queries
+      - other_opensearch_queries_count
+      - routines
+      - other_routines_count
+      - association_forms
+      - related_tables
+      - other_related_tables_count
+      - artifacts
+      - other_artifacts_count
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+          description: The name it goes by in the product
+        kind:
+          type: string
+          enum:
+          - form
+          - table
+          - quickpay
+        entries_count:
+          type: integer
+        undeletable_reasons:
+          type: array
+          description: Why the delete would be refused; empty when it would go through
+          items:
+            type: string
+        opensearch_queries:
+          type: array
+          description: The caller's enabled public queries on it, which stop opening while it is in the trash and open again once it is restored
+          items:
+            type: object
+            required:
+            - token
+            - name
+            properties:
+              token:
+                type: string
+              name:
+                type: string
+        other_opensearch_queries_count:
+          type: integer
+          description: How many enabled public queries of other members are on it
+        routines:
+          type: array
+          description: The caller's enabled routines that use it, which pause once it is deleted and stay paused after a restore
+          items:
+            type: object
+            required:
+            - id
+            - name
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        other_routines_count:
+          type: integer
+          description: How many enabled routines of other members use it
+        association_forms:
+          type: array
+          description: Forms associated with it, whose association fields go empty once it is deleted
+          items:
+            type: object
+            required:
+            - token
+            - name
+            properties:
+              token:
+                type: string
+              name:
+                type: string
+        related_tables:
+          type: array
+          description: Other tables the caller can read whose relation columns link to its entries, which lose those links once it is deleted
+          items:
+            type: object
+            required:
+            - token
+            - name
+            properties:
+              token:
+                type: string
+              name:
+                type: string
+        other_related_tables_count:
+          type: integer
+          description: How many such tables the caller cannot read
+        artifacts:
+          type: array
+          description: The caller's published artifacts whose page writes to or reads from it, which stop working while it is in the trash and work again once it is restored
+          items:
+            type: object
+            required:
+            - token
+            - name
+            properties:
+              token:
+                type: string
+              name:
+                type: string
+        other_artifacts_count:
+          type: integer
+          description: How many such published artifacts of other members there are
     FieldDataCheckResponse:
       type: object
       required:

@@ -42,13 +42,7 @@ export const RESOURCES: readonly Resource[] = [
   },
   { name: 'account', summary: 'Account, members, invoices and what the account paid' },
   { name: 'folder', summary: 'Manage folders' },
-  {
-    name: 'form',
-    summary: 'Manage forms',
-    note:
-      'There is no delete, on purpose: removing a form takes its entries with it, so it is ' +
-      'left to the web app, where the person doing it can see what they are about to lose.'
-  },
+  { name: 'form', summary: 'Manage forms' },
   { name: 'table', summary: 'Manage tables' },
   { name: 'field', summary: 'Manage fields' },
   { name: 'view', summary: 'Manage views' },
