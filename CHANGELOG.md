@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.27.0](https://github.com/jinshuju/cli/compare/v0.26.0...v0.27.0) (2026-11-24)
+
+
+### Features
+
+* follow the openapi.yaml of 2026-11-24 ([09d7ecd](https://github.com/jinshuju/cli/commit/09d7ecdd7034e1de3dd5893aab69abf48c685152))
+* **form,table:** move forms and tables to the trash with form delete and table delete, previewed with --preview ([#122](https://github.com/jinshuju/cli/issues/122)) ([ed2f504](https://github.com/jinshuju/cli/commit/ed2f50479daeca74faddff26f0545a7d2d8f95e9))
+
+
+### Fixes
+
+* keep multipleOf, minProperties and maxProperties, which the published openapi.yaml now uses ([f2c3348](https://github.com/jinshuju/cli/commit/f2c334800353fff3ca99dec08e0c4094ada51c86))
+* **routine:** say only formula and form association fields cannot be watched ([5804e85](https://github.com/jinshuju/cli/commit/5804e857250618e70bed8136386aa12d1946553b))
+
 ## [0.26.0](https://github.com/jinshuju/cli/compare/v0.25.1...v0.26.0) (2026-11-17)
 
 
