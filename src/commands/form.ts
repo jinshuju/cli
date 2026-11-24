@@ -11,6 +11,8 @@ import {
 import {
   FOLDER_OPTION,
   LISTING,
+  PREVIEW_OPTION,
+  YES_OPTION,
   filters,
   given,
   keywords,
@@ -19,7 +21,8 @@ import {
   payload,
   refuseWithMine,
   requiredOption,
-  sort
+  sort,
+  trash
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
@@ -568,6 +571,19 @@ export const FORM: readonly Command[] = [
         body: { folder_token: (input.options.folder as string | undefined) ?? '' }
       }),
     examples: ['jinshuju form move Kp7mQ2 --folder Fd2xK8', 'jinshuju form move Kp7mQ2']
+  },
+  {
+    path: ['form', 'delete'],
+    summary: 'Move forms to the trash',
+    description:
+      'Each form goes to the trash with its entries, and can be restored from there in the web app ' +
+      'within 2 years. Up to 20 at a time, each deleted on its own: one refused leaves the others ' +
+      'deleted, and the error says which went and which did not. --preview reads what deleting each ' +
+      'would take with it instead, and deletes nothing.',
+    args: [{ name: 'form', required: true, variadic: true, description: 'Form token' }],
+    options: [YES_OPTION, PREVIEW_OPTION],
+    run: (input, client) => trash(client, input, 'form'),
+    examples: ['jinshuju form delete Kp7mQ2 Hx3pL9 --preview', 'jinshuju form delete Kp7mQ2 Hx3pL9 --yes']
   },
   {
     path: ['form', 'theme', 'set'],

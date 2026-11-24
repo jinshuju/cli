@@ -158,7 +158,9 @@ export type OperationId =
   | 'prepareFormImageUpload'
   | 'prepareGoodsDeliverableAttachmentUpload'
   | 'prepareImportFileUpload'
+  | 'previewFormDeletion'
   | 'previewFormFieldTypeChange'
+  | 'previewTableDeletion'
   | 'previewTableFieldTypeChange'
   | 'replaceEntry'
   | 'replaceTableEntry'
@@ -1716,6 +1718,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     path: '/forms/{form_token}/import_file_upload_urls',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
+  previewFormDeletion: {
+    method: 'GET',
+    path: '/forms/{form_token}/deletion_preview',
+    parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
   previewFormFieldTypeChange: {
     method: 'GET',
     path: '/forms/{form_token}/fields/preview_convert',
@@ -1729,6 +1736,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         schema: { type: 'array', items: { $ref: 'FieldTypeChangeCheck' } }
       }
     ]
+  },
+  previewTableDeletion: {
+    method: 'GET',
+    path: '/tables/{table_token}/deletion_preview',
+    parameters: [{ name: 'table_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
   previewTableFieldTypeChange: {
     method: 'GET',

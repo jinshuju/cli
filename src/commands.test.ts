@@ -1728,6 +1728,199 @@ test('entry summary asks for named fields and can drop the overview', async () =
 
 const WRITE_ENV = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
+test('form delete and table delete want --yes, then move each one named to the trash', async () => {
+  const mock = createMockClient();
+
+  const unconfirmed = await cli(['form', 'delete', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  assert.equal(unconfirmed.exitCode, 2);
+  assert.match(unconfirmed.stderr, /Deleting form Kp7mQ2 moves it to the trash; pass --yes/);
+  assert.equal(mock.requests.length, 0);
+
+  const forms = await cli(['form', 'delete', 'Kp7mQ2', 'Hx3pL9', '--yes', '--output', 'json'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const tables = await cli(['table', 'delete', 'Vn4xR8', '--yes'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(forms.exitCode, 0);
+  assert.deepEqual(JSON.parse(forms.stdout), { deleted: ['Kp7mQ2', 'Hx3pL9'] });
+  assert.equal(tables.exitCode, 0);
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['DELETE /api/v1/forms/Kp7mQ2', 'DELETE /api/v1/forms/Hx3pL9', 'DELETE /api/v1/tables/Vn4xR8']
+  );
+});
+
+test('form delete tries every form, and says which went to the trash and which did not', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      if (request.path.endsWith('/Hx3pL9')) {
+        throw new HttpError('抱歉！因表单内有红包余额，该表单不能删除', 403, {
+          error_description: '抱歉！因表单内有红包余额，该表单不能删除'
+        });
+      }
+      if (request.path.endsWith('/Qm5tW2')) throw new TransportError('the request timed out', true);
+      return { token: request.path.split('/').pop() } as T;
+    }
+  };
+
+  const result = await cli(['form', 'delete', 'Kp7mQ2', 'Hx3pL9', 'Qm5tW2', 'Zr8nB4', '--yes'], {
+    env: WRITE_ENV,
+    client
+  });
+
+  assert.equal(requests.length, 4);
+  assert.equal(result.exitCode, 3);
+  assert.match(result.stderr, /moved to the trash: Kp7mQ2, Zr8nB4/);
+  assert.match(result.stderr, /Hx3pL9 not deleted: 抱歉！因表单内有红包余额，该表单不能删除/);
+  assert.match(result.stderr, /Qm5tW2 may or may not be deleted: the request timed out/);
+
+  const json = await cli(['form', 'delete', 'Kp7mQ2', 'Hx3pL9', 'Qm5tW2', '--yes', '--output', 'json'], {
+    env: WRITE_ENV,
+    client
+  });
+  assert.equal(json.exitCode, 3);
+  assert.deepEqual(JSON.parse(json.stderr).error.body, {
+    deleted: ['Kp7mQ2'],
+    failures: [
+      { token: 'Hx3pL9', status: 403, body: { error_description: '抱歉！因表单内有红包余额，该表单不能删除' } },
+      { token: 'Qm5tW2', message: 'the request timed out' }
+    ]
+  });
+});
+
+test('form delete --preview reads what deleting each would take with it, and deletes nothing', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      conform(request);
+      if (request.path.includes('/Hx3pL9/'))
+        throw new HttpError('Form not found', 404, { error_description: 'Form not found' });
+      return { token: request.path.split('/')[4], entries_count: 3 } as T;
+    }
+  };
+
+  const result = await cli(['form', 'delete', 'Kp7mQ2', 'Hx3pL9', '--preview', '--output', 'json'], {
+    env: WRITE_ENV,
+    client
+  });
+  const tables = await cli(['table', 'delete', 'Vn4xR8', '--preview', '--output', 'json'], { env: WRITE_ENV, client });
+  const both = await cli(['form', 'delete', 'Kp7mQ2', '--preview', '--yes'], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    previews: [{ token: 'Kp7mQ2', entries_count: 3 }],
+    failures: [{ token: 'Hx3pL9', status: 404, message: 'Form not found' }]
+  });
+  assert.equal(tables.exitCode, 0);
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /--preview and --yes are alternatives/);
+  assert.deepEqual(
+    requests.map((request) => `${request.method} ${request.path}`),
+    [
+      'GET /api/v1/forms/Kp7mQ2/deletion_preview',
+      'GET /api/v1/forms/Hx3pL9/deletion_preview',
+      'GET /api/v1/tables/Vn4xR8/deletion_preview'
+    ]
+  );
+});
+
+test('form delete --preview reads the first alone, then at most 5 at a time, keeping the order given', async () => {
+  let inFlight = 0;
+  let most = 0;
+  let firstDone = false;
+  const early: string[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      const token = request.path.split('/')[4]!;
+      if (token !== 't00' && !firstDone) early.push(token);
+      inFlight += 1;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20 - Number(token.slice(1))));
+      inFlight -= 1;
+      if (token === 't00') firstDone = true;
+      return { token } as T;
+    }
+  };
+  const tokens = Array.from({ length: 12 }, (_, index) => `t${String(index).padStart(2, '0')}`);
+
+  const result = await cli(['form', 'delete', ...tokens, '--preview', '--output', 'json'], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    (JSON.parse(result.stdout).previews as { token: string }[]).map((preview) => preview.token),
+    tokens
+  );
+  assert.deepEqual(early, []);
+  assert.equal(most, 5);
+});
+
+test('form delete deletes the first alone, then at most 5 at a time, and reports in the order given', async () => {
+  let inFlight = 0;
+  let most = 0;
+  let firstDone = false;
+  const early: string[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      const token = request.path.split('/')[4]!;
+      if (token !== 't00' && !firstDone) early.push(token);
+      inFlight += 1;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20 - Number(token.slice(1))));
+      inFlight -= 1;
+      if (token === 't00') firstDone = true;
+      if (token === 't07') throw new HttpError('no grant', 403, { error_description: 'no grant' });
+      return { token } as T;
+    }
+  };
+  const tokens = Array.from({ length: 12 }, (_, index) => `t${String(index).padStart(2, '0')}`);
+
+  const result = await cli(['form', 'delete', ...tokens, '--yes', '--output', 'json'], { env: WRITE_ENV, client });
+
+  assert.equal(result.exitCode, 3);
+  const body = JSON.parse(result.stderr).error.body;
+  assert.deepEqual(
+    body.deleted,
+    tokens.filter((token) => token !== 't07')
+  );
+  assert.deepEqual(
+    body.failures.map((failure: { token: string }) => failure.token),
+    ['t07']
+  );
+  assert.deepEqual(early, []);
+  assert.equal(most, 5);
+});
+
+test('form delete --preview fails as its first failure does when none can be read', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      throw new HttpError('Form not found', 404, { error_description: 'Form not found' });
+    }
+  };
+  const result = await cli(['form', 'delete', 'Kp7mQ2', '--preview'], { env: WRITE_ENV, client });
+  assert.equal(result.exitCode, 4);
+  assert.match(result.stderr, /Form not found/);
+});
+
+test('form delete takes 20 forms at a time and sends nothing for more', async () => {
+  const mock = createMockClient();
+  const tokens = Array.from({ length: 21 }, (_, index) => `Kp7m${String(index).padStart(2, '0')}`);
+  const result = await cli(['form', 'delete', ...tokens, '--yes'], { env: WRITE_ENV, client: mock.client });
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /form delete takes at most 20 forms at a time, got 21/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('form delete names every form it was not told to go ahead with', async () => {
+  const mock = createMockClient();
+  const unconfirmed = await cli(['form', 'delete', 'Kp7mQ2', 'Hx3pL9'], { env: WRITE_ENV, client: mock.client });
+  assert.match(unconfirmed.stderr, /Deleting forms Kp7mQ2, Hx3pL9 moves them to the trash; pass --yes/);
+  assert.equal(mock.requests.length, 0);
+});
+
 test('field verbs all ride on the container PATCH, each in its own operation', async () => {
   const add = createMockClient();
   const update = createMockClient();
@@ -3986,9 +4179,6 @@ test('help mentions jsj, the exit codes, and what a resource does not have', asy
   assert.match(root.stdout, /`jsj` is the same command/);
   assert.match(root.stdout, /Exit codes: 0 ok/);
   assert.match(root.stdout, /8 rate limited/);
-
-  const form = await cli(['form', '--help'], { env: {} });
-  assert.match(form.stdout, /There is no delete, on purpose/);
 
   const checkin = await cli(['checkin', '--help'], { env: {} });
   assert.match(checkin.stdout, /Check-in rides on a form/);
