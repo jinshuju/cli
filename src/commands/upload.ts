@@ -33,7 +33,8 @@ export const FORM_IMAGE_TYPES = [
   'header',
   'wallpaper',
   'opensearch_header',
-  'wheel_fortune_prize'
+  'wheel_fortune_prize',
+  'weixin_share_icon'
 ] as const;
 export type FormImageType = (typeof FORM_IMAGE_TYPES)[number];
 
@@ -99,8 +100,8 @@ export async function uploadedId(client: HttpClient, { id, path = {}, file, extr
 }
 
 /**
- * An image that a form's theme, one of its public queries or a prize of its lucky wheel
- * refers to by id, uploaded with `imageType` saying which.
+ * An image that a form's theme, one of its public queries, a prize of its lucky wheel
+ * or its WeChat share card refers to by id, uploaded with `imageType` saying which.
  */
 export function uploadFormImage(client: HttpClient, file: string, imageType: FormImageType): Promise<string> {
   return uploadedId(client, { id: 'uploadFormImage', file, extra: { image_type: imageType }, key: 'attachment_id' });

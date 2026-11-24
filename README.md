@@ -100,8 +100,8 @@ jinshuju form create --json '{
 block that belongs to it. That settings block has an endpoint of its own, so a
 payload carrying it becomes two requests — and the general form update does not
 recognise the key at all (it reads only `name`, `description`, `setting`,
-`fields` and `field_rules`), so without the dispatch `exam_setting` would be
-dropped in silence.
+`fields`, `field_rules`, `redirect_rules` and `layout`), so without the dispatch
+`exam_setting` would be dropped in silence.
 
 The settings block is always sent first. It is the half that can be rejected —
 "this is not an exam form" — and sending it first is what guarantees a rejection
@@ -232,6 +232,10 @@ jinshuju form copy Kp7mQ2 --name Copy
 jinshuju form copy Kp7mQ2 --name 第二期 --with-notification-rules
 jinshuju form move Kp7mQ2 --folder Fd2xK8         # without --folder, moves it out of its folder
 jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"
+jinshuju form setting edit Kp7mQ2 --json '{"weixin_share":{"title":"2026 年会报名"}}'   # the card a link shows in WeChat
+jinshuju form redirect-rule edit Kp7mQ2 --json @redirect-rules.json   # where a submission meeting conditions goes instead
+jinshuju form cooperator add Kp7mQ2 --user 6512a1c2d3e4f5a6b7c8d9d3 --role data_viewer   # account members; no invitation is sent
+jinshuju form result-share create Kp7mQ2 --fields field_2,field_3 --stats field_3     # a link to the results, answered in url
 jinshuju table create --json @table.json --folder Nf7mDC
 jinshuju table edit Vn4xR8 --json '{"name":"2026 ledger"}'
 ```
@@ -280,6 +284,7 @@ jinshuju comment create --form Kp7mQ2 --entry 12 "Contacted, awaiting reply"
 jinshuju opensearch edit Qy7nR3 --disable
 jinshuju checkin create --form Kp7mQ2             # needs the check-in plugin enabled for the account
 jinshuju checkin edit 42 --disable
+jinshuju checkin edit 42 --success-message '签到成功，$(field_1)'   # what registrants see once checked in
 jinshuju notification create --form Kp7mQ2 --approach SMS --recipients field_2 --template-id 6650a1 --placeholder field_1
 jinshuju notification list --form Kp7mQ2             # each rule says whether it can send, and why not
 jinshuju notification log 6650b2 --form Kp7mQ2 --from 2026-10-01   # what the rule sent: how many succeeded, failed, and why
@@ -383,7 +388,7 @@ version has no such scope, and the routine commands answer it with 403 (exit
 
 ## Working with files
 
-Nine commands take a file. The CLI uploads with its own credential; there is no
+Ten commands take a file. The CLI uploads with its own credential; there is no
 ticket to fetch first.
 
 ```bash
@@ -395,6 +400,7 @@ jinshuju form theme set Kp7mQ2 --wallpaper ./bg.png
 jinshuju opensearch edit Qy7nR3 --header ./banner.png
 jinshuju form wheel-fortune edit Kp7mQ2 --json @wheel.json --prize-image 一等奖=./earbuds.png
 jinshuju form quickpay edit Kp7mQ2 --json @quickpay.json --deliverable-file 电子书=./book.pdf
+jinshuju form setting edit Kp7mQ2 --share-icon ./logo.png   # the icon of the card a link shows in WeChat
 jinshuju form image upload ./venue-map.png      # answers with a url for an <img> in a form or field description
 jinshuju sms signature create 小金培训 --license ./license.jpg --company-name 小金培训有限公司 --company-id 91110000MA00000000 \
   --id-card-front ./front.jpg --id-card-back ./back.jpg --id-card-name 张三 --id-card-number 110101199001011234 --mobile 13800000000

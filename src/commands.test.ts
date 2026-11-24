@@ -2220,6 +2220,20 @@ test('checkin list, get, edit and delete address the campaign', async () => {
   assert.equal(both.exitCode, 2);
 });
 
+test('checkin create and edit carry --success-message, the message registrants see once checked in', async () => {
+  const mock = createMockClient();
+  const message = '签到成功，$(field_1)';
+
+  await cli(['checkin', 'create', '--form', 'Kp7mQ2', '--success-message', message], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  await cli(['checkin', 'edit', '42', '--success-message', message], { env: WRITE_ENV, client: mock.client });
+
+  assert.deepEqual(mock.requests[0].body, { form_token: 'Kp7mQ2', success_message: message });
+  assert.deepEqual(mock.requests[1].body, { success_message: message });
+});
+
 test('checkin delete answers with the campaign id in every format, though the API answered an empty body', async () => {
   const client = {
     async request<T>(): Promise<T> {
@@ -2442,10 +2456,10 @@ test('form get --include names the blocks, and setting is honoured by already be
   const asked = createMockClient();
   const settingOnly = createMockClient();
 
-  await cli(['form', 'get', 'Kp7mQ2', '--include', 'theme,rules,extended,transactions,analytics,exam_setting'], {
-    env: WRITE_ENV,
-    client: asked.client
-  });
+  await cli(
+    ['form', 'get', 'Kp7mQ2', '--include', 'theme,rules,redirect_rules,extended,transactions,analytics,exam_setting'],
+    { env: WRITE_ENV, client: asked.client }
+  );
   await cli(['form', 'get', 'Kp7mQ2', '--include', 'setting'], { env: WRITE_ENV, client: settingOnly.client });
   const unknown = await cli(['form', 'get', 'Kp7mQ2', '--include', 'wallpaper'], {
     env: WRITE_ENV,
@@ -2458,6 +2472,7 @@ test('form get --include names the blocks, and setting is honoured by already be
     'include_exam_setting',
     'include_extended_attributes',
     'include_field_rules',
+    'include_redirect_rules',
     'include_theme',
     'include_transactions'
   ]);
@@ -2465,7 +2480,7 @@ test('form get --include names the blocks, and setting is honoured by already be
   assert.equal(unknown.exitCode, 2);
   assert.match(
     unknown.stderr,
-    /--include takes setting, theme, rules, extended, transactions, analytics, exam_setting/
+    /--include takes setting, theme, rules, redirect_rules, extended, transactions, analytics, exam_setting/
   );
 });
 
@@ -3049,6 +3064,226 @@ test('form image upload sends the image as a description image and answers with 
   assert.equal(mock.requests[0].path, '/api/v1/form_image_attachments');
   assert.equal((mock.requests[0].form as FormData).get('image_type'), 'description');
   assert.equal(JSON.parse(result.stdout).url, 'https://cdn.example/di/1.png');
+});
+
+test('form setting get and edit address the settings endpoint, which takes the WeChat share card', async () => {
+  const mock = createMockClient();
+  const share = { weixin_share: { title: '2026 年会报名', predefined_icon: 3 } };
+
+  await cli(['form', 'setting', 'get', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'setting', 'edit', 'Kp7mQ2', '--json', JSON.stringify(share)], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const empty = await cli(['form', 'setting', 'edit', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['GET /api/v1/forms/Kp7mQ2/setting', 'PATCH /api/v1/forms/Kp7mQ2/setting']
+  );
+  assert.deepEqual(mock.requests[1].body, share);
+  assert.equal(empty.exitCode, 2);
+  assert.match(empty.stderr, /pass --json, --share-icon or both/);
+});
+
+test('form setting edit --share-icon uploads the icon and sets it on the share card, beside what --json says', async () => {
+  const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'ws_1' } });
+
+  await cli(
+    [
+      'form',
+      'setting',
+      'edit',
+      'Kp7mQ2',
+      '--share-icon',
+      'package.json',
+      '--json',
+      '{"weixin_share":{"title":"报名"}}'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(mock.requests.length, 2);
+  assert.equal((mock.requests[0].form as FormData).get('image_type'), 'weixin_share_icon');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/setting');
+  assert.deepEqual(mock.requests[1].body, { weixin_share: { title: '报名', icon_attachment_id: 'ws_1' } });
+});
+
+test('form setting edit uploads nothing when --json already picks an icon, and says which went up when the save fails', async () => {
+  const clash = createMockClient();
+  const both = await cli(
+    [
+      'form',
+      'setting',
+      'edit',
+      'Kp7mQ2',
+      '--share-icon',
+      'package.json',
+      '--json',
+      '{"weixin_share":{"predefined_icon":3}}'
+    ],
+    { env: WRITE_ENV, client: clash.client }
+  );
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /--share-icon sets the icon, so weixin_share.predefined_icon cannot/);
+  assert.equal(clash.requests.length, 0);
+
+  const refusing = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      if (request.path === '/api/v1/form_image_attachments') return { attachment_id: 'ws_2' } as T;
+      throw new HttpError('customized_weixin_thumbnail is not in the plan', 402, {});
+    }
+  };
+  const refused = await cli(['form', 'setting', 'edit', 'Kp7mQ2', '--share-icon', 'package.json'], {
+    env: WRITE_ENV,
+    client: refusing
+  });
+  assert.notEqual(refused.exitCode, 0);
+  assert.match(refused.stderr, /uploaded package.json as icon_attachment_id ws_2, but saving the settings failed/);
+});
+
+test('form redirect-rule get reads the rules, and edit sends them as redirect_rules of a form update', async () => {
+  const mock = createMockClient();
+  const rules = {
+    add: [{ redirect_url: 'https://example.com/b', conditions: [{ trigger: 'field_3', value: 'B 卷' }] }]
+  };
+
+  await cli(['form', 'redirect-rule', 'get', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'redirect-rule', 'edit', 'Kp7mQ2', '--json', JSON.stringify(rules)], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['GET /api/v1/forms/Kp7mQ2/redirect_rules', 'PATCH /api/v1/forms/Kp7mQ2']
+  );
+  assert.deepEqual(mock.requests[1].body, { redirect_rules: rules });
+});
+
+test('form result-share list, get and delete address the share, and delete wants --yes', async () => {
+  const mock = createMockClient();
+
+  await cli(['form', 'result-share', 'list', 'Kp7mQ2'], { env: WRITE_ENV, client: mock.client });
+  await cli(['form', 'result-share', 'get', 'Kp7mQ2', 'Rs8kT2'], { env: WRITE_ENV, client: mock.client });
+  const unconfirmed = await cli(['form', 'result-share', 'delete', 'Kp7mQ2', 'Rs8kT2'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  await cli(['form', 'result-share', 'delete', 'Kp7mQ2', 'Rs8kT2', '--yes'], { env: WRITE_ENV, client: mock.client });
+
+  assert.equal(unconfirmed.exitCode, 2);
+  assert.match(unconfirmed.stderr, /pass --yes/);
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    [
+      'GET /api/v1/forms/Kp7mQ2/open_results',
+      'GET /api/v1/forms/Kp7mQ2/open_results/Rs8kT2',
+      'DELETE /api/v1/forms/Kp7mQ2/open_results/Rs8kT2'
+    ]
+  );
+});
+
+test('form result-share create and edit lay their flags over --json, a password beside the switch that asks for it', async () => {
+  const mock = createMockClient();
+
+  await cli(
+    [
+      'form',
+      'result-share',
+      'create',
+      'Kp7mQ2',
+      '--title',
+      '积分公示',
+      '--fields',
+      'field_2,field_3',
+      '--stats',
+      'field_3',
+      '--masked',
+      'field_2',
+      '--password',
+      '2026',
+      '--json',
+      '{"allowed_audience":"public","title":"overridden"}'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+  await cli(['form', 'result-share', 'edit', 'Kp7mQ2', 'Rs8kT2', '--no-password', '--disable'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const nothing = await cli(['form', 'result-share', 'edit', 'Kp7mQ2', 'Rs8kT2'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const opposite = await cli(['form', 'result-share', 'edit', 'Kp7mQ2', 'Rs8kT2', '--password', 'x', '--no-password'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+
+  assert.equal(mock.requests[0].method, 'POST');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/open_results');
+  assert.deepEqual(mock.requests[0].body, {
+    allowed_audience: 'public',
+    title: '积分公示',
+    readable_field_api_codes: ['field_2', 'field_3'],
+    report_field_api_codes: ['field_3'],
+    privacy_protected_field_api_codes: ['field_2'],
+    password_required: true,
+    access_password: '2026'
+  });
+  assert.equal(mock.requests[1].method, 'PATCH');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2/open_results/Rs8kT2');
+  assert.deepEqual(mock.requests[1].body, { enabled: false, password_required: false });
+  assert.equal(mock.requests.length, 2);
+  assert.equal(nothing.exitCode, 2);
+  assert.match(nothing.stderr, /name something to change/);
+  assert.equal(opposite.exitCode, 2);
+  assert.match(opposite.stderr, /--password and --no-password are opposites/);
+});
+
+test('form cooperator add adds every --user with the one --role, and needs both', async () => {
+  const mock = createMockClient();
+
+  await cli(
+    [
+      'form',
+      'cooperator',
+      'add',
+      'Kp7mQ2',
+      '--user',
+      '6512a1c2d3e4f5a6b7c8d9d3',
+      '--user',
+      '6512a1c2d3e4f5a6b7c8d9d4',
+      '--role',
+      'data_viewer'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+  const noUser = await cli(['form', 'cooperator', 'add', 'Kp7mQ2', '--role', 'manager'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const noRole = await cli(['form', 'cooperator', 'add', 'Kp7mQ2', '--user', '6512a1c2d3e4f5a6b7c8d9d3'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const badRole = await cli(
+    ['form', 'cooperator', 'add', 'Kp7mQ2', '--user', '6512a1c2d3e4f5a6b7c8d9d3', '--role', 'owner'],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(mock.requests.length, 1);
+  assert.equal(mock.requests[0].method, 'POST');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/cooperators');
+  assert.deepEqual(mock.requests[0].body, {
+    user_ids: ['6512a1c2d3e4f5a6b7c8d9d3', '6512a1c2d3e4f5a6b7c8d9d4'],
+    role: 'data_viewer'
+  });
+  assert.match(noUser.stderr, /--user is required/);
+  assert.match(noRole.stderr, /--role is required/);
+  assert.match(badRole.stderr, /--role must be one of manager, data_maintainer, data_viewer/);
+  for (const result of [noUser, noRole, badRole]) assert.equal(result.exitCode, 2);
 });
 
 test('opensearch edit --header uploads an image to the query and sets it as the header', async () => {
