@@ -1071,7 +1071,8 @@ export const FORM: readonly Command[] = [
   {
     path: ['form', 'cooperator', 'list'],
     summary: 'List the cooperators of a form',
-    args: [{ name: 'form', required: true, description: 'Form token' }],
+    description: "A table's token reads a table's cooperators the same way.",
+    args: [{ name: 'form', required: true, description: 'Form token, or a table token' }],
     request: (input) => call('listFormCooperators', { path: { form_token: input.args.form } })
   },
   {
@@ -1081,8 +1082,9 @@ export const FORM: readonly Command[] = [
       "As adding team members on the form's cooperation page does; no invitation is sent. Only active " +
       'members of the account can be added, by the id `account member list` shows. One deactivated, ' +
       'outside the account or a cooperator already (through a folder too) adds nobody, and so does ' +
-      'needing more seats than the form has left outside the Enterprise plans.',
-    args: [{ name: 'form', required: true, description: 'Form token' }],
+      'needing more seats than the form has left outside the Enterprise plans. A table token adds ' +
+      'cooperators to the table, which has only the manager and data_viewer roles.',
+    args: [{ name: 'form', required: true, description: 'Form token, or a table token' }],
     options: [
       {
         name: '--user',
