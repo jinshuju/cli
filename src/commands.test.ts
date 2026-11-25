@@ -2152,6 +2152,23 @@ test('opensearch edit turns a query on or off, but not both', async () => {
   assert.match(both.stderr, /--enable and --disable are opposites/);
 });
 
+test('opensearch delete wants --yes before it deletes the query', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) =>
+    cli(['opensearch', 'delete', 'Qy7nR3', ...args], { env: WRITE_ENV, client: mock.client });
+
+  const unconfirmed = await run([]);
+  assert.notEqual(unconfirmed.exitCode, 0);
+  assert.match(unconfirmed.stderr, /Deleting public query Qy7nR3 is permanent; pass --yes/);
+  assert.equal(mock.requests.length, 0);
+
+  await run(['--yes']);
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['DELETE /api/v1/opensearch/queries/Qy7nR3']
+  );
+});
+
 test('checkin create turns check-in on for a form, sending only what was named', async () => {
   const plain = createMockClient();
   const named = createMockClient();
