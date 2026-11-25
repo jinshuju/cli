@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/jinshuju/cli/compare/v0.29.1...v0.30.0) (2026-11-25)
+
+
+### Features
+
+* **opensearch:** delete a public query with opensearch delete ([#128](https://github.com/jinshuju/cli/issues/128)) ([372ac32](https://github.com/jinshuju/cli/commit/372ac320caa721b28238514bef9a816f2142a41b))
+
 ## [0.29.1](https://github.com/jinshuju/cli/compare/v0.29.0...v0.29.1) (2026-11-25)
 
 
