@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/jinshuju/cli/compare/v0.29.0...v0.29.1) (2026-11-25)
+
+
+### Fixes
+
+* **form:** name every key setting takes in form create --help ([f8f55f1](https://github.com/jinshuju/cli/commit/f8f55f1bad8334a2a027d6e068fc6bd4c15599f0))
+
 ## [0.29.0](https://github.com/jinshuju/cli/compare/v0.28.0...v0.29.0) (2026-11-25)
 
 
