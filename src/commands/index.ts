@@ -22,6 +22,7 @@ import { LOCAL } from './local.js';
 import { MESSAGE } from './message.js';
 import { NOTIFICATION } from './notification.js';
 import { OPENSEARCH } from './opensearch.js';
+import { PSEUDO_FORM } from './pseudo-form.js';
 import { ROUTINE } from './routine.js';
 import { SMS } from './sms.js';
 import { TABLE } from './table.js';
@@ -49,6 +50,11 @@ export const RESOURCES: readonly Resource[] = [
   { name: 'entry', summary: 'Manage entries' },
   { name: 'comment', summary: 'Manage entry comments' },
   { name: 'opensearch', summary: 'Manage public queries' },
+  {
+    name: 'pseudo-form',
+    summary: 'Pseudo forms (预填写): fill links with some fields already filled in, one per person or row',
+    note: 'Only a manager of the form can create, edit or delete them, and the form’s account needs 数据预填写 in its plan.'
+  },
   {
     name: 'notification',
     summary: 'Notification rules: SMS, email and WeChat to submitters, bots and webhooks to your team',
@@ -119,6 +125,7 @@ export const COMMANDS: readonly Command[] = [
   ...ENTRY,
   ...COMMENT,
   ...OPENSEARCH,
+  ...PSEUDO_FORM,
   ...NOTIFICATION,
   ...ROUTINE,
   ...CHECKIN,

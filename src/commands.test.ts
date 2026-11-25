@@ -4479,10 +4479,11 @@ test('fill get reads the page a fill link points at, from the link as shared or 
 
   await cli(['fill', 'get', 'https://acme.jinshuju.net/v/aB3dE9?x_field_1=1'], runtime);
   await cli(['fill', 'get', 'f/Kp7mQ2'], runtime);
+  await cli(['fill', 'get', 'https://acme.jsj.top/pf/Xy7Kp2'], runtime);
 
   assert.deepEqual(
     mock.requests.map((request) => `${request.method} ${url(request)}`),
-    ['GET /api/v1/fill/v/aB3dE9', 'GET /api/v1/fill/f/Kp7mQ2']
+    ['GET /api/v1/fill/v/aB3dE9', 'GET /api/v1/fill/f/Kp7mQ2', 'GET /api/v1/fill/pf/Xy7Kp2']
   );
 });
 
@@ -4519,6 +4520,105 @@ test('fill submit without --json is a usage error', async () => {
 
   assert.equal(result.exitCode, 2);
   assert.equal(mock.requests.length, 0);
+});
+
+test('fill submit posts through a pseudo form link to its own page', async () => {
+  const mock = createMockClient();
+  await cli(['fill', 'submit', 'pf/Xy7Kp2', '--json', '{"field_3":18}'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(url(mock.requests[0]), '/api/v1/fill/pf/Xy7Kp2/entries');
+  assert.deepEqual(mock.requests[0]?.body, { entry: { field_3: 18 } });
+});
+
+// --- pseudo-form -------------------------------------------------------------
+
+test('pseudo-form list reads the pseudo forms of the form, a page at a time', async () => {
+  const mock = createMockClient();
+  await cli(['pseudo-form', 'list', '--form', 'Kp7mQ2', '--limit', '20'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(
+    `${mock.requests[0]?.method} ${url(mock.requests[0])}`,
+    'GET /api/v1/forms/Kp7mQ2/pseudo_forms?limit=20'
+  );
+});
+
+test('pseudo-form create sends the name and the preset values', async () => {
+  const mock = createMockClient();
+  await cli(['pseudo-form', 'create', '--form', 'Kp7mQ2', '--name', '张三-上司', '--json', '{"field_1":"张三"}'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(`${mock.requests[0]?.method} ${url(mock.requests[0])}`, 'POST /api/v1/forms/Kp7mQ2/pseudo_forms');
+  assert.deepEqual(mock.requests[0]?.body, { name: '张三-上司', values: { field_1: '张三' } });
+});
+
+test('pseudo-form create --batch sends every item in one request', async () => {
+  const mock = createMockClient();
+  const items = [
+    { name: '张三-上司', values: { field_1: '张三' } },
+    { name: '李四-HRBP', values: { field_1: '李四' } }
+  ];
+  await cli(['pseudo-form', 'create', '--form', 'Kp7mQ2', '--batch', JSON.stringify(items)], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client: mock.client
+  });
+
+  assert.equal(`${mock.requests[0]?.method} ${url(mock.requests[0])}`, 'POST /api/v1/forms/Kp7mQ2/pseudo_forms/batch');
+  assert.deepEqual(mock.requests[0]?.body, { pseudo_forms: items });
+});
+
+test('pseudo-form create refuses what it cannot send, before sending anything', async () => {
+  const mock = createMockClient();
+  const runtime = { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client };
+
+  const neither = await cli(['pseudo-form', 'create', '--form', 'Kp7mQ2'], runtime);
+  const both = await cli(['pseudo-form', 'create', '--form', 'Kp7mQ2', '--name', 'x', '--batch', '[]'], runtime);
+  const notList = await cli(['pseudo-form', 'create', '--form', 'Kp7mQ2', '--batch', '{"values":{}}'], runtime);
+
+  assert.deepEqual([neither.exitCode, both.exitCode, notList.exitCode], [2, 2, 2]);
+  assert.match(neither.stderr, /--json is required/);
+  assert.match(both.stderr, /does not go with --json or --name/);
+  assert.match(notList.stderr, /--batch must be a list/);
+  assert.equal(mock.requests.length, 0);
+});
+
+test('pseudo-form edit sends only what is named, and refuses an edit that names nothing', async () => {
+  const mock = createMockClient();
+  const runtime = { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client };
+
+  await cli(['pseudo-form', 'edit', 'aB3dE9', '--form', 'Kp7mQ2', '--json', '{"field_2":null}'], runtime);
+  const nothing = await cli(['pseudo-form', 'edit', 'aB3dE9', '--form', 'Kp7mQ2'], runtime);
+
+  assert.equal(
+    `${mock.requests[0]?.method} ${url(mock.requests[0])}`,
+    'PATCH /api/v1/forms/Kp7mQ2/pseudo_forms/aB3dE9'
+  );
+  assert.deepEqual(mock.requests[0]?.body, { values: { field_2: null } });
+  assert.equal(nothing.exitCode, 2);
+  assert.equal(mock.requests.length, 1);
+});
+
+test('pseudo-form delete asks for --yes, deletes one by its own path and several in one request', async () => {
+  const mock = createMockClient();
+  const runtime = { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client: mock.client };
+
+  const unconfirmed = await cli(['pseudo-form', 'delete', 'aB3dE9', '--form', 'Kp7mQ2'], runtime);
+  await cli(['pseudo-form', 'delete', 'aB3dE9', '--form', 'Kp7mQ2', '--yes'], runtime);
+  await cli(['pseudo-form', 'delete', 'aB3dE9', 'Xy7Kp2', '--form', 'Kp7mQ2', '--yes'], runtime);
+
+  assert.equal(unconfirmed.exitCode, 2);
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${url(request)}`),
+    ['DELETE /api/v1/forms/Kp7mQ2/pseudo_forms/aB3dE9', 'DELETE /api/v1/forms/Kp7mQ2/pseudo_forms/batch']
+  );
+  assert.deepEqual(mock.requests[1]?.body, { tokens: ['aB3dE9', 'Xy7Kp2'] });
 });
 
 // --- routine -----------------------------------------------------------------

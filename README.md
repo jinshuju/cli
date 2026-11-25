@@ -331,8 +331,9 @@ rejected when combined with `--mine`.
 
 ## Filling in someone else's form
 
-A fill link — `…/f/<token>` for a form, `…/v/<token>` for a table's form view —
-can be filled from the CLI the way anyone with the link fills it in a browser:
+A fill link — `…/f/<token>` for a form, `…/v/<token>` for a table's form view,
+`…/pf/<token>` for a pseudo form — can be filled from the CLI the way anyone with
+the link fills it in a browser:
 
 ```bash
 jinshuju fill get https://acme.jinshuju.net/v/aB3dE9                          # what it asks for, and whether you can submit
@@ -344,6 +345,26 @@ back. The entry is recorded as yours. A page that asks for something only the
 person at it can do — a captcha, an SMS code, WeChat, a payment — lists it under
 `blockers`, and is refused until it is filled in a browser. An OAuth session
 needs the `submit_entries` scope for these.
+
+## Prefilled links (pseudo forms)
+
+A pseudo form (预填写) is a fill link that opens the form with some fields
+already filled in, such as one link per person to be reviewed. An entry
+submitted through it keeps the preset values whatever the filler types.
+
+```bash
+jinshuju pseudo-form create --form Kp7mQ2 --name 张三-上司 --json '{"field_1":"张三","field_2":"上司"}'
+jinshuju pseudo-form create --form Kp7mQ2 --batch @links.json      # [{"name": "...", "values": {...}}], up to 200
+jinshuju pseudo-form list --form Kp7mQ2 --all
+jinshuju pseudo-form edit aB3dE9 --form Kp7mQ2 --json '{"field_2":null}'   # null clears a preset; the rest keep theirs
+jinshuju pseudo-form delete aB3dE9 Xy7Kp2 --form Kp7mQ2 --yes
+```
+
+Each answer carries `fill_url`, the link to hand out. A batch makes the items it
+can and lists the others in `errors` by index. Values are written as
+`entry create` writes them, a choice by its code or its text. A field of a type
+that cannot be preset, such as an attachment, is refused by name. Only a manager
+of the form can, and the form's account needs 数据预填写 in its plan.
 
 ## Routines (自动任务)
 
