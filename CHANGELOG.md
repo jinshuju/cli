@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/jinshuju/cli/compare/v0.28.0...v0.29.0) (2026-11-25)
+
+
+### Features
+
+* **pseudo-form:** create, list, edit and delete pseudo forms, and fill a /pf/ link ([#121](https://github.com/jinshuju/cli/issues/121)) ([ce3e1ad](https://github.com/jinshuju/cli/commit/ce3e1ad063ac1c0bf1d2cd288169e881ac3b5c98))
+
 ## [0.28.0](https://github.com/jinshuju/cli/compare/v0.27.0...v0.28.0) (2026-11-24)
 
 
