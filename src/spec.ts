@@ -308,6 +308,19 @@ export function bodyChoices(id: OperationId, path: string): readonly string[] | 
   return enumOf(walk(OPERATIONS[id].body?.content['application/json'], path.split('.')), `${id} ${path}`);
 }
 
+/**
+ * The keys an object in a JSON body takes, walked to as `bodyChoices` walks:
+ * `setting`. For help that has to name every key, which a hand-kept list
+ * would name fewer of as the API learns more.
+ */
+export function bodyKeys(id: OperationId, path: string): readonly string[] | undefined {
+  const schema = walk(OPERATIONS[id].body?.content['application/json'], path.split('.'));
+  const keys = Object.keys((schema && resolved(schema).properties) ?? {});
+  if (keys.length > 0) return keys;
+  unanswered.push(`${id} ${path}`);
+  return undefined;
+}
+
 /** The schema the steps lead to: each names a property, and `[]` steps into a list's items. */
 function walk(from: Schema | undefined, steps: readonly string[]): Schema | undefined {
   let schema = from;

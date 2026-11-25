@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 import { runCli } from './cli.js';
 import { COMMANDS } from './commands/index.js';
+import { bodyKeys } from './spec.js';
 import { styleFor } from './style.js';
 import { VERSION } from './version.js';
 
@@ -156,6 +157,20 @@ for (const command of COMMANDS.filter((entry) => entry.payload?.length)) {
     assert.match(result.stdout, /jinshuju field (types|filterable|list)/);
   });
 }
+
+// Help that explained only the close rules and wording read as all setting
+// takes, and agents told users a confirmation code or hidden field numbers
+// could not be set from the command line.
+test('form create --help names every key setting takes, the ones it never explains included', async () => {
+  const { stdout } = await runCli(['form', 'create', '--help']);
+  const named = stdout.replace(/\s+/g, ' ');
+
+  for (const key of bodyKeys('createForm', 'setting') ?? []) {
+    assert.match(named, new RegExp(`[ :]${key}[,.]`), `setting.${key} is missing from the help`);
+  }
+  assert.match(named, / show_field_number,/);
+  assert.match(named, / gen_code_enabled,/);
+});
 
 test('a command that takes no payload shows no payload section', async () => {
   const result = await runCli(['form', 'list', '--help']);

@@ -27,9 +27,27 @@ import {
 } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 import { validateContainerPayload } from '../payload.js';
-import { bodyChoices, call, type OperationId } from '../spec.js';
+import { bodyChoices, bodyKeys, call, type OperationId } from '../spec.js';
 import { readableSize, upload, uploadedId, uploadFormImage } from './upload.js';
 import { isRecord } from '../values.js';
+
+/**
+ * Every key setting takes, from the spec. The paragraphs above explain a few;
+ * a key the help never names reads as one the CLI cannot write.
+ */
+function settingKeys(): string[] {
+  const keys = bodyKeys('createForm', 'setting');
+  if (!keys) return [];
+  const lines = ['Every key setting takes, in `form create` and `form edit` alike:'];
+  for (const key of keys) {
+    const last = lines.length - 1;
+    const joined = `${lines[last]} ${key},`;
+    if (last > 0 && joined.length <= 78) lines[last] = joined;
+    else lines.push(`${key},`);
+  }
+  lines[lines.length - 1] = lines[lines.length - 1]!.replace(/,$/, '.');
+  return [...lines, ''];
+}
 
 /**
  * The shape behind `--json` on a form, shown rather than described: `fields` is
@@ -74,6 +92,7 @@ const FORM_PAYLOAD: readonly string[] = [
   'not-open and fill-limit messages. A key left out keeps its text, and ""',
   'puts the default back.',
   '',
+  ...settingKeys(),
   'A form reads its fields back in the shape written here, each with the',
   'api_code the backend assigned, and a field read goes back through',
   '`field update` as it came. `field types` lists the types to write, and',
@@ -614,7 +633,7 @@ export const FORM: readonly Command[] = [
       'The payload carries the operations to apply: name, description, setting, layout, and fields as ' +
       '{add, update, update_choices, remove}. Only what is named changes. Switching layout keeps every ' +
       'field; the card layout hides the ones it cannot show and the classic layout shows them again. `form create --help` ' +
-      'shows what setting takes, the close rules among it; `form setting edit` writes the few settings this ' +
+      'lists every key setting takes and explains the close rules among them; `form setting edit` writes the few settings this ' +
       'payload cannot, the WeChat share card among them. Display and redirect rules have commands of their ' +
       'own: `form rule edit` and `form redirect-rule edit`.',
     args: [{ name: 'form', required: true, description: 'Form token' }],
