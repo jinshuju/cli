@@ -1,6 +1,6 @@
 import { JSON_OPTION, UsageError } from '../options.js';
 import { call } from '../spec.js';
-import { overriding, payload } from './shared.js';
+import { YES_OPTION, confirmed, overriding, payload } from './shared.js';
 import type { Command } from './types.js';
 import { uploadFormImage } from './upload.js';
 
@@ -71,5 +71,19 @@ export const OPENSEARCH: readonly Command[] = [
       return client.request(call('updateOpensearchQuery', { path: { query_token: input.args.query }, body }));
     },
     examples: ['jinshuju opensearch edit Qy7nR3 --disable', 'jinshuju opensearch edit Qy7nR3 --header ./banner.png']
+  },
+  {
+    path: ['opensearch', 'delete'],
+    summary: 'Delete a public query',
+    description:
+      'Its link stops working for good and nothing restores it. To close the link for now and keep ' +
+      'the query, `opensearch edit <query> --disable` instead.',
+    args: [{ name: 'query', required: true, description: 'Public query token' }],
+    options: [YES_OPTION],
+    request: (input) => {
+      confirmed(input, `Deleting public query ${input.args.query}`);
+      return call('deleteOpensearchQuery', { path: { query_token: input.args.query } });
+    },
+    examples: ['jinshuju opensearch delete Qy7nR3 --yes']
   }
 ];

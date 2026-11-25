@@ -6495,6 +6495,42 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+      - OpenSearch
+      summary: Delete a public query
+      description: |
+        Deletes a public query the caller created; on success, returns the query token. Nothing restores it, and its link stops working for good.
+        - To close the link for now and keep the query, update it with `enabled: false` instead.
+
+        OAuth scope: forms
+      operationId: deleteOpensearchQuery
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - token
+                properties:
+                  token:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          description: 'Forbidden: the OAuth token lacks the required scope, or the call comes from a routine run'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
   "/opensearch/query_suggestions":
     get:
       tags:
@@ -18344,6 +18380,7 @@ components:
       - name
       - enabled
       - form_token
+      - form_name
       - created_at
       - searches_count
       - views_count
@@ -18365,6 +18402,11 @@ components:
           - string
           - 'null'
           description: Token of the form it belongs to; null when the form has been deleted
+        form_name:
+          type:
+          - string
+          - 'null'
+          description: Name of the form it belongs to; null when the form has been deleted
         created_at:
           type: string
           format: date-time

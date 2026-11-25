@@ -65,6 +65,7 @@ export type OperationId =
   | 'deleteMessageChannel'
   | 'deleteNotificationRule'
   | 'deleteOpenResult'
+  | 'deleteOpensearchQuery'
   | 'deletePseudoForm'
   | 'deletePseudoFormsBatch'
   | 'deleteRoutine'
@@ -827,6 +828,11 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'token', in: 'path', required: true, schema: { type: 'string' } }
     ]
+  },
+  deleteOpensearchQuery: {
+    method: 'DELETE',
+    path: '/opensearch/queries/{query_token}',
+    parameters: [{ name: 'query_token', in: 'path', required: true, schema: { type: 'string' } }]
   },
   deletePseudoForm: {
     method: 'DELETE',
