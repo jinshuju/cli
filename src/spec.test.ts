@@ -8,6 +8,7 @@ import { validate } from './schema.js';
 import {
   BASE_PATH,
   bodyChoices,
+  bodyKeys,
   call,
   choices,
   operation,
@@ -124,6 +125,8 @@ test('flags read their values off the spec rather than a copy of it', () => {
   assert.ok(bodyChoices('createForm', 'scene')?.includes('quickpay'));
   assert.ok(bodyChoices('createTable', 'fields[].type')?.includes('TextArea'));
   assert.deepEqual(bodyChoices('createFolder', 'kind'), ['form', 'table']);
+  // An object's keys are read off a $ref the same way.
+  assert.ok(bodyKeys('updateForm', 'setting')?.includes('gen_code_enabled'));
   // A document a parameter carries is walked the way a body is.
   assert.ok(choices('listEntries', 'filters[].operator')?.includes('within_last'));
   assert.ok(choices('aggregateEntries', 'metrics[].func')?.includes('median'));
