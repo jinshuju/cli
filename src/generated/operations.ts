@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-24';
+export const SPEC_DATE: string | undefined = '2026-11-26';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -59,6 +59,7 @@ export type OperationId =
   | 'deleteEntry'
   | 'deleteEntryComment'
   | 'deleteForm'
+  | 'deleteFormCooperator'
   | 'deleteFormView'
   | 'deleteFormWebhook'
   | 'deleteMemoryNotes'
@@ -207,6 +208,7 @@ export type OperationId =
   | 'updateEvaluationSetting'
   | 'updateExamSetting'
   | 'updateForm'
+  | 'updateFormCooperator'
   | 'updateFormSetting'
   | 'updateFormTheme'
   | 'updateFormView'
@@ -781,6 +783,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'DELETE',
     path: '/forms/{form_token}',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  deleteFormCooperator: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/cooperators/{user_id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'user_id', in: 'path', required: true, schema: { type: 'string', pattern: '^[0-9a-f]{24}$' } }
+    ]
   },
   deleteFormView: {
     method: 'DELETE',
@@ -2194,6 +2204,15 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'FormUpdateInput' } } }
   },
+  updateFormCooperator: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/cooperators/{user_id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'user_id', in: 'path', required: true, schema: { type: 'string', pattern: '^[0-9a-f]{24}$' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'CooperatorUpdateInput' } } }
+  },
   updateFormSetting: {
     method: 'PATCH',
     path: '/forms/{form_token}/setting',
@@ -2517,6 +2536,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2608,6 +2628,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2635,6 +2656,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2722,6 +2744,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2775,6 +2798,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -2782,6 +2806,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
+      presentation_style: { type: ['string', 'null'], enum: ['list', 'dropdown', null] },
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
@@ -2884,7 +2909,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       selected: { type: 'boolean' },
       description_text: { type: ['string', 'null'] },
       description_url: { type: ['string', 'null'] },
-      is_other: { type: 'boolean' }
+      is_other: { type: 'boolean' },
+      allow_extended_text: { type: 'boolean' },
+      extended_text_required: { type: 'boolean' },
+      extended_text_placeholder: { type: 'string', maxLength: 500 },
+      position: { type: 'integer', minimum: 0 }
     }
   },
   ChoiceUpdateInput: {
@@ -2910,7 +2939,11 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
             quota: { type: ['integer', 'null'], minimum: 0 },
             recover_quota: { type: 'integer', minimum: 1 },
             description_text: { type: ['string', 'null'] },
-            description_url: { type: ['string', 'null'] }
+            description_url: { type: ['string', 'null'] },
+            allow_extended_text: { type: 'boolean' },
+            extended_text_required: { type: 'boolean' },
+            extended_text_placeholder: { type: ['string', 'null'], maxLength: 500 },
+            position: { type: 'integer', minimum: 0 }
           },
           additionalProperties: false
         }
@@ -2925,6 +2958,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       user_ids: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string', pattern: '^[0-9a-f]{24}$' } },
       role: { type: 'string', enum: ['manager', 'data_maintainer', 'data_viewer'] }
     },
+    additionalProperties: false
+  },
+  CooperatorUpdateInput: {
+    type: 'object',
+    required: ['role'],
+    properties: { role: { type: 'string', enum: ['manager', 'data_maintainer', 'data_viewer'] } },
     additionalProperties: false
   },
   CopyFormInput: {
@@ -2980,6 +3019,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -3000,6 +3040,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -3084,6 +3125,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -3114,6 +3156,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -3156,6 +3199,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 }
@@ -3186,6 +3230,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -3763,6 +3808,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       hidden: { type: 'boolean' },
       allow_extended_text: { type: 'boolean' },
       extended_text_required: { type: 'boolean' },
+      extended_text_placeholder: { type: ['string', 'null'] },
       description_text: { type: ['string', 'null'] },
       description_url: { type: ['string', 'null'] },
       attachment_id: { type: 'string' },
@@ -3840,6 +3886,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       sms_verification: { type: 'boolean' },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
+      presentation_style: { type: ['string', 'null'], enum: ['list', 'dropdown', null] },
       random_choices: { type: 'boolean' },
       hide_choice_when_quota_empty: { type: 'boolean' },
       quota_blank_warning: { type: ['string', 'null'] },
@@ -4131,6 +4178,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       confirm_data_loss: { type: 'boolean' },
       label: { type: ['string', 'null'] },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       unique: { type: 'boolean' },
@@ -4162,6 +4210,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       hide_quota: { type: 'boolean' },
       grids_to_occupy: { type: ['integer', 'null'], minimum: 1, maximum: 3 },
       start_new_row: { type: 'boolean' },
+      presentation_style: { type: ['string', 'null'], enum: ['list', 'dropdown', null] },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
       with_exclusive_choice: { type: 'boolean' },
@@ -4335,6 +4384,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -4387,6 +4437,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -4450,6 +4501,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -4805,7 +4857,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       notes: { type: ['string', 'null'] },
       private: { type: ['boolean', 'null'] },
       position: { type: ['integer', 'null'] },
-      validations: { type: 'array', items: { type: 'string' } }
+      validations: { type: 'array', items: { type: 'string' } },
+      privacy_safe: { type: ['boolean', 'null'] }
     },
     additionalProperties: false
   },
@@ -4971,6 +5024,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 }
@@ -4985,6 +5039,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5169,6 +5224,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5200,6 +5256,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5220,6 +5277,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5261,7 +5319,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       description_url: { type: ['string', 'null'] },
       image_url: { type: 'string' },
       image_base64: { type: 'string' },
-      attachment_id: { type: 'string' }
+      attachment_id: { type: 'string' },
+      position: { type: 'integer', minimum: 0 }
     }
   },
   ImageMultiSelectInput: {
@@ -5273,6 +5332,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5328,6 +5388,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5356,6 +5417,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5396,6 +5458,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5444,6 +5507,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5513,6 +5577,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5530,6 +5595,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5670,6 +5736,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5693,6 +5760,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5700,6 +5768,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       choices: { type: 'array', minItems: 1, items: { $ref: 'ChoiceInput' }, maxItems: 1000 },
       calculable: { type: 'boolean' },
       choices_layout: { type: ['string', 'null'] },
+      presentation_style: { type: ['string', 'null'], enum: ['list', 'dropdown', null] },
       random_choices: { type: 'boolean' },
       minimum_length: { type: ['integer', 'null'], minimum: 0 },
       maximum_length: { type: ['integer', 'null'], minimum: 0 },
@@ -5751,6 +5820,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5767,6 +5837,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5855,6 +5926,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5871,6 +5943,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -5933,6 +6006,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -6157,6 +6231,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -6188,6 +6263,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -6206,6 +6282,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -6431,6 +6508,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -6993,6 +7071,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7028,6 +7107,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7077,6 +7157,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7206,6 +7287,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7222,6 +7304,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7276,6 +7359,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7297,6 +7381,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7434,6 +7519,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
@@ -7464,6 +7550,7 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       label: { type: ['string', 'null'] },
       cid: { type: 'string' },
       notes: { type: ['string', 'null'] },
+      customized_validation_message: { type: ['string', 'null'], maxLength: 50 },
       private: { type: 'boolean' },
       required: { type: 'boolean' },
       position: { type: 'integer', minimum: 0 },
