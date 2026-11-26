@@ -3888,6 +3888,20 @@ test('delete and remove reach the same command, whichever one a resource names i
   assert.match(help.stdout, /Usage: jinshuju field remove/);
 });
 
+test('create and add, update and edit, show and get, ls and list reach the same command', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+  const usage = async (words: string[]) =>
+    /Usage: jinshuju ([a-z -]+?) [<[]/.exec((await cli([...words, '--help'], { env })).stdout)?.[1];
+
+  assert.equal(await usage(['field', 'create']), 'field add');
+  assert.equal(await usage(['form', 'add']), 'form create');
+  assert.equal(await usage(['field', 'edit']), 'field update');
+  assert.equal(await usage(['form', 'update']), 'form edit');
+  assert.equal(await usage(['form', 'show']), 'form get');
+  assert.equal(await usage(['form', 'ls']), 'form list');
+  assert.equal(await usage(['form', 'cooperator', 'create']), 'form cooperator add');
+});
+
 test('an unknown command is answered with the nearest commands of its resource first', async () => {
   const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
 
