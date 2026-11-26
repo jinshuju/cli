@@ -1,6 +1,7 @@
 import { FILTER_OPTION, FILTERS_OPTION, JSON_OPTION, PAGINATION_OPTIONS, SORT_OPTION } from '../options.js';
 import { bodyChoices, call } from '../spec.js';
 import {
+  FOLDER_FILTER_OPTION,
   FOLDER_OPTION,
   LISTING,
   PREVIEW_OPTION,
@@ -35,6 +36,7 @@ export const TABLE: readonly Command[] = [
         placeholder: '<kw>',
         description: 'Match tables whose name contains the keyword'
       },
+      FOLDER_FILTER_OPTION,
       FILTER_OPTION,
       FILTERS_OPTION,
       SORT_OPTION,

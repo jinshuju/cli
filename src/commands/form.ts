@@ -9,6 +9,7 @@ import {
   type OptionSpec
 } from '../options.js';
 import {
+  FOLDER_FILTER_OPTION,
   FOLDER_OPTION,
   LISTING,
   PREVIEW_OPTION,
@@ -513,7 +514,9 @@ export const FORM: readonly Command[] = [
   {
     path: ['form', 'list'],
     summary: 'List forms',
-    description: 'Filters act on the form itself: form_name, created_at, last_entry_created_at, entries_count.',
+    description:
+      'Filters act on the form itself: form_name, created_at, last_entry_created_at, entries_count, ' +
+      'folder_token (or --folder).',
     options: [
       {
         name: '--name',
@@ -523,6 +526,7 @@ export const FORM: readonly Command[] = [
         description: 'Match forms whose name contains the keyword, repeatable'
       },
       { name: '--with-transactions', type: 'boolean', description: "Carry each payment form's collected totals" },
+      FOLDER_FILTER_OPTION,
       MINE_OPTION,
       FILTER_OPTION,
       FILTERS_OPTION,
@@ -531,7 +535,7 @@ export const FORM: readonly Command[] = [
     ],
     request: (input) => {
       if (input.options.mine) {
-        refuseWithMine(input, ['name', 'with_transactions', 'filter', 'filters', 'sort']);
+        refuseWithMine(input, ['name', 'with_transactions', 'folder', 'filter', 'filters', 'sort']);
         return call('listMyFilledForms', { query: paging(input) });
       }
       return call('listForms', {
@@ -548,7 +552,8 @@ export const FORM: readonly Command[] = [
     examples: [
       'jinshuju form list --name 报名',
       'jinshuju form list --sort entries_count:desc --limit 10',
-      'jinshuju form list --mine'
+      'jinshuju form list --mine',
+      'jinshuju form list --folder Fd2xK8 --all'
     ]
   },
   {

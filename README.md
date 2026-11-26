@@ -305,7 +305,8 @@ than a prompt nobody is there to answer.
 ## Searching across containers
 
 ```bash
-jinshuju entry search "Acme Corp"                     # every form and table you can read, up to 10
+jinshuju entry search "Acme Corp"                     # every form you can read, however many; see unsearched_count
+jinshuju entry search "Acme Corp" --next <next>       # carry on one that stopped short
 jinshuju entry search 13800138000 --form Kp7mQ2 --form Vn4xR8
 jinshuju entry search repair --scope-filter 'entries_count gt 100'   # picks which forms to search, not which rows
 
@@ -699,6 +700,7 @@ jinshuju artifact share set Xy7Qm2PaLk9W --audience private    # the link still 
 
 ```bash
 jinshuju form list --name signup --name survey   # several keywords match any, not one joined phrase
+jinshuju form list --folder Fd2xK8 --all          # only the forms filed in that folder
 jinshuju entry list --form Kp7mQ2 --labels       # carry the field label with each value, saving a form read
 jinshuju table move Vn4xR8 --folder Nf7mDC       # a table only goes into a kind=table folder
 jinshuju table create --json @t.json --with-default-entries   # seed a few blank rows, as the web UI does
