@@ -138,11 +138,23 @@ export const COMMANDS: readonly Command[] = [
 ];
 
 /**
- * Words that name the same verb. Some resources delete and others remove, after
- * what the API calls it, and nobody remembers which; either one reaches the
- * command, and the one written out still wins where both exist.
+ * Words that name the same verb. Some resources delete and others remove, some
+ * edit and others update, after what the API calls it, and nobody remembers
+ * which; any word of a group reaches the command, and the one written out still
+ * wins where both exist. No resource has two of one group, and every update or
+ * edit changes only what it names, so a synonym never lands on a command that
+ * does more than the word said.
  */
-const SAME_VERB: Readonly<Record<string, string>> = { delete: 'remove', remove: 'delete' };
+const VERB_GROUPS: readonly (readonly string[])[] = [
+  ['delete', 'remove'],
+  ['create', 'add'],
+  ['update', 'edit'],
+  ['get', 'show'],
+  ['list', 'ls']
+];
+const SAME_VERB: ReadonlyMap<string, readonly string[]> = new Map(
+  VERB_GROUPS.flatMap((group) => group.map((word) => [word, group.filter((other) => other !== word)] as const))
+);
 
 /** The command whose path the words begin with, longest match first; a spelled-out match beats a synonym. */
 export function findCommand(words: readonly string[], commands: readonly Command[] = COMMANDS): Command | undefined {
@@ -151,7 +163,7 @@ export function findCommand(words: readonly string[], commands: readonly Command
   for (const command of commands) {
     if (command.path.length > words.length) continue;
     const parts = command.path.map((part, index) =>
-      words[index] === part ? 'exact' : SAME_VERB[words[index] as string] === part ? 'synonym' : 'miss'
+      words[index] === part ? 'exact' : SAME_VERB.get(words[index] as string)?.includes(part) ? 'synonym' : 'miss'
     );
     if (parts.includes('miss')) continue;
     const exact = !parts.includes('synonym');
