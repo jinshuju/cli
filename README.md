@@ -235,6 +235,8 @@ jinshuju form theme set Kp7mQ2 --primary-color "#1F6FEB"
 jinshuju form setting edit Kp7mQ2 --json '{"weixin_share":{"title":"2026 年会报名"}}'   # the card a link shows in WeChat
 jinshuju form redirect-rule edit Kp7mQ2 --json @redirect-rules.json   # where a submission meeting conditions goes instead
 jinshuju form cooperator add Kp7mQ2 --user 6512a1c2d3e4f5a6b7c8d9d3 --role data_viewer   # account members; no invitation is sent
+jinshuju form cooperator update Kp7mQ2 6512a1c2d3e4f5a6b7c8d9d3 --role data_maintainer   # user_id from form cooperator list
+jinshuju form cooperator remove Kp7mQ2 6512a1c2d3e4f5a6b7c8d9d3 --yes
 jinshuju form result-share create Kp7mQ2 --fields field_2,field_3 --stats field_3     # a link to the results, answered in url
 jinshuju table create --json @table.json --folder Nf7mDC
 jinshuju table edit Vn4xR8 --json '{"name":"2026 ledger"}'

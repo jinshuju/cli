@@ -59,6 +59,7 @@ export type OperationId =
   | 'deleteEntry'
   | 'deleteEntryComment'
   | 'deleteForm'
+  | 'deleteFormCooperator'
   | 'deleteFormView'
   | 'deleteFormWebhook'
   | 'deleteMemoryNotes'
@@ -207,6 +208,7 @@ export type OperationId =
   | 'updateEvaluationSetting'
   | 'updateExamSetting'
   | 'updateForm'
+  | 'updateFormCooperator'
   | 'updateFormSetting'
   | 'updateFormTheme'
   | 'updateFormView'
@@ -781,6 +783,14 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     method: 'DELETE',
     path: '/forms/{form_token}',
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }]
+  },
+  deleteFormCooperator: {
+    method: 'DELETE',
+    path: '/forms/{form_token}/cooperators/{user_id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'user_id', in: 'path', required: true, schema: { type: 'string', pattern: '^[0-9a-f]{24}$' } }
+    ]
   },
   deleteFormView: {
     method: 'DELETE',
@@ -2194,6 +2204,15 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
     parameters: [{ name: 'form_token', in: 'path', required: true, schema: { type: 'string' } }],
     body: { required: true, content: { 'application/json': { $ref: 'FormUpdateInput' } } }
   },
+  updateFormCooperator: {
+    method: 'PATCH',
+    path: '/forms/{form_token}/cooperators/{user_id}',
+    parameters: [
+      { name: 'form_token', in: 'path', required: true, schema: { type: 'string' } },
+      { name: 'user_id', in: 'path', required: true, schema: { type: 'string', pattern: '^[0-9a-f]{24}$' } }
+    ],
+    body: { required: true, content: { 'application/json': { $ref: 'CooperatorUpdateInput' } } }
+  },
   updateFormSetting: {
     method: 'PATCH',
     path: '/forms/{form_token}/setting',
@@ -2925,6 +2944,12 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       user_ids: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string', pattern: '^[0-9a-f]{24}$' } },
       role: { type: 'string', enum: ['manager', 'data_maintainer', 'data_viewer'] }
     },
+    additionalProperties: false
+  },
+  CooperatorUpdateInput: {
+    type: 'object',
+    required: ['role'],
+    properties: { role: { type: 'string', enum: ['manager', 'data_maintainer', 'data_viewer'] } },
     additionalProperties: false
   },
   CopyFormInput: {

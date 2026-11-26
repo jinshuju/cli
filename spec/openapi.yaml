@@ -2798,6 +2798,7 @@ paths:
       description: |
         Adds members of the caller's account to the form, all with one predefined role, as adding team members on the form's cooperation page does; no invitation is sent.
         OAuth scope: forms
+        - Takes the predefined admin role on the form (a custom role does not count; an account token needs none) and, on an Enterprise form, membership of its account.
         - `user_ids` are ids of active members from GET /billing_account/users. If any of them is deactivated, outside the account, or already a cooperator on the form (also through a folder), nothing is added.
         - A table has only the manager and data_viewer roles.
         - Outside the Enterprise plans, each form has a fixed number of cooperator seats besides its creator; a request needing more seats than are left adds nobody.
@@ -2838,7 +2839,7 @@ paths:
         '402':
           $ref: '#/components/responses/PaymentRequired'
         '403':
-          description: The OAuth token lacks the forms scope, the caller is not an admin of the form or, on an Enterprise form, not a member of its account, or the form has too few cooperator seats left
+          description: The OAuth token lacks the forms scope, the caller does not hold the predefined admin role on the form (a custom role does not count) or, on an Enterprise form, is not a member of its account, or the form has too few cooperator seats left
           content:
             application/json:
               schema:
@@ -2847,6 +2848,121 @@ paths:
           $ref: '#/components/responses/NotFound'
         '415':
           description: The body is not application/json
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/forms/{form_token}/cooperators/{user_id}":
+    parameters:
+    - $ref: '#/components/parameters/FormToken'
+    - name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9a-f]{24}$"
+      description: The cooperator's `user_id` from GET /forms/{form_token}/cooperators
+    patch:
+      tags:
+      - Forms
+      summary: Change a cooperator's role
+      description: |
+        Gives the cooperator another predefined role, as changing a role on the form's cooperation page does.
+        OAuth scope: forms
+        - Takes the predefined admin role on the form (a custom role does not count; an account token needs none) and, on an Enterprise form, membership of its account.
+        - A table has only the manager and data_viewer roles.
+        - The form's creator and its only manager keep the manager role.
+        - A cooperator whose role comes from a folder the form is in gets this role on the form itself, which takes precedence over the folder's.
+      operationId: updateFormCooperator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CooperatorUpdateInput'
+      responses:
+        '200':
+          description: The cooperator with the new role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cooperator'
+        '400':
+          description: The role does not exist on a table, or the user is the creator or the only manager
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          description: The OAuth token lacks the forms scope, or the caller does not hold the predefined admin role on the form (a custom role does not count) or, on an Enterprise form, is not a member of its account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The form cannot be found, or the user is not a cooperator on it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: The body is not application/json
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Forms
+      summary: Remove a cooperator
+      description: |
+        Removes the user from the form's cooperators, as removing them on the form's cooperation page does.
+        OAuth scope: forms
+        - Takes the predefined admin role on the form (a custom role does not count; an account token needs none) and, on an Enterprise form, membership of its account; a cooperator removing themselves to leave the form needs neither, unless a folder the form is in also gives them a role.
+        - The form's creator and its only manager cannot be removed.
+        - A role that comes from a folder the form is in can only be removed on that folder; when the user also has a role on the form itself, that one is removed and the folder's then applies, as `role` in the response says.
+      operationId: deleteFormCooperator
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - user_id
+                - role
+                properties:
+                  user_id:
+                    type: string
+                    description: Id of the user removed
+                  role:
+                    type:
+                    - string
+                    - 'null'
+                    description: The role a folder the form is in still gives the user, which now applies; null when they are no longer a cooperator
+        '400':
+          description: The user is the creator or the only manager, or has a role only through a folder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          description: The OAuth token lacks the forms scope, or, removing someone else or leaving while a folder still gives a role, the caller does not hold the predefined admin role on the form (a custom role does not count) or, on an Enterprise form, is not a member of its account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The form cannot be found, or the user is not a cooperator on it
           content:
             application/json:
               schema:
@@ -16259,6 +16375,19 @@ components:
           - data_maintainer
           - data_viewer
           description: 'Role for every user added: manager administers the form, data_maintainer adds, reads, edits, deletes and exports entries, data_viewer reads and exports them'
+      additionalProperties: false
+    CooperatorUpdateInput:
+      type: object
+      required:
+      - role
+      properties:
+        role:
+          type: string
+          enum:
+          - manager
+          - data_maintainer
+          - data_viewer
+          description: 'The new role: manager administers the form, data_maintainer adds, reads, edits, deletes and exports entries, data_viewer reads and exports them; an outside cooperator on an Enterprise form keeps whatever export and messaging rights the cooperation page gave them'
       additionalProperties: false
     FormWeixinOauthSessionInput:
       type: object
