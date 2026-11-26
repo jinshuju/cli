@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/jinshuju/cli/compare/v0.32.0...v0.33.0) (2026-11-26)
+
+
+### Features
+
+* search every form in reach by following next, and list forms and tables by folder ([5886fe5](https://github.com/jinshuju/cli/commit/5886fe5c7616571f2ad3923a02522ada454d6a35))
+
 ## [0.32.0](https://github.com/jinshuju/cli/compare/v0.31.0...v0.32.0) (2026-11-26)
 
 
