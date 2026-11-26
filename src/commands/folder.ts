@@ -1,14 +1,15 @@
-import { LIMIT_OPTION } from '../options.js';
+import { PAGINATION_OPTIONS } from '../options.js';
 import { bodyChoices, call } from '../spec.js';
-import { given, paging } from './shared.js';
+import { LISTING, given, paging } from './shared.js';
 import type { Command } from './types.js';
 
 export const FOLDER: readonly Command[] = [
   {
     path: ['folder', 'list'],
     summary: 'List folders',
-    options: [LIMIT_OPTION],
-    request: (input) => call('listFolders', { query: paging(input) })
+    options: [...PAGINATION_OPTIONS],
+    request: (input) => call('listFolders', { query: paging(input) }),
+    paginate: LISTING
   },
   {
     path: ['folder', 'get'],

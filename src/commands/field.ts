@@ -1,5 +1,7 @@
 import { CONTAINER_OPTIONS, JSON_OPTION, UsageError, type OptionSpec } from '../options.js';
+import type { HttpClient } from '../http.js';
 import { call, choices } from '../spec.js';
+import { isRecord } from '../values.js';
 import { YES_OPTION, confirmed, onContainer, one, payload, requiredOption } from './shared.js';
 import type { Command, CommandInput } from './types.js';
 
@@ -15,9 +17,9 @@ const FIELD_PAYLOAD: readonly string[] = [
   'A field as `form get` or `field list` returns it can be written back as it is, whole or',
   'a few of its keys:',
   '  null for a setting clears it, or puts it back to its default',
-  '  choices are changed with `field update-choices`; `field update` takes them as read,',
-  '    which changes nothing, and replaces them only on a CascadeDropDown or with a `type`',
-  '    that turns a text field into a choice field',
+  '  choices on `field update` are the whole list the field should have, in its order: each',
+  '    is matched by api_code or text, a new one is added, one left out is removed (--yes if',
+  '    it holds answers). `field update-choices` makes single changes',
   "  a key no write can change, like api_code_alias or a choice's hidden, goes back only as",
   '    it was read; the API answers which key when one differs',
   '',
@@ -48,6 +50,167 @@ function checks(input: CommandInput, parse: (target: string) => Record<string, u
   const all = [...fromArgs, ...fromJson];
   if (all.length === 0) throw new UsageError('name at least one target, as an argument or through --json');
   return all;
+}
+
+/**
+ * Whether each target may hold answers, asked of the same check `field check`
+ * makes. Only a plain "no data" counts as none: a target the check could not
+ * read, or a check that failed, is taken to hold some, so the caller is asked
+ * rather than an answer lost. The reason a check failed rides along.
+ */
+async function holdingData(
+  client: HttpClient,
+  input: CommandInput,
+  targets: readonly Record<string, unknown>[]
+): Promise<{ holding: boolean[]; unsure?: string }> {
+  try {
+    const body = await client.request(
+      onContainer(input, 'checkFormFieldData', 'checkTableFieldData', {
+        query: { checks: JSON.stringify(targets) }
+      })
+    );
+    const results = isRecord(body) && Array.isArray(body.results) ? body.results : [];
+    return { holding: targets.map((_, index) => !(isRecord(results[index]) && results[index].has_data === false)) };
+  } catch (error) {
+    return { holding: targets.map(() => true), unsure: (error as Error).message };
+  }
+}
+
+/**
+ * Removing what holds no answers loses nothing, so it goes ahead unasked; only
+ * what does, or might, waits for --yes. Asking for a confirmation that guards
+ * nothing taught callers to add --yes to every remove, which is the habit that
+ * would let the one that matters through.
+ */
+async function confirmedIfHolding(
+  client: HttpClient,
+  input: CommandInput,
+  targets: readonly Record<string, unknown>[],
+  what: string
+): Promise<void> {
+  if (input.options.yes || targets.length === 0) return;
+  const { holding, unsure } = await holdingData(client, input, targets);
+  if (!holding.some(Boolean)) return;
+  const reason = unsure === undefined ? 'holds answers' : `may hold answers (the check failed: ${unsure})`;
+  confirmed(input, `${what} ${reason}, and removing it deletes them`, 'for good');
+}
+
+/** The operations as given, with a choice to update named by `name` read as its `value`. */
+function choiceChanges(given: unknown): Record<string, unknown> {
+  const changes = given as Record<string, unknown>;
+  return Array.isArray(changes.update) ? { ...changes, update: changes.update.map(withValue) } : changes;
+}
+
+/** A choice as a caller writes it: its text, from `value`, `name`, or the bare string. */
+function choiceText(choice: unknown): string | undefined {
+  if (typeof choice === 'string') return choice;
+  if (!isRecord(choice)) return undefined;
+  const text = choice.value ?? choice.name;
+  return typeof text === 'string' ? text : undefined;
+}
+
+/** What `update_choices` calls `value`, written as `name`, which `add` takes and `update` does not. */
+function withValue(item: unknown): unknown {
+  if (!isRecord(item) || item.name === undefined || item.value !== undefined) return item;
+  const { name, ...rest } = item;
+  return { ...rest, value: name };
+}
+
+/**
+ * A whole list of choices on `field update`, the shape `field add` takes, turned
+ * into the operations the API takes instead: one that names its choices in full
+ * is refused there, and "these are the choices now" has only one meaning. Each
+ * is matched to a choice the field has by api_code, else by its text; one with
+ * no match is added, and a choice the list leaves out is removed.
+ *
+ * The list's order is the order asked for. When removing and appending leave
+ * the choices in it already, no position is sent; otherwise every choice that
+ * stays and every one added gets one (`placed`).
+ */
+function choiceOperations(
+  current: readonly Record<string, unknown>[],
+  given: readonly unknown[]
+): { add: unknown[]; update: Record<string, unknown>[]; remove: Record<string, unknown>[] } {
+  // Each slot of the list asked for: a choice the field has, by its index, or one to add.
+  const slots: ({ kept: number } | { added: unknown })[] = [];
+  const changes = new Map<number, Record<string, unknown>>();
+  for (const item of given) {
+    const code = isRecord(item) ? item.api_code : undefined;
+    const text = choiceText(item);
+    const index = current.findIndex((choice) =>
+      code !== undefined ? choice.api_code === code : choice.value === text
+    );
+    if (index === -1 || slots.some((slot) => 'kept' in slot && slot.kept === index)) {
+      slots.push({ added: typeof item === 'string' ? { value: item } : item });
+      continue;
+    }
+    slots.push({ kept: index });
+    const choice = current[index] as Record<string, unknown>;
+    if (!isRecord(item)) continue;
+    const changed = Object.entries(withValue(item) as Record<string, unknown>).filter(
+      ([key, value]) => key !== 'api_code' && JSON.stringify(choice[key]) !== JSON.stringify(value)
+    );
+    if (changed.length > 0) changes.set(index, Object.fromEntries(changed));
+  }
+  const kept = slots.flatMap((slot) => ('kept' in slot ? [slot.kept] : []));
+  const remove = current.filter((_, index) => !kept.includes(index));
+  const positions = placed(
+    slots,
+    [...kept].sort((a, b) => a - b)
+  );
+  const add = slots.flatMap((slot, at) => ('added' in slot ? [{ at, item: slot.added }] : []));
+  const update = slots.flatMap((slot, at) => {
+    if (!('kept' in slot)) return [];
+    const change = { ...changes.get(slot.kept), ...(positions ? { position: at } : {}) };
+    return Object.keys(change).length > 0 ? [{ api_code: current[slot.kept]?.api_code, ...change }] : [];
+  });
+  return {
+    add: (positions
+      ? [...add].sort((a, b) => (positions.get(a.at) as number) - (positions.get(b.at) as number))
+      : add
+    ).map(({ at, item }) => (positions ? { ...(item as Record<string, unknown>), position: positions.get(at) } : item)),
+    update,
+    remove
+  };
+}
+
+/**
+ * Where each choice to add has to be inserted for the list to come out in the
+ * order asked, or undefined when appending already does. Keyed by slot.
+ *
+ * The API removes first, then inserts each addition at its position in turn,
+ * then moves each choice given a position, lowest position first: out of
+ * where it is, into that place. Every choice that stays is moved to its own
+ * slot, so the moves are fixed; what is left to choose is where the additions
+ * go in. That is found by playing the moves backwards from the list asked
+ * for: each choice moved is taken out of its slot and put back among the ones
+ * already put back in the order the field has them now. What is left is the
+ * list just before the moves, and the additions' places in it are where they
+ * are inserted, lowest first.
+ */
+function placed(
+  slots: readonly ({ kept: number } | { added: unknown })[],
+  keptNow: readonly number[]
+): Map<number, number> | undefined {
+  const appended = [
+    ...keptNow.map((index) => slots.findIndex((slot) => 'kept' in slot && slot.kept === index)),
+    ...slots.flatMap((slot, at) => ('added' in slot ? [at] : []))
+  ];
+  if (appended.every((at, index) => at === index)) return undefined;
+
+  const list = slots.map((_, at) => at);
+  const back: number[] = [];
+  const rank = (at: number) => keptNow.indexOf((slots[at] as { kept: number }).kept);
+  for (let at = slots.length - 1; at >= 0; at -= 1) {
+    if (!('kept' in (slots[at] as object))) continue;
+    list.splice(list.indexOf(at), 1);
+    const after = back.filter((other) => rank(other) > rank(at)).map((other) => list.indexOf(other));
+    const before = back.filter((other) => rank(other) < rank(at)).map((other) => list.indexOf(other));
+    const where = after.length > 0 ? Math.min(...after) : before.length > 0 ? Math.max(...before) + 1 : list.length;
+    list.splice(where, 0, at);
+    back.push(at);
+  }
+  return new Map(slots.flatMap((slot, at) => ('added' in slot ? [[at, list.indexOf(at)] as const] : [])));
 }
 
 export const FIELD_SCOPES = ['normal', 'exam', 'customized'] as const;
@@ -286,15 +449,42 @@ export const FIELD: readonly Command[] = [
       'Write the keys to change, or the whole field as `field list` read it, as the payload below says. ' +
       WRITE_ANSWER,
     args: [{ name: 'api-code', required: true, description: 'Field api_code, e.g. field_3' }],
-    options: [...CONTAINER_OPTIONS, JSON_OPTION],
+    options: [...CONTAINER_OPTIONS, JSON_OPTION, YES_OPTION],
     payload: FIELD_PAYLOAD,
-    request: (input) =>
-      onContainer(input, 'updateForm', 'updateTable', {
-        body: {
-          fields: { update: [{ ...(payload(input) as Record<string, unknown>), api_code: input.args['api-code'] }] }
+    run: async (input, client) => {
+      const code = input.args['api-code'];
+      const { choices: given, ...patch } = payload(input) as Record<string, unknown>;
+      const fields: Record<string, unknown> = { update: [{ ...patch, api_code: code }] };
+      if (Array.isArray(given)) {
+        const field = selectFields(await client.request(onContainer(input, 'getForm', 'getTable'))).find(
+          (candidate) => candidate.api_code === code
+        );
+        const current = field?.choices;
+        // A type the field does not have yet, or a cascade's nested levels,
+        // take the list as it is; the API replaces the choices there.
+        const replaces = !field || !Array.isArray(current) || (patch.type !== undefined && patch.type !== field.type);
+        if (replaces) {
+          fields.update = [{ ...patch, choices: given, api_code: code }];
+        } else {
+          const ops = choiceOperations(current as Record<string, unknown>[], given);
+          await confirmedIfHolding(
+            client,
+            input,
+            ops.remove.map((choice) => ({ field_api_code: code, choice_value: choice.value })),
+            `Choice ${ops.remove.map((choice) => JSON.stringify(choice.value)).join(', ')} of ${code}`
+          );
+          const operations = Object.fromEntries(
+            Object.entries({ ...ops, remove: ops.remove.map((choice) => choice.api_code) }).filter(
+              ([, items]) => items.length > 0
+            )
+          );
+          if (Object.keys(patch).length === 0) delete fields.update;
+          if (Object.keys(operations).length > 0) fields.update_choices = [{ ...operations, field_api_code: code }];
         }
-      }),
-    select: (body, input) => touchedFields(body, (field) => field.api_code === input.args['api-code']),
+      }
+      const body = await client.request(onContainer(input, 'updateForm', 'updateTable', { body: { fields } }));
+      return touchedFields(body, (candidate) => candidate.api_code === code);
+    },
     examples: ['jinshuju field update --form Kp7mQ2 field_3 --json \'{"required":true}\'']
   },
   {
@@ -307,7 +497,7 @@ export const FIELD: readonly Command[] = [
       onContainer(input, 'updateForm', 'updateTable', {
         body: {
           fields: {
-            update_choices: [{ ...(payload(input) as Record<string, unknown>), field_api_code: input.args['api-code'] }]
+            update_choices: [{ ...choiceChanges(payload(input)), field_api_code: input.args['api-code'] }]
           }
         }
       }),
@@ -378,15 +568,16 @@ export const FIELD: readonly Command[] = [
   {
     path: ['field', 'remove'],
     summary: 'Remove a field',
-    description: 'Removing a field that still holds answers deletes those answers with it, and cannot be undone.',
+    description:
+      'Removing a field that still holds answers deletes those answers with it, and cannot be undone, ' +
+      'so that one waits for --yes; a field with no answers goes without it.',
     args: [{ name: 'api-code', required: true, description: 'Field api_code' }],
     options: [...CONTAINER_OPTIONS, YES_OPTION],
-    request: (input) => {
-      confirmed(input, `Removing ${input.args['api-code']} and any answers it holds`);
-      return onContainer(input, 'updateForm', 'updateTable', {
-        body: { fields: { remove: [input.args['api-code']] } }
-      });
+    run: async (input, client) => {
+      const code = input.args['api-code'];
+      await confirmedIfHolding(client, input, [{ field_api_code: code }], code as string);
+      return client.request(onContainer(input, 'updateForm', 'updateTable', { body: { fields: { remove: [code] } } }));
     },
-    examples: ['jinshuju field remove --form Kp7mQ2 field_9 --yes']
+    examples: ['jinshuju field remove --form Kp7mQ2 field_9', 'jinshuju field remove --form Kp7mQ2 field_9 --yes']
   }
 ];

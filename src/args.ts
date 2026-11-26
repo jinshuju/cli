@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { Command } from './commands/index.js';
+import type { ArgSpec } from './commands/types.js';
 import { GLOBAL_OPTIONS, LOCAL_OPTIONS, UsageError, optionKey, readJsonInput, type OptionSpec } from './options.js';
 
 /**
@@ -154,6 +155,66 @@ function containerHint(command: Command, extra: string): string {
   const takesContainer = (command.options ?? []).some((option) => option.name === '--form');
   if (!takesContainer || !/^[A-Za-z0-9]{6}$/.test(extra)) return '';
   return `. Did you mean --form ${extra}? (a table: --table ${extra})`;
+}
+
+/**
+ * The flags an argument may also be given as, so they can be split off the
+ * line and bound like any other: `--serial-number 12` for `<serial>`.
+ */
+export function argumentFlags(command: Command | undefined): OptionSpec[] {
+  return (command?.args ?? []).flatMap(flagsOf);
+}
+
+function flagsOf(arg: ArgSpec): OptionSpec[] {
+  return (arg.flags ?? []).map((name) => ({
+    name,
+    type: 'string' as const,
+    placeholder: `<${arg.name}>`,
+    description: `Same as <${arg.name}>`
+  }));
+}
+
+/**
+ * The words as the command reads them, once two other ways of writing them
+ * are taken in.
+ *
+ * An argument given as one of its flags goes back in its place among the
+ * positionals. And a token in front of every argument the command takes, on a
+ * command that is addressed by `--form` and was given neither container, is
+ * that container: `entry get Kp7mQ2 12` can only mean `entry get --form Kp7mQ2
+ * 12`, the way `form get Kp7mQ2` reads. It is taken as a form, the kind the
+ * habit comes from; a table still needs `--table`.
+ */
+export function placedArgs(
+  command: Command,
+  words: readonly string[],
+  options: Record<string, unknown>
+): { words: string[]; options: Record<string, unknown> } {
+  const specs = command.args ?? [];
+  const positionals = words.slice(command.path.length);
+  const flagged = specs.map((arg) =>
+    flagsOf(arg)
+      .map((spec) => options[optionKey(spec)])
+      .find((value) => value !== undefined)
+  );
+  const container = (command.options ?? []).find((option) => option.name === '--form');
+  let placed = { ...options };
+  const free = specs.length - flagged.filter((value) => value !== undefined).length;
+  if (
+    container &&
+    options.form === undefined &&
+    options.table === undefined &&
+    !specs.some((arg) => arg.variadic) &&
+    positionals.length === free + 1 &&
+    /^[A-Za-z0-9]{6}$/.test(positionals[0] as string)
+  ) {
+    const token = positionals.shift() as string;
+    placed = { ...placed, form: container.repeatable ? [token] : token };
+  }
+  flagged.forEach((value, index) => {
+    if (value !== undefined) positionals.splice(index, 0, String(value));
+  });
+  return { words: [...command.path, ...positionals], options: placed };
 }
 
 export function bindArgs(command: Command, words: readonly string[]): { args: Record<string, string>; rest: string[] } {

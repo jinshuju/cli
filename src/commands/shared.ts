@@ -37,15 +37,43 @@ export function onContainer(
 
 /** The conditions themselves. A read sends them as a query string, a write as a body. */
 export function filterConditions(input: CommandInput): unknown {
-  const compact = (input.options.filter as string[] | undefined) ?? [];
+  const given = (input.options.filter as string[] | undefined) ?? [];
+  // JSON handed to --filter is what --filters takes, and can mean nothing else;
+  // refusing it only sent the caller off to read help.
+  const json = given.filter(looksLikeJson);
+  const compact = given.filter((item) => !looksLikeJson(item));
   const raw = input.options.filters;
-  if (raw !== undefined && compact.length > 0) {
+  if ([raw !== undefined, json.length > 0, compact.length > 0].filter(Boolean).length > 1) {
     throw new UsageError('--filter and --filters are alternatives, not both');
   }
-  if (raw !== undefined) return raw;
+  if (raw !== undefined) return Array.isArray(raw) ? raw.map(withOperator) : raw;
+  if (json.length > 0) return json.flatMap(parseJsonFilter).map(withOperator);
   if (compact.length === 0) return undefined;
   const conditions: FilterCondition[] = compact.map(parseFilter);
   return conditions;
+}
+
+function looksLikeJson(value: string): boolean {
+  return /^\s*[[{]/.test(value);
+}
+
+/** One condition or a list of them, as JSON. */
+function parseJsonFilter(value: string): unknown[] {
+  try {
+    return [JSON.parse(value) as unknown].flat();
+  } catch {
+    throw new UsageError(`--filter looks like JSON but does not parse: ${JSON.stringify(value)}`);
+  }
+}
+
+/**
+ * The API names the key `operator`. `op` is written for it often enough, and
+ * means nothing else, so it is renamed rather than refused.
+ */
+function withOperator(condition: unknown): unknown {
+  if (!isRecord(condition) || !('op' in condition) || 'operator' in condition) return condition;
+  const { op, ...rest } = condition;
+  return { ...rest, operator: op };
 }
 
 export function filters(input: CommandInput): string | undefined {
