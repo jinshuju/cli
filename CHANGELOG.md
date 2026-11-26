@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.31.0](https://github.com/jinshuju/cli/compare/v0.30.0...v0.31.0) (2026-11-26)
+
+
+### Features
+
+* accept the spellings agents reach for instead of refusing them ([aa6fb5a](https://github.com/jinshuju/cli/commit/aa6fb5abf076fb850d058c49165260b820e2f3d5))
+* follow the openapi.yaml of 2026-11-26 ([2dd541e](https://github.com/jinshuju/cli/commit/2dd541ed8eb2cee0bf776157273424270c0fc0df))
+* **form:** change a cooperator's role and remove a cooperator ([#133](https://github.com/jinshuju/cli/issues/133)) ([6ab7c21](https://github.com/jinshuju/cli/commit/6ab7c21b7c50c757bfa94b04d9b01b8fff8535ce))
+
 ## [0.30.0](https://github.com/jinshuju/cli/compare/v0.29.1...v0.30.0) (2026-11-25)
 
 
