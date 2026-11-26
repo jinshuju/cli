@@ -385,6 +385,12 @@ const RESULT_SHARE_ARG = {
   description: 'Result share token, from `form result-share list`'
 } as const;
 
+const COOPERATOR_ARG = {
+  name: 'user',
+  required: true,
+  description: "The cooperator's user_id, from `form cooperator list`"
+} as const;
+
 /** A result share's body: `--json`, with the flags that were given laid over it. */
 function resultShareBody(input: CommandInput): Record<string, unknown> {
   const json = input.options.json;
@@ -1132,5 +1138,49 @@ export const FORM: readonly Command[] = [
       'jinshuju form cooperator add Kp7mQ2 --user 6512a1c2d3e4f5a6b7c8d9d3 --role data_viewer',
       'jinshuju form cooperator add Kp7mQ2 --user 6512a1c2d3e4f5a6b7c8d9d3 --user 6512a1c2d3e4f5a6b7c8d9d4 --role manager'
     ]
+  },
+  {
+    path: ['form', 'cooperator', 'update'],
+    summary: "Change a cooperator's role on a form",
+    description:
+      "As changing a role on the form's cooperation page does. The form's creator and its only manager " +
+      'keep the manager role. A cooperator whose role comes from a folder the form is in gets this role ' +
+      "on the form itself, which takes precedence over the folder's. A table token changes a role on the " +
+      'table, which has only the manager and data_viewer roles.',
+    args: [{ name: 'form', required: true, description: 'Form token, or a table token' }, COOPERATOR_ARG],
+    options: [
+      {
+        name: '--role',
+        type: 'string',
+        choices: bodyChoices('updateFormCooperator', 'role'),
+        placeholder: '<role>',
+        description:
+          'manager administers the form, data_maintainer adds, edits, deletes and exports entries, ' +
+          'data_viewer reads and exports them'
+      }
+    ],
+    request: (input) =>
+      call('updateFormCooperator', {
+        path: { form_token: input.args.form, user_id: input.args.user },
+        body: { role: requiredOption(input, 'role') }
+      }),
+    examples: ['jinshuju form cooperator update Kp7mQ2 6512a1c2d3e4f5a6b7c8d9d3 --role data_maintainer']
+  },
+  {
+    path: ['form', 'cooperator', 'remove'],
+    summary: 'Remove a cooperator from a form',
+    description:
+      "As removing them on the form's cooperation page does; your own id leaves the form. The form's " +
+      'creator and its only manager cannot be removed. A role that comes from a folder the form is in ' +
+      'is removed on that folder, not here: when the user also has a role on the form itself, that one ' +
+      "goes and the folder's applies again, as `role` in the answer says (null when they are no longer " +
+      'a cooperator).',
+    args: [{ name: 'form', required: true, description: 'Form token, or a table token' }, COOPERATOR_ARG],
+    options: [{ ...YES_OPTION, description: 'Confirm the removal' }],
+    request: (input) => {
+      confirmed(input, `Removing ${input.args.user} from ${input.args.form}`, 'takes away their access');
+      return call('deleteFormCooperator', { path: { form_token: input.args.form, user_id: input.args.user } });
+    },
+    examples: ['jinshuju form cooperator remove Kp7mQ2 6512a1c2d3e4f5a6b7c8d9d3 --yes']
   }
 ];

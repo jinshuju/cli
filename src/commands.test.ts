@@ -3328,6 +3328,44 @@ test('form cooperator add adds every --user with the one --role, and needs both'
   for (const result of [noUser, noRole, badRole]) assert.equal(result.exitCode, 2);
 });
 
+test('form cooperator update sends the one --role for the user, and needs it', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) =>
+    cli(['form', 'cooperator', 'update', 'Kp7mQ2', ...args], { env: WRITE_ENV, client: mock.client });
+
+  await run(['6512a1c2d3e4f5a6b7c8d9d3', '--role', 'data_maintainer']);
+  const noRole = await run(['6512a1c2d3e4f5a6b7c8d9d3']);
+  const badRole = await run(['6512a1c2d3e4f5a6b7c8d9d3', '--role', 'owner']);
+
+  assert.equal(mock.requests.length, 1);
+  assert.equal(mock.requests[0].method, 'PATCH');
+  assert.equal(mock.requests[0].path, '/api/v1/forms/Kp7mQ2/cooperators/6512a1c2d3e4f5a6b7c8d9d3');
+  assert.deepEqual(mock.requests[0].body, { role: 'data_maintainer' });
+  assert.match(noRole.stderr, /--role is required/);
+  assert.match(badRole.stderr, /--role must be one of manager, data_maintainer, data_viewer/);
+  for (const result of [noRole, badRole]) assert.equal(result.exitCode, 2);
+});
+
+test('form cooperator remove wants --yes before it removes the user', async () => {
+  const mock = createMockClient();
+  const run = (args: string[]) =>
+    cli(['form', 'cooperator', 'remove', 'Kp7mQ2', '6512a1c2d3e4f5a6b7c8d9d3', ...args], {
+      env: WRITE_ENV,
+      client: mock.client
+    });
+
+  const unconfirmed = await run([]);
+  assert.equal(unconfirmed.exitCode, 2);
+  assert.match(unconfirmed.stderr, /Removing 6512a1c2d3e4f5a6b7c8d9d3 from Kp7mQ2 takes away their access; pass --yes/);
+  assert.equal(mock.requests.length, 0);
+
+  await run(['--yes']);
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['DELETE /api/v1/forms/Kp7mQ2/cooperators/6512a1c2d3e4f5a6b7c8d9d3']
+  );
+});
+
 test('opensearch edit --header uploads an image to the query and sets it as the header', async () => {
   const mock = uploadingClient({ '/api/v1/form_image_attachments': { attachment_id: 'os_1' } });
 
