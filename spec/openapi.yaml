@@ -8661,8 +8661,8 @@ paths:
         Runs one keyword as a full-text search across several forms / tables and returns, per form, the match count and some of the matching serial numbers (at most 50 per form), without entry content.
         - Search scope: the forms in `form_tokens` when given; otherwise every form and table the caller can access (for an account access token, every form and table in the account).
           Either way, `filters` then narrows the scope; unless `filters` specifies `entries_count`, only forms with entries are searched by default (`entries_count > 0`).
-        - The scope holds at most 10 forms; beyond that it returns 400: narrow it with `filters`, or pass `form_tokens` directly.
-        - Forms with no match are left out of the result; forms that cannot be accessed, where the caller's role does not allow reading entries, whose search timed out or whose search service did not respond are listed with `unavailable` giving the reason (this does not mean there was no match).
+        - Without `form_tokens` the scope has no size limit: forms are searched newest first until the call's time runs out. `unsearched_count` then says how many were left and `next` resumes after the last one searched (pass the same `keyword` and `filters` with it); repeat until `next` is null. `form_tokens` takes at most 10.
+        - Forms with no match are left out of the result; forms that cannot be accessed, where the caller's role does not allow reading entries, whose search timed out or whose search service did not respond are listed with `unavailable` giving the reason (this does not mean there was no match). Forms counted in `unsearched_count` were not searched either.
 
         OAuth scope: read_entries
       parameters:
@@ -8676,7 +8676,7 @@ paths:
       - name: form_tokens
         in: query
         required: false
-        description: Tokens (ids also accepted) of the forms or tables to search, comma-separated (or repeat `form_tokens[]=`), at most 10 after deduplication. When omitted, every accessible form is searched.
+        description: Tokens (ids also accepted) of the forms or tables to search, comma-separated (or repeat `form_tokens[]=`), at most 10 after deduplication. When omitted, every accessible form is searched, continuing with `next`.
         explode: false
         schema:
           type: array
@@ -8689,7 +8689,7 @@ paths:
         in: query
         required: false
         description: |
-          Filters on form attributes that narrow the search scope, a JSON string holding an array of ScopeCondition objects (`JSON.stringify` the array; do not pass the array itself), with the same fields as `filters` of `GET /forms` (`form_name` / `created_at` / `last_entry_created_at` / `entries_count`); conditions are combined with AND.
+          Filters on form attributes that narrow the search scope, a JSON string holding an array of ScopeCondition objects (`JSON.stringify` the array; do not pass the array itself), with the same fields as `filters` of `GET /forms` (`form_name` / `created_at` / `last_entry_created_at` / `entries_count` / `folder_token`); conditions are combined with AND.
           Without an `entries_count` condition, `entries_count > 0` is appended automatically.
         content:
           application/json:
@@ -8703,6 +8703,12 @@ paths:
               value:
                 unit: day
                 "n": 30
+      - name: next
+        in: query
+        required: false
+        description: "`next` from the previous response, to search the forms it left; not taken with `form_tokens`."
+        schema:
+          type: string
       responses:
         '200':
           description: Matches per form
@@ -9820,6 +9826,7 @@ components:
         | `created_at` | time | `eq` `ne` `gte` `gt` `lte` `lt` `within_last` |
         | `last_entry_created_at` | time | same as above (forms that have never received an entry have no value) |
         | `entries_count` | integer | `eq` `ne` `gte` `gt` `lte` `lt` |
+        | `folder_token` | text | `eq` `any_in` (the folder the caller sees the form in, as `folder_token` in each row) |
 
         The value of `within_last` looks like `{"unit":"day","n":30}` (unit can be minute / day / week / month), meaning the window going back from now.
         Example: `[{"field":"last_entry_created_at","operator":"within_last","value":{"unit":"day","n":7}}]`
@@ -24797,6 +24804,8 @@ components:
       required:
       - total
       - forms
+      - unsearched_count
+      - next
       properties:
         total:
           type: integer
@@ -24832,6 +24841,14 @@ components:
                   - 'null'
                   description: Token of the folder the current identity sees this form in, also a shared folder another cooperator put it in (for an account token, the account owner's view); null when it is in no such folder
             - $ref: '#/components/schemas/EntryFormUnavailable'
+        unsearched_count:
+          type: integer
+          description: Forms in scope the call ran out of time before searching; they are not listed in `forms` and may hold matches
+        next:
+          type:
+          - string
+          - 'null'
+          description: Pass back as `next` to search the forms counted in `unsearched_count`; null when every form in scope was searched
       examples:
       - total: 3
         forms:
@@ -24843,6 +24860,8 @@ components:
           - 57
           - 88
           folder_token:
+        unsearched_count: 0
+        next:
     EntryStatsResponse:
       type: object
       required:

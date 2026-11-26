@@ -40,6 +40,38 @@ import { isRecord } from '../values.js';
 import { basename } from 'node:path';
 import { upload } from './upload.js';
 
+/**
+ * How many calls one `entry search` makes before handing the rest back. Each
+ * call searches for as long as the API allows, so this bounds the command's own
+ * time; a search still unfinished answers its next for the caller to go on.
+ */
+const SEARCH_ROUNDS = 6;
+
+type SearchPage = { total?: number; forms?: unknown[]; unsearched_count?: number; next?: string | null };
+
+/**
+ * A search over every form in reach comes back a part at a time: each answer
+ * names the forms it covered and, when time ran out, a cursor to the rest. The
+ * parts are put together into one answer, so "absent" still means "searched,
+ * no match" for every form the cursor walked past.
+ */
+async function searchAll(
+  client: HttpClient,
+  query: { keyword: string | undefined; form_tokens?: readonly string[]; filters?: string; next?: string }
+): Promise<SearchPage> {
+  let page = (await client.request(call('searchEntriesAcrossForms', { query }))) as SearchPage;
+  const forms = [...(page.forms ?? [])];
+  let total = page.total ?? 0;
+  for (let round = 1; round < SEARCH_ROUNDS && page.next; round += 1) {
+    page = (await client.request(
+      call('searchEntriesAcrossForms', { query: { ...query, next: page.next } })
+    )) as SearchPage;
+    forms.push(...(page.forms ?? []));
+    total += page.total ?? 0;
+  }
+  return { ...page, total, forms };
+}
+
 /** The api_codes a --fields named, for `call` to spell as the parameter says: comma-joined, as the spec has it. */
 function list(value: unknown): readonly string[] | undefined {
   const values = value as string[] | undefined;
@@ -535,8 +567,10 @@ export const ENTRY: readonly Command[] = [
       'never returned. Read what you need afterwards with `entry get` or `entry list --keyword`. ' +
       'A form that matched nothing is left out, so a token you named and cannot find was searched ' +
       'and matched nothing. A form that could not be searched is listed with a reason instead — ' +
-      '"not searched" is not "no match". Name up to 10 containers, or name none and let ' +
-      '--scope-filter describe them; the call is refused rather than truncated when more than 10 match.',
+      '"not searched" is not "no match". Name up to 10 containers, or name none and every form in ' +
+      'reach is searched, narrowed by --scope-filter: the API searches as many as its time allows and ' +
+      'this keeps calling it until all are done. If it still stops short, unsearched_count says how ' +
+      'many forms were not searched (they may hold matches) and --next <next> carries on from there.',
     args: [{ name: 'keyword', required: true, description: 'The text to search for' }],
     options: [
       ...CONTAINER_LIST_OPTIONS,
@@ -547,28 +581,35 @@ export const ENTRY: readonly Command[] = [
         placeholder: "'<field> <op> [value]'",
         description:
           'Which forms to search, not which entries match. Takes form_name, created_at, ' +
-          'last_entry_created_at, entries_count. Empty forms are skipped unless you say otherwise'
+          'last_entry_created_at, entries_count, folder_token. Empty forms are skipped unless you say otherwise'
+      },
+      {
+        name: '--next',
+        type: 'string',
+        placeholder: '<next>',
+        description: 'Carry on a search that stopped short, from the next it answered'
       },
       MINE_OPTION
     ],
-    request: (input) => {
+    run: async (input, client) => {
       const { tokens } = namedContainers(input.options);
       if (input.options.mine) {
-        refuseWithMine(input, ['table', 'scope_filter']);
-        return call('searchMySubmittedEntries', {
-          query: {
-            keyword: input.args.keyword,
-            form_tokens: tokens.length > 0 ? tokens : undefined
-          }
-        });
+        refuseWithMine(input, ['table', 'scope_filter', 'next']);
+        return client.request(
+          call('searchMySubmittedEntries', {
+            query: { keyword: input.args.keyword, form_tokens: tokens.length > 0 ? tokens : undefined }
+          })
+        );
+      }
+      if (tokens.length > 0 && input.options.next !== undefined) {
+        throw new UsageError('--next carries on a search over every form in reach; it does not take --form or --table');
       }
       const scope = (input.options.scope_filter as string[] | undefined) ?? [];
-      return call('searchEntriesAcrossForms', {
-        query: {
-          keyword: input.args.keyword,
-          form_tokens: tokens.length > 0 ? tokens : undefined,
-          filters: scope.length > 0 ? JSON.stringify(scope.map(parseFilter)) : undefined
-        }
+      return searchAll(client, {
+        keyword: input.args.keyword,
+        form_tokens: tokens.length > 0 ? tokens : undefined,
+        filters: scope.length > 0 ? JSON.stringify(scope.map(parseFilter)) : undefined,
+        next: input.options.next as string | undefined
       });
     },
     examples: [

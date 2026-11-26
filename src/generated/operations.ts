@@ -2025,7 +2025,8 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
         in: 'query',
         content: 'application/json',
         schema: { type: 'array', items: { $ref: 'ScopeCondition' } }
-      }
+      },
+      { name: 'next', in: 'query', schema: { type: 'string' } }
     ]
   },
   searchMySubmittedEntries: {

@@ -2601,6 +2601,89 @@ test('entry search names its containers, or describes them with --scope-filter',
   assert.match(mixed.stderr, /--form and --table are mutually exclusive/);
 });
 
+test('entry search over every form keeps calling with next until the API has searched them all', async () => {
+  const requests: HttpRequest[] = [];
+  const pages = [
+    { total: 1, forms: [{ form_token: 'Kp7mQ2', matched: 2 }], unsearched_count: 30, next: 'c1' },
+    { total: 0, forms: [], unsearched_count: 12, next: 'c2' },
+    { total: 1, forms: [{ form_token: 'aB3dE9', matched: 1 }], unsearched_count: 0, next: null }
+  ];
+  const paging = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      conform(request);
+      return pages[requests.length - 1] as T;
+    }
+  };
+
+  const result = await cli(['entry', 'search', '张三', '--output', 'json'], { env: WRITE_ENV, client: paging });
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  const next = requests.map((request) => new URL(url(request), 'https://x').searchParams.get('next'));
+  assert.deepEqual(next, [null, 'c1', 'c2']);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    total: 2,
+    forms: [
+      { form_token: 'Kp7mQ2', matched: 2 },
+      { form_token: 'aB3dE9', matched: 1 }
+    ],
+    unsearched_count: 0,
+    next: null
+  });
+});
+
+test('entry search stops after a bounded number of calls and hands back next, which --next resumes', async () => {
+  const requests: HttpRequest[] = [];
+  const endless = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      return { total: 0, forms: [], unsearched_count: 500, next: `c${requests.length}` } as T;
+    }
+  };
+
+  const first = await cli(['entry', 'search', '张三', '--output', 'json'], { env: WRITE_ENV, client: endless });
+  const calls = requests.length;
+  const answer = JSON.parse(first.stdout) as { unsearched_count: number; next: string };
+  await cli(['entry', 'search', '张三', '--next', answer.next, '--output', 'json'], {
+    env: WRITE_ENV,
+    client: endless
+  });
+  const withTokens = await cli(['entry', 'search', '张三', '--form', 'Kp7mQ2', '--next', 'c1'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  assert.ok(calls > 1 && calls < 10, `${calls} calls`);
+  assert.equal(answer.unsearched_count, 500);
+  assert.equal(new URL(url(requests[calls]!), 'https://x').searchParams.get('next'), answer.next);
+  assert.equal(withTokens.exitCode, 2);
+  assert.match(withTokens.stderr, /--next carries on a search over every form/);
+});
+
+test('form list and table list narrow to folders with --folder, beside any other filter', async () => {
+  const forms = createMockClient();
+  const tables = createMockClient();
+
+  await cli(['form', 'list', '--folder', 'Fd2xK8', '--folder', 'Gh3yL9', '--filter', 'entries_count gt 0'], {
+    env: WRITE_ENV,
+    client: forms.client
+  });
+  await cli(['table', 'list', '--folder', 'Fd2xK8'], { env: WRITE_ENV, client: tables.client });
+  const mine = await cli(['form', 'list', '--mine', '--folder', 'Fd2xK8'], {
+    env: WRITE_ENV,
+    client: createMockClient().client
+  });
+
+  const filters = (request: HttpRequest) =>
+    JSON.parse(new URL(url(request), 'https://x').searchParams.get('filters')!) as unknown;
+  assert.deepEqual(filters(forms.requests[0]!), [
+    { field: 'entries_count', operator: 'gt', value: '0' },
+    { field: 'folder_token', operator: 'any_in', value: ['Fd2xK8', 'Gh3yL9'] }
+  ]);
+  assert.deepEqual(filters(tables.requests[0]!), [{ field: 'folder_token', operator: 'any_in', value: ['Fd2xK8'] }]);
+  assert.equal(mine.exitCode, 2);
+});
+
 test('--mine switches all three reads to what the caller submitted', async () => {
   const forms = createMockClient();
   const entries = createMockClient();

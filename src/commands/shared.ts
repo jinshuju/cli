@@ -78,8 +78,21 @@ function withOperator(condition: unknown): unknown {
 
 export function filters(input: CommandInput): string | undefined {
   const conditions = filterConditions(input);
-  return conditions === undefined ? undefined : JSON.stringify(conditions);
+  const folders = (input.options.folder as string[] | undefined) ?? [];
+  if (folders.length === 0) return conditions === undefined ? undefined : JSON.stringify(conditions);
+  // A folder is one more condition on the listing, AND-ed with the rest.
+  const rest = conditions === undefined ? [] : [conditions].flat();
+  return JSON.stringify([...rest, { field: 'folder_token', operator: 'any_in', value: folders }]);
 }
+
+/** Only what is filed in these folders, as the caller sees them. */
+export const FOLDER_FILTER_OPTION: OptionSpec = {
+  name: '--folder',
+  type: 'string',
+  repeatable: true,
+  placeholder: '<folder>',
+  description: 'Only what is filed in this folder (its folder_token), repeatable'
+};
 
 export function sort(input: CommandInput, key: 'api_code' | 'field'): string | undefined {
   const rules = (input.options.sort as string[] | undefined) ?? [];
