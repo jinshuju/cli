@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/jinshuju/cli/compare/v0.31.0...v0.32.0) (2026-11-26)
+
+
+### Features
+
+* take create/add, update/edit, show/get and ls/list as the same verb ([23530da](https://github.com/jinshuju/cli/commit/23530da040d469db36b761a4fd18b6f62a394b20))
+
 ## [0.31.0](https://github.com/jinshuju/cli/compare/v0.30.0...v0.31.0) (2026-11-26)
 
 
