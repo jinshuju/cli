@@ -10379,7 +10379,7 @@ components:
           schema:
             $ref: '#/components/schemas/RateLimitError'
     EntryValidationFailed:
-      description: 'Entry validation failed or a parameter is invalid. When field validation fails, `error_description` is a JSON string serialized from `{ "<api_code>": ["error message"] }`'
+      description: 'Entry validation failed or a parameter is invalid. When field validation fails, `error_description` is a JSON string serialized from `{ "<api_code>": ["error message"] }`; a value in a shape its field does not take gets a sentence naming each such key and the shape the field takes instead'
       content:
         application/json:
           schema:
@@ -11567,18 +11567,19 @@ components:
       description: |
         Field values for writing an entry, keyed by field api_code or api_code_alias. Unknown keys and non-writable fields (signature, formula) are ignored.
         Choice fields take the choice api_code or the choice label; see the table below for cascading drop-downs and choice extra text. Number fields accept a number or a numeric string.
+        A value in another shape than the table gives (an object where text goes, an hour past 23, a cascade level not under the one above) is refused, not dropped.
 
         | Field | How to write |
         |---|---|
         | Single-line / multi-line text, name, mobile, email, phone, website, ID card | String |
         | Single choice, drop-down | `"choice api_code"` or `"choice label"`; extra text via `"<api_code>_extended_text": {"<choice>": "extra text"}`, "Other" text via `"<api_code>_other": "..."` |
-        | Multiple choice | Array, items as above |
+        | Multiple choice | Array, items as above; a single choice may be sent alone |
         | Image single choice / image multiple choice | Choice api_code (string / array) |
         | Cascading drop-down | `{"level_1": "...", "level_2": "..."}` (api_code or label) |
         | Number, rating, NPS | Number |
         | Yes/No | Boolean |
         | Date | `"2012-12-25"` or `"2012-12-25 12:13:15"` (Beijing time, UTC+8) |
-        | Time | `{"hour": "12", "minute": "15"}` |
+        | Time | `{"hour": "12", "minute": "15"}`, or `"12:15"` / `"12:15:30"` as it is read back |
         | Address | `{"province","city","district","street"}` |
         | Geolocation | `{"longitude","latitude","address"}` |
         | File upload (multiple allowed) | Array; each item is one of: the id of an uploaded attachment; the download URL of an attachment already on this form (to keep it); `{"base64": "...", "file_name": "a.png", "content_type": "image/png"}` (≤ 5MB; `base64` may also be a data URI) |
@@ -12064,6 +12065,20 @@ components:
         is_other:
           type: boolean
           description: Make this the "Other" choice (choosing it shows a text box); its text is kept as written. A choice whose text is exactly `其他` or `其它` needs no flag. Only for RadioButton / CheckBox / DropDown
+        allow_extended_text:
+          type: boolean
+          description: Show a text box when the choice is picked; taken only by a choice of a RadioButton / CheckBox / Department / Grade field of a form (a CheckBox in the list style), not by its "Other" choice
+        extended_text_required:
+          type: boolean
+          description: The text box must be filled in; takes effect only with allow_extended_text
+        extended_text_placeholder:
+          type: string
+          maxLength: 500
+          description: Hint shown in the empty text box; takes effect only with allow_extended_text
+        position:
+          type: integer
+          minimum: 0
+          description: Where update_choices.add inserts the choice, from 0; appended at the end by default
     DimensionInput:
       type: object
       title: DimensionInput
@@ -13442,6 +13457,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label; WidgetButton takes none
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages; WidgetButton / WidgetContact / WidgetMap / WidgetMarquee / FormulaField / ReversedAssociation / PageBreak / SectionBreak / Divider / StyledText / ImageText / Carousel / Timer / ImageGroup / WidgetVideo take none, and neither does a table column
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it; WidgetButton / WidgetContact / WidgetMap / WidgetMarquee take none'
@@ -13590,6 +13611,15 @@ components:
         start_new_row:
           type: boolean
           description: Start a new row with this field instead of placing it beside the one before; applies only with grids_to_occupy
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
+          description: list (the default) shows every choice; dropdown puts them in a drop-down the filler picks several from. A change to dropdown is refused while a visible choice requires text after it, unless update_choices removes that choice in the same request; a field the form editor turned from a drop-down stays dropdown, null included
         minimum_length:
           type:
           - integer
@@ -14147,7 +14177,7 @@ components:
           type: string
         add:
           type: array
-          description: Choices appended after the existing ones; ChoiceInput items for a choice field, ImageChoiceInput items for an ImageRadioButton / ImageCheckBox, each with one of image_url / image_base64 / attachment_id
+          description: Choices to add, appended after the existing ones unless they give position; ChoiceInput items for a choice field, ImageChoiceInput items for an ImageRadioButton / ImageCheckBox, each with one of image_url / image_base64 / attachment_id
           items:
             anyOf:
             - $ref: '#/components/schemas/ChoiceInput'
@@ -14201,6 +14231,22 @@ components:
                 - string
                 - 'null'
                 description: An http or https link the choice description opens instead of a text; null removes it. Give this or description_text, not both. Only RadioButton, CheckBox, ImageRadioButton and ImageCheckBox take it
+              allow_extended_text:
+                type: boolean
+                description: Show a text box when the choice is picked
+              extended_text_required:
+                type: boolean
+                description: The text box must be filled in
+              extended_text_placeholder:
+                type:
+                - string
+                - 'null'
+                maxLength: 500
+                description: Hint shown in the empty text box; null clears it
+              position:
+                type: integer
+                minimum: 0
+                description: Move the choice to this place, from 0, in the list as it is after the additions
             additionalProperties: false
       additionalProperties: false
     FieldRuleOperations:
@@ -18840,6 +18886,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -18951,6 +19003,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19022,6 +19080,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19125,6 +19189,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19177,6 +19247,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19255,6 +19331,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19320,6 +19402,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19406,6 +19494,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19506,6 +19600,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19534,6 +19634,15 @@ components:
           - string
           - 'null'
           description: How the choices are laid out
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
+          description: list (the default) shows every choice; dropdown puts them in a drop-down the filler picks several from
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
@@ -19626,6 +19735,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19721,6 +19836,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19791,6 +19912,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19853,6 +19980,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19897,6 +20030,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -19955,6 +20094,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20014,6 +20159,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20151,6 +20302,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20185,6 +20342,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20242,6 +20405,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20288,6 +20457,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20347,6 +20522,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20403,6 +20584,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20437,6 +20624,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20478,6 +20671,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20562,6 +20761,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20664,6 +20869,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20713,6 +20924,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20761,6 +20978,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20923,6 +21146,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -20974,6 +21203,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -21097,6 +21332,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -21184,6 +21425,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -21551,6 +21798,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -21681,6 +21934,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -21709,6 +21968,15 @@ components:
           - string
           - 'null'
           description: How the choices are laid out
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
+          description: list (the default) shows every choice; dropdown puts them in a drop-down the filler picks several from
         random_choices:
           type: boolean
           description: Shuffle the choices each time the form opens
@@ -21843,6 +22111,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -21960,6 +22234,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22109,6 +22389,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22239,6 +22525,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22363,6 +22655,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22504,6 +22802,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22605,6 +22909,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22737,6 +23047,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22829,6 +23145,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -22904,6 +23226,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -23004,6 +23332,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
@@ -23204,6 +23538,10 @@ components:
         attachment_id:
           type: string
           description: The `attachment_id` of an image_type=field_choice upload, or an image this form already has
+        position:
+          type: integer
+          minimum: 0
+          description: Where update_choices.add inserts the choice, from 0; appended at the end by default
     CascadeChoiceInput:
       type: object
       title: CascadeChoiceInput
@@ -25107,6 +25445,7 @@ components:
       - label
       - notes
       - required
+      - privacy_safe
       properties:
         api_code:
           type: string
@@ -25124,6 +25463,9 @@ components:
         required:
           type: boolean
           description: Whether it is required
+        privacy_safe:
+          type: boolean
+          description: Whether privacy protection is on for this relation column
     FormViewFieldOverrideInput:
       type: object
       description: Configuration of one fill item of a form view
@@ -25132,7 +25474,7 @@ components:
       properties:
         field_api_code:
           type: string
-          description: The column's api_code; the column must exist and be usable as a fill item, and cannot repeat within one request
+          description: The column's api_code; the column must exist and be usable as a fill item, and cannot repeat within one request. A lookup or rollup column shown on the fill page needs its relation column not hidden
         label:
           type:
           - string
@@ -25160,6 +25502,11 @@ components:
             type: string
             examples:
             - presence
+        privacy_safe:
+          type:
+          - boolean
+          - 'null'
+          description: Takes effect on relation columns only and is ignored on others. When true, no list is shown and a filler must type to find a related record; a single-line text, multi-line text, name, mobile, email, telephone, ID card, link or serial number display column must match the typed value in full
       additionalProperties: false
     EntryImportInput:
       type: object
@@ -31464,6 +31811,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31491,6 +31839,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -31571,6 +31923,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31592,6 +31945,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -31640,6 +31997,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31665,6 +32023,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -31732,6 +32094,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31750,6 +32113,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -31786,6 +32153,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31809,6 +32177,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -31865,6 +32237,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31885,6 +32258,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -31931,6 +32308,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -31954,6 +32332,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32017,6 +32399,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -32042,6 +32425,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32103,11 +32490,13 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
       - calculable
       - choices_layout
+      - presentation_style
       - random_choices
       - minimum_length
       - maximum_length
@@ -32135,6 +32524,10 @@ components:
           type:
           - string
           - 'null'
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
         private:
           type: boolean
         required:
@@ -32147,6 +32540,14 @@ components:
           type:
           - string
           - 'null'
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
         random_choices:
           type: boolean
         minimum_length:
@@ -32207,6 +32608,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -32231,6 +32633,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32288,6 +32694,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - predefined_value
@@ -32308,6 +32715,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32360,6 +32771,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - rating_type
@@ -32379,6 +32791,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32422,6 +32838,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - dimensions
@@ -32438,6 +32855,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32470,6 +32891,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -32489,6 +32911,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32529,6 +32955,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - predefined_value
@@ -32548,6 +32975,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32590,6 +33021,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - max_size
@@ -32608,6 +33040,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32675,6 +33111,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - api_code_alias
@@ -32689,6 +33126,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32713,6 +33154,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -32732,6 +33174,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32772,6 +33218,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - minimum_ratings_display_text
@@ -32789,6 +33236,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32826,6 +33277,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - predefined_value
@@ -32844,6 +33296,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32887,6 +33343,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - random_choices
@@ -32905,6 +33362,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32943,6 +33404,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - api_code_alias
@@ -32957,6 +33419,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -32981,6 +33447,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - max_duration
@@ -32996,6 +33463,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33024,6 +33495,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - levels
@@ -33048,6 +33520,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33107,6 +33583,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - horizontal_on_mobile
@@ -33128,6 +33605,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33180,6 +33661,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - horizontal_on_mobile
@@ -33197,6 +33679,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33231,6 +33717,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - horizontal_on_mobile
@@ -33249,6 +33736,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33286,6 +33777,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unit
@@ -33303,6 +33795,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33436,6 +33932,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - allow_multiple_items
@@ -33454,6 +33951,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33488,6 +33989,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -33511,6 +34013,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33609,6 +34115,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - calculable
@@ -33631,6 +34138,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -33684,6 +34195,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - calculable
@@ -33710,6 +34222,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34054,6 +34570,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -34082,6 +34599,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34159,11 +34680,13 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
       - calculable
       - choices_layout
+      - presentation_style
       - random_choices
       - minimum_length
       - maximum_length
@@ -34192,6 +34715,10 @@ components:
           type:
           - string
           - 'null'
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
         private:
           type: boolean
         required:
@@ -34204,6 +34731,14 @@ components:
           type:
           - string
           - 'null'
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
         random_choices:
           type: boolean
         minimum_length:
@@ -34275,6 +34810,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - calculable
@@ -34300,6 +34836,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34369,6 +34909,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - calculable
@@ -34396,6 +34937,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34474,6 +35019,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -34502,6 +35048,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34579,6 +35129,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -34606,6 +35157,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34679,6 +35234,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -34709,6 +35265,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34805,6 +35365,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -34829,6 +35390,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -34893,6 +35458,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - unique
@@ -34921,6 +35487,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -35004,6 +35574,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - rating_type
@@ -35026,6 +35597,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -35085,6 +35660,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - minimum_ratings_display_text
@@ -35105,6 +35681,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -35158,6 +35738,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -35183,6 +35764,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -35244,6 +35829,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - other_choice_required
@@ -35269,6 +35855,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -35634,6 +36224,7 @@ components:
       - type
       - label
       - notes
+      - customized_validation_message
       - private
       - required
       - dimensions
@@ -35650,6 +36241,10 @@ components:
           - string
           - 'null'
         notes:
+          type:
+          - string
+          - 'null'
+        customized_validation_message:
           type:
           - string
           - 'null'
@@ -36693,6 +37288,7 @@ components:
       - hidden
       - allow_extended_text
       - extended_text_required
+      - extended_text_placeholder
       - description_text
       - description_url
       properties:
@@ -36729,10 +37325,15 @@ components:
           description: Hidden from fillers; not writable, so a write may only repeat the current value
         allow_extended_text:
           type: boolean
-          description: Shows a text box when chosen; not writable, so a write may only repeat the current value
+          description: Shows a text box when chosen
         extended_text_required:
           type: boolean
-          description: The text box must be filled in; not writable, so a write may only repeat the current value
+          description: The text box must be filled in
+        extended_text_placeholder:
+          type:
+          - string
+          - 'null'
+          description: Hint shown in the empty text box
         description_text:
           type:
           - string
@@ -36759,6 +37360,7 @@ components:
       - hidden
       - allow_extended_text
       - extended_text_required
+      - extended_text_placeholder
       - description_text
       - description_url
       - attachment_id
@@ -36797,10 +37399,15 @@ components:
           description: Hidden from fillers; not writable, so a write may only repeat the current value
         allow_extended_text:
           type: boolean
-          description: Shows a text box when chosen; not writable, so a write may only repeat the current value
+          description: Shows a text box when chosen
         extended_text_required:
           type: boolean
-          description: The text box must be filled in; not writable, so a write may only repeat the current value
+          description: The text box must be filled in
+        extended_text_placeholder:
+          type:
+          - string
+          - 'null'
+          description: Hint shown in the empty text box
         description_text:
           type:
           - string
@@ -36835,6 +37442,7 @@ components:
       - hidden
       - allow_extended_text
       - extended_text_required
+      - extended_text_placeholder
       - description_text
       - description_url
       - sub_choices
@@ -36872,10 +37480,15 @@ components:
           description: Hidden from fillers; not writable, so a write may only repeat the current value
         allow_extended_text:
           type: boolean
-          description: Shows a text box when chosen; not writable, so a write may only repeat the current value
+          description: Shows a text box when chosen
         extended_text_required:
           type: boolean
-          description: The text box must be filled in; not writable, so a write may only repeat the current value
+          description: The text box must be filled in
+        extended_text_placeholder:
+          type:
+          - string
+          - 'null'
+          description: Hint shown in the empty text box
         description_text:
           type:
           - string
@@ -37000,10 +37613,15 @@ components:
           description: Hidden from fillers; not writable, so a write may only repeat the current value
         allow_extended_text:
           type: boolean
-          description: Shows a text box when chosen; not writable, so a write may only repeat the current value
+          description: Shows a text box when chosen
         extended_text_required:
           type: boolean
-          description: The text box must be filled in; not writable, so a write may only repeat the current value
+          description: The text box must be filled in
+        extended_text_placeholder:
+          type:
+          - string
+          - 'null'
+          description: Hint shown in the empty text box
         description_text:
           type:
           - string
@@ -37133,6 +37751,14 @@ components:
           type:
           - string
           - 'null'
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
         random_choices:
           type: boolean
         hide_choice_when_quota_empty:
@@ -37477,6 +38103,7 @@ components:
       - private
       - calculable
       - choices_layout
+      - presentation_style
       - random_choices
       - minimum_length
       - maximum_length
@@ -37507,6 +38134,14 @@ components:
           type:
           - string
           - 'null'
+        presentation_style:
+          type:
+          - string
+          - 'null'
+          enum:
+          - list
+          - dropdown
+          -
         random_choices:
           type: boolean
         minimum_length:
@@ -39191,6 +39826,12 @@ components:
           - string
           - 'null'
           description: Text shown under the field label
+        customized_validation_message:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+          description: Message a filler sees in place of the default one when an answer fails a check of this field, such as required, unique (a duplicate) or a format; null or an empty string for the default messages
         private:
           type: boolean
           description: 'Hidden field: fillers do not see it, it is not checked for required, and an exam or evaluation does not score it'
