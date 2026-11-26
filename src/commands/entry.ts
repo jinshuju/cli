@@ -46,6 +46,21 @@ function list(value: unknown): readonly string[] | undefined {
   return values && values.length > 0 ? values : undefined;
 }
 
+/**
+ * A view's entries cut down to the fields named, which its endpoint cannot do:
+ * it takes no field list, only the view's own columns. A caller asking for a few
+ * columns out of habit is answered rather than refused. The two keys that say
+ * which entry a row is stay, as they do when the API narrows a listing itself.
+ */
+function onlyFields(row: unknown, fields: readonly string[] | undefined): unknown {
+  if (!fields || !isRecord(row)) return row;
+  const kept = new Set(['token', 'serial_number', ...fields]);
+  return Object.fromEntries(Object.entries(row).filter(([key]) => kept.has(key)));
+}
+
+/** How a serial number is reached for as a flag, which reads as the argument it means. */
+const SERIAL_FLAGS = ['--serial', '--serial-number'] as const;
+
 function labels(input: CommandInput): boolean | undefined {
   return input.options.labels ? true : undefined;
 }
@@ -416,7 +431,8 @@ export const ENTRY: readonly Command[] = [
     path: ['entry', 'list'],
     summary: 'List entries',
     description:
-      'With --view the view carries its own filter and sort, so --filter, --keyword and --sort cannot be added on top.',
+      'With --view the view carries its own filter and sort, so --filter, --keyword and --sort cannot be added on top; ' +
+      'it also decides which columns come back, and --fields keeps only those of them it names.',
     options: [
       ...CONTAINER_OPTIONS,
       { name: '--view', type: 'string', placeholder: '<view>', description: 'Read the entries of this view' },
@@ -452,22 +468,9 @@ export const ENTRY: readonly Command[] = [
             throw new UsageError(`--${flag} cannot be combined with --view: the view carries its own filter and sort`);
           }
         }
-        // The view decides its own columns and the endpoint takes no field
-        // list, so --fields here asked for something that was never going to
-        // happen. Refusing beats accepting it and answering every field.
-        if (input.options.fields !== undefined) {
-          throw new UsageError(
-            '--fields cannot be combined with --view: the view decides its own columns. ' +
-              'Change them with `view edit --columns`, or read the form without --view.'
-          );
-        }
-        // A view is read fifty rows a page, and the API takes no page size for it.
-        if (input.options.limit !== undefined) {
-          throw new UsageError('--limit cannot be combined with --view: a view is read 50 rows a page');
-        }
         return onContainer(input, 'listFormViewEntries', 'listTableViewEntries', {
           path: { view_token: view },
-          query: { include_labels: labels(input), next: input.options.next as string | undefined }
+          query: { include_labels: labels(input), ...paging(input) }
         });
       }
       return onContainer(input, 'listEntries', 'listTableEntries', {
@@ -481,6 +484,7 @@ export const ENTRY: readonly Command[] = [
         }
       });
     },
+    row: (row, input) => (input.options.view === undefined ? row : onlyFields(row, list(input.options.fields))),
     paginate: LISTING,
     examples: [
       'jinshuju entry list --form Kp7mQ2',
@@ -757,7 +761,14 @@ export const ENTRY: readonly Command[] = [
       DETAIL_URL +
       ' ' +
       VALUE_SHAPES,
-    args: [{ name: 'serial', required: false, description: 'Entry serial number; leave out with --batch' }],
+    args: [
+      {
+        name: 'serial',
+        required: false,
+        description: 'Entry serial number; leave out with --batch',
+        flags: SERIAL_FLAGS
+      }
+    ],
     options: [
       ...CONTAINER_OPTIONS,
       JSON_OPTION,
@@ -892,7 +903,7 @@ export const ENTRY: readonly Command[] = [
   {
     path: ['entry', 'delete'],
     summary: 'Delete one entry',
-    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    args: [{ name: 'serial', required: true, description: 'Entry serial number', flags: SERIAL_FLAGS }],
     options: [...CONTAINER_OPTIONS, YES_OPTION],
     request: (input) => {
       confirmed(input, `Deleting entry ${input.args.serial}`);
@@ -904,7 +915,7 @@ export const ENTRY: readonly Command[] = [
     path: ['entry', 'get'],
     summary: 'Show one entry',
     description: DETAIL_URL,
-    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    args: [{ name: 'serial', required: true, description: 'Entry serial number', flags: SERIAL_FLAGS }],
     options: [
       ...CONTAINER_OPTIONS,
       { name: '--fields', type: 'list', placeholder: '<api-code,...>', description: 'Return only these fields' },
@@ -923,7 +934,7 @@ export const ENTRY: readonly Command[] = [
       "red_envelope_audit_state is the review of an entry's red envelope, reservation_status its " +
       "reservation, and wheel_fortune_prize_audit_state the lucky wheel's winners, each with the id " +
       '`entry state-flow trigger --target` takes. Forms only; takes the form creator, admin or data maintainer role.',
-    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    args: [{ name: 'serial', required: true, description: 'Entry serial number', flags: SERIAL_FLAGS }],
     options: [FORM_OPTION, STATE_FLOW_OPTION],
     request: (input) => call('getEntryStateFlow', { path: stateFlowPath(input) }),
     examples: [
@@ -940,7 +951,7 @@ export const ENTRY: readonly Command[] = [
       'and reda_refuse rejects it, cancel_all frees the reserved slots without refunding a paid entry, ' +
       'winner_confirm redeems a winner, and delete_winner removes one for good: its prize and voucher ' +
       'code do not go back to the pool. A winner is named by --target.',
-    args: [{ name: 'serial', required: true, description: 'Entry serial number' }],
+    args: [{ name: 'serial', required: true, description: 'Entry serial number', flags: SERIAL_FLAGS }],
     options: [
       FORM_OPTION,
       STATE_FLOW_OPTION,

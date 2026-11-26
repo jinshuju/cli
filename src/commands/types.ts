@@ -8,6 +8,8 @@ export interface ArgSpec {
   /** Takes the rest of the words; only the last argument may. */
   readonly variadic?: boolean;
   readonly description: string;
+  /** Flags that may carry it instead, for the spellings a caller reaches for first. */
+  readonly flags?: readonly string[];
 }
 
 /** How a listing returns its next page, which is what `--all` follows. */
@@ -53,6 +55,13 @@ export interface Command {
    */
   readonly run?: (input: CommandInput, client: HttpClient) => Promise<unknown>;
   readonly paginate?: Pagination;
+  /**
+   * Reshapes each row of a listing, on every page `--all` reads as on the one a
+   * plain call answers. `select` sees one response and so cannot reach the rows
+   * of a listing read page by page; this is for a narrowing the API could not
+   * do itself, which has to hold however the listing was read.
+   */
+  readonly row?: (row: unknown, input: CommandInput) => unknown;
   /**
    * Narrows the response to what the command is about. `field list` asks for a
    * form because that is where fields live, but a caller asked for the fields.

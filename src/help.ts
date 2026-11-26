@@ -108,6 +108,36 @@ export function commandHelp(command: Command, style: Style = PLAIN): string {
   return `${parts.join('\n')}\n`;
 }
 
+/**
+ * How far a command is from what was typed after the resource: the words it
+ * shares with it count most, and the edits that turn one word into the other
+ * break ties. `artifact get <id>` is nearest `artifact share get`, `field rmove`
+ * nearest `field remove`.
+ */
+function distanceTo(command: Command, words: readonly string[]): number {
+  const wanted = command.path.slice(1);
+  const typed = words.slice(1, 1 + Math.max(wanted.length, 1));
+  const shared = wanted.filter((word) => typed.includes(word)).length;
+  const edits = wanted.reduce((sum, word, index) => sum + editDistance(word, typed[index] ?? ''), 0);
+  return edits - 100 * shared;
+}
+
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      current[j] = Math.min(
+        (previous[j] as number) + 1,
+        (current[j - 1] as number) + 1,
+        (previous[j - 1] as number) + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length] as number;
+}
+
 /** What the caller typed that matched nothing, and the nearest things that do. */
 export function unknownCommandHelp(
   words: readonly string[],
@@ -116,7 +146,14 @@ export function unknownCommandHelp(
 ): string {
   const typed = words.join(' ');
   const resource = words[0];
-  const siblings = commands.filter((command) => command.path[0] === resource).slice(0, 10);
+  // Nearest first: a resource has more commands than the list shows, and the one
+  // meant used to be cut off whenever it was declared late.
+  const siblings = commands
+    .filter((command) => command.path[0] === resource)
+    .map((command, order) => ({ command, order, distance: distanceTo(command, words) }))
+    .sort((a, b) => a.distance - b.distance || a.order - b.order)
+    .slice(0, 10)
+    .map(({ command }) => command);
   return [
     `Unknown command: jinshuju ${typed}`,
     ...(siblings.length > 0

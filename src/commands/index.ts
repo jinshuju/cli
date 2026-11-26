@@ -137,13 +137,30 @@ export const COMMANDS: readonly Command[] = [
   ...ARTIFACT
 ];
 
-/** The command whose path the words begin with, longest match first. */
+/**
+ * Words that name the same verb. Some resources delete and others remove, after
+ * what the API calls it, and nobody remembers which; either one reaches the
+ * command, and the one written out still wins where both exist.
+ */
+const SAME_VERB: Readonly<Record<string, string>> = { delete: 'remove', remove: 'delete' };
+
+/** The command whose path the words begin with, longest match first; a spelled-out match beats a synonym. */
 export function findCommand(words: readonly string[], commands: readonly Command[] = COMMANDS): Command | undefined {
   let best: Command | undefined;
+  let bestExact = false;
   for (const command of commands) {
     if (command.path.length > words.length) continue;
-    if (command.path.some((part, index) => words[index] !== part)) continue;
-    if (!best || command.path.length > best.path.length) best = command;
+    const parts = command.path.map((part, index) =>
+      words[index] === part ? 'exact' : SAME_VERB[words[index] as string] === part ? 'synonym' : 'miss'
+    );
+    if (parts.includes('miss')) continue;
+    const exact = !parts.includes('synonym');
+    const longer = !best || command.path.length > best.path.length;
+    const tieWon = best !== undefined && command.path.length === best.path.length && exact && !bestExact;
+    if (longer || tieWon) {
+      best = command;
+      bestExact = exact;
+    }
   }
   return best;
 }

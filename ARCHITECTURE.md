@@ -122,12 +122,16 @@ A `Command` is data, not a class:
 | `run(input, client)`                            | for the commands that are more than one request, or must decide how many; returns what to print            |
 | `paginate`                                      | which keys hold the rows and the cursor, so `--all` can follow it                                          |
 | `select`, `render`                              | narrow the payload; reshape it for text only                                                               |
+| `row`                                           | reshape each row of a listing, on every page `--all` reads as on one page                                  |
 | `text`                                          | hints the text renderer cannot read off the payload: the listing key, the lists worth breaking a table for |
 
 A command has one of `request` and `run`, never both. `run` exists for form
 create with an exam settings block (two requests, and the second may be
 refused after the first landed), for uploads that produce an id the real
-request needs, and for `entry import --wait`. Each of those says in its error
+request needs, for `entry import --wait`, and for the field writes that read
+first: `field remove` and `field update` with choices ask whether what they
+would remove holds answers, and `field update` reads the choices it is
+replacing. Each of those says in its error
 exactly what did and did not happen, because "nothing happened" would invite
 the caller to do it again.
 

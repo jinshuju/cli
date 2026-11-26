@@ -1,4 +1,4 @@
-import { bindArgs, bindOptions, leadingWords, readStdin, splitArgs } from './args.js';
+import { argumentFlags, bindArgs, bindOptions, leadingWords, placedArgs, readStdin, splitArgs } from './args.js';
 import { findCommand, type Command } from './commands/index.js';
 import { defaultConfigPath, loadConfig } from './config.js';
 import { helpFor, rootHelp } from './help.js';
@@ -9,6 +9,7 @@ import { checked } from './preflight.js';
 import { progress, type Progress } from './progress.js';
 import { format, terminalWidth } from './render.js';
 import { fail, ok, outputOf, unknown, type CliResult, type CliRuntime } from './result.js';
+import { isRecord } from './values.js';
 import { VERSION } from './version.js';
 
 export type { CliResult, CliRuntime } from './result.js';
@@ -18,7 +19,7 @@ export async function runCli(args: string[] = [], runtime: CliRuntime = {}): Pro
   // says which flags take a value. Its own words come first and hold no flags,
   // so they are readable without knowing anything.
   const command = findCommand(leadingWords(args));
-  const specs = [...(command?.options ?? []), ...GLOBAL_OPTIONS, ...LOCAL_OPTIONS];
+  const specs = [...(command?.options ?? []), ...argumentFlags(command), ...GLOBAL_OPTIONS, ...LOCAL_OPTIONS];
   const { words, flags } = splitArgs(args, specs);
   const stdin = runtime.stdin ?? readStdin;
 
@@ -47,9 +48,10 @@ async function runRemote(
   stdin: () => string
 ): Promise<CliResult> {
   const label = `jinshuju ${command.path.join(' ')}`;
-  const specs = [...(command.options ?? []), ...GLOBAL_OPTIONS, ...LOCAL_OPTIONS];
-  const options = bindOptions(specs, flags, label, stdin);
-  const input = { ...bindArgs(command, words), options };
+  const specs = [...(command.options ?? []), ...argumentFlags(command), ...GLOBAL_OPTIONS, ...LOCAL_OPTIONS];
+  const placed = placedArgs(command, words, bindOptions(specs, flags, label, stdin));
+  const options = placed.options;
+  const input = { ...bindArgs(command, placed.words), options };
   const output = (options.output as OutputFormat) ?? 'text';
   const width = runtime.width ?? terminalWidth();
 
@@ -78,6 +80,7 @@ async function runRemote(
 
   const request = command.request?.(input);
   if (!request) throw new UsageError(`${label} is not available yet`);
+  const eachRow = (rows: unknown[]): unknown[] => (command.row ? rows.map((row) => command.row!(row, input)) : rows);
 
   if (options.all && command.paginate) {
     // jsonl is the one format that can be written before the end is known,
@@ -88,7 +91,7 @@ async function runRemote(
       let gathered = '';
       const write = runtime.stdout ?? ((chunk: string) => (gathered += chunk));
       await readAllPages(client, request, command.paginate, progress(), (rows) => {
-        for (const row of rows) write(`${JSON.stringify(row)}\n`);
+        for (const row of eachRow(rows)) write(`${JSON.stringify(row)}\n`);
       });
       return { exitCode: 0, stdout: gathered, stderr: '' };
     }
@@ -96,7 +99,7 @@ async function runRemote(
     let totals: Record<string, unknown> | undefined;
     await readAllPages(client, request, command.paginate, progress(), (page, body) => {
       totals ??= Object.fromEntries((command.paginate?.totals ?? []).map((key) => [key, body?.[key]]));
-      rows.push(...page);
+      rows.push(...eachRow(page));
     });
     const listing = { ...totals, count: rows.length, data: rows };
     // Every page read is still one listing, and reads the way a single page does.
@@ -104,7 +107,11 @@ async function runRemote(
     return ok(format(listing, output, width, hints));
   }
 
-  const result = await client.request(request);
+  let result = await client.request(request);
+  const items = command.paginate?.items;
+  if (command.row && items && isRecord(result) && Array.isArray(result[items])) {
+    result = { ...result, [items]: eachRow(result[items]) };
+  }
   const selected = command.select ? command.select(result, input) : result;
   if (output === 'text') return ok(format(command.render ? command.render(selected) : selected, output, width, hints));
   return ok(format(selected, output, width, hints));

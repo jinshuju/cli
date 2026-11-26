@@ -249,8 +249,13 @@ container:
 jinshuju field add --form Kp7mQ2 --json '{"type":"TextField","label":"Notes"}'
 jinshuju field update --form Kp7mQ2 field_3 --json '{"required":true}'
 jinshuju field update-choices --form Kp7mQ2 field_7 --json '{"add":[{"label":"Third"}]}'
-jinshuju field remove --form Kp7mQ2 field_9 --yes
+jinshuju field remove --form Kp7mQ2 field_9
 ```
+
+`field remove` asks the field check first: a field with no answers goes, and
+one holding answers waits for `--yes`, since removing it deletes them. Choices
+given to `field update` are the whole list the field should have, in its order,
+sent as the `update-choices` operations that make it so.
 
 `add`, `update` and `update-choices` answer with the fields they touched rather
 than the whole container the PATCH returns. A form whose fields need a plan its

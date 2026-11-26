@@ -3686,16 +3686,495 @@ test('a row the width would leave blank buys back the column that explains it', 
   assert.match(narrow.stdout, /not readable by this credential/);
 });
 
-test('--fields is refused with --view, rather than accepted and dropped', async () => {
+test('a view is read with --limit as its page size and --fields cut out of each row, on every page --all reads', async () => {
+  const requests: HttpRequest[] = [];
+  const rows = [
+    { token: 'e1', serial_number: 1, field_1: '张三', field_2: '13800000000', field_3: 'A' },
+    { token: 'e2', serial_number: 2, field_1: '李四', field_2: '13900000000', field_3: 'B' }
+  ];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      conform(request);
+      const first = request.query?.next === undefined;
+      return { total: 2, count: 1, data: [rows[first ? 0 : 1]], next: first ? 1 : null } as T;
+    }
+  };
+
+  const result = await cli(
+    [
+      'entry',
+      'list',
+      '--form',
+      'ZmhBDb',
+      '--view',
+      'P1dtOx',
+      '--all',
+      '--limit',
+      '1000',
+      '--fields',
+      'field_1,field_3'
+    ],
+    { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client }
+  );
+  const listed = await cli(
+    ['entry', 'list', '--form', 'ZmhBDb', '--view', 'P1dtOx', '--all', '--fields', 'field_1', '--output', 'json'],
+    { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client }
+  );
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(url(requests[0]), '/api/v1/forms/ZmhBDb/views/P1dtOx/entries?limit=1000');
+  assert.equal(requests.length, 4);
+  assert.deepEqual(JSON.parse(listed.stdout).data, [
+    { token: 'e1', serial_number: 1, field_1: '张三' },
+    { token: 'e2', serial_number: 2, field_1: '李四' }
+  ]);
+});
+
+test('a view read one page at a time keeps --fields too, and its cursor', async () => {
+  const client = {
+    async request<T>(): Promise<T> {
+      return {
+        total: 9,
+        count: 1,
+        data: [{ token: 'e1', serial_number: 1, field_1: '张三', field_2: 'x' }],
+        next: 1
+      } as T;
+    }
+  };
+  const result = await cli(
+    [
+      'entry',
+      'list',
+      '--table',
+      'L4ojcB',
+      '--view',
+      'xZ8iBN',
+      '--limit',
+      '1',
+      '--fields',
+      'field_1',
+      '--output',
+      'json'
+    ],
+    { env: { JINSHUJU_ACCESS_TOKEN: 'tok' }, client }
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    total: 9,
+    count: 1,
+    data: [{ token: 'e1', serial_number: 1, field_1: '张三' }],
+    next: 1
+  });
+});
+
+test('--filter given the JSON --filters takes is read as --filters, op spelling included', async () => {
   const mock = createMockClient();
-  const result = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--fields', 'field_1'], {
-    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  const listed = await cli(
+    ['entry', 'list', '--table', 'SPuzcs', '--filter', '[{"field":"field_8","op":"gte","value":2}]'],
+    { env, client: mock.client }
+  );
+  const counted = await cli(
+    ['entry', 'count', '--form', 'Kp7mQ2', '--filter', '{"field":"field_8","operator":"eq","value":"A"}'],
+    {
+      env,
+      client: mock.client
+    }
+  );
+  const raw = await cli(
+    ['entry', 'list', '--form', 'Kp7mQ2', '--filters', '[{"field":"field_1","op":"eq","value":"x"}]'],
+    {
+      env,
+      client: mock.client
+    }
+  );
+  const both = await cli(
+    [
+      'entry',
+      'list',
+      '--form',
+      'Kp7mQ2',
+      '--filter',
+      'field_1 eq x',
+      '--filter',
+      '[{"field":"field_8","op":"gte","value":2}]'
+    ],
+    { env, client: mock.client }
+  );
+  const broken = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--filter', '[{"field":'], {
+    env,
     client: mock.client
   });
 
-  assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /--fields cannot be combined with --view/);
+  assert.equal(listed.exitCode, 0, listed.stderr);
+  assert.deepEqual(JSON.parse(String(mock.requests[0].query?.filters)), [
+    { field: 'field_8', operator: 'gte', value: 2 }
+  ]);
+  assert.equal(counted.exitCode, 0, counted.stderr);
+  assert.deepEqual(JSON.parse(String(mock.requests[1].query?.filters)), [
+    { field: 'field_8', operator: 'eq', value: 'A' }
+  ]);
+  assert.equal(raw.exitCode, 0, raw.stderr);
+  assert.deepEqual(JSON.parse(String(mock.requests[2].query?.filters)), [
+    { field: 'field_1', operator: 'eq', value: 'x' }
+  ]);
+  assert.equal(both.exitCode, 2);
+  assert.match(both.stderr, /alternatives, not both/);
+  assert.equal(broken.exitCode, 2);
+  assert.match(broken.stderr, /--filter looks like JSON but does not parse/);
+  assert.equal(mock.requests.length, 3);
+});
+
+test('entry get takes the form token in front of the serial, and the serial as --serial-number or --serial', async () => {
+  const mock = createMockClient();
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  const leading = await cli(['entry', 'get', 'gP5dOA', '5'], { env, client: mock.client });
+  const flagged = await cli(['entry', 'get', '--form', 'ETMxmc', '--serial-number', '22'], {
+    env,
+    client: mock.client
+  });
+  const short = await cli(['entry', 'get', '--table', 'Vn4xR8', '--serial', '7'], { env, client: mock.client });
+  const both = await cli(['entry', 'get', 'ETMxmc', '--serial-number', '22'], { env, client: mock.client });
+
+  for (const result of [leading, flagged, short, both]) assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(
+    mock.requests.map((request) => request.path),
+    [
+      '/api/v1/forms/gP5dOA/entries/5',
+      '/api/v1/forms/ETMxmc/entries/22',
+      '/api/v1/tables/Vn4xR8/entries/7',
+      '/api/v1/forms/ETMxmc/entries/22'
+    ]
+  );
+});
+
+test('a token in front is taken as the form only when nothing else could be meant', async () => {
+  const mock = createMockClient();
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  // Named already: the extra word stays an error.
+  const named = await cli(['entry', 'get', '--form', 'Kp7mQ2', 'gP5dOA', '5'], { env, client: mock.client });
+  // Not shaped like a token.
+  const word = await cli(['entry', 'get', 'hello!', '5'], { env, client: mock.client });
+  // As many words as arguments: the one there is the serial.
+  const serialOnly = await cli(['entry', 'get', '5'], { env, client: mock.client });
+
+  assert.equal(named.exitCode, 2);
+  assert.match(named.stderr, /takes no argument "5"/);
+  assert.equal(word.exitCode, 2);
+  assert.equal(serialOnly.exitCode, 2);
+  assert.match(serialOnly.stderr, /--form <token> or --table <token> is required/);
   assert.equal(mock.requests.length, 0);
+});
+
+test('delete and remove reach the same command, whichever one a resource names it by', async () => {
+  const mock = createMockClient();
+
+  const field = await cli(['field', 'delete', '--form', 'Kp7mQ2', 'field_9', '--yes'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  const form = await cli(['form', 'remove', 'Kp7mQ2', '--yes'], { env: WRITE_ENV, client: mock.client });
+  const help = await cli(['field', 'delete', '--help'], { env: WRITE_ENV });
+
+  assert.equal(field.exitCode, 0, field.stderr);
+  assert.deepEqual(mock.requests[0].body, { fields: { remove: ['field_9'] } });
+  assert.equal(form.exitCode, 0, form.stderr);
+  assert.equal(mock.requests[1].method, 'DELETE');
+  assert.equal(mock.requests[1].path, '/api/v1/forms/Kp7mQ2');
+  assert.match(help.stdout, /Usage: jinshuju field remove/);
+});
+
+test('an unknown command is answered with the nearest commands of its resource first', async () => {
+  const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
+
+  const typo = await cli(['field', 'rmove', '--form', 'Kp7mQ2', 'field_9'], { env });
+  const artifact = await cli(['artifact', 'get', '6512a1c2d3e4f5a6b7c8d9e1'], { env });
+  const theme = await cli(['form', 'theme', 'get', 'Kp7mQ2'], { env });
+
+  const first = (stderr: string) => stderr.split('Did you mean:')[1]?.trim().split('\n')[0];
+  assert.match(typo.stderr, /Unknown command: jinshuju field rmove/);
+  assert.equal(first(typo.stderr), 'jinshuju field remove');
+  assert.equal(first(artifact.stderr), 'jinshuju artifact share get');
+  assert.equal(first(theme.stderr), 'jinshuju form theme set');
+});
+
+test('folder list follows the cursor with --all', async () => {
+  const requests: HttpRequest[] = [];
+  const client = {
+    async request<T>(request: HttpRequest): Promise<T> {
+      requests.push(request);
+      conform(request);
+      const first = request.query?.next === undefined;
+      return { total: 2, count: 1, data: [{ token: first ? 'Fd1' : 'Fd2' }], next: first ? 1 : null } as T;
+    }
+  };
+  const result = await cli(['folder', 'list', '--all', '--output', 'json'], {
+    env: { JINSHUJU_ACCESS_TOKEN: 'tok' },
+    client
+  });
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(
+    JSON.parse(result.stdout).data.map((row: { token: string }) => row.token),
+    ['Fd1', 'Fd2']
+  );
+});
+
+/** A client answering a field check with `has_data` for each target, and everything else as the mock does. */
+function checking(hasData: boolean | 'fail', field?: Record<string, unknown>) {
+  const mock = createMockClient();
+  return {
+    requests: mock.requests,
+    client: {
+      async request<T>(request: HttpRequest): Promise<T> {
+        await mock.client.request(request);
+        if (request.path.endsWith('/fields/check')) {
+          if (hasData === 'fail') throw new HttpError('Service unavailable', 503, {});
+          const checks = JSON.parse(String(request.query?.checks)) as unknown[];
+          return { form_token: 'Kp7mQ2', results: checks.map(() => ({ has_data: hasData })) } as T;
+        }
+        if (request.method === 'GET') return { token: 'Kp7mQ2', fields: field ? [field] : [] } as T;
+        return { fields: field ? [field] : [] } as T;
+      }
+    }
+  };
+}
+
+test('field remove goes ahead without --yes when the field holds no answers, and waits for it when it does', async () => {
+  const empty = checking(false);
+  const holding = checking(true);
+  const unsure = checking('fail');
+  const confirmedRemove = checking(true);
+
+  const gone = await cli(['field', 'remove', 'field_4', '--form', 'DkM9f0'], { env: WRITE_ENV, client: empty.client });
+  const kept = await cli(['field', 'remove', '--form', 'THLtAu', 'field_18'], {
+    env: WRITE_ENV,
+    client: holding.client
+  });
+  const doubt = await cli(['field', 'remove', '--form', 'THLtAu', 'field_18'], {
+    env: WRITE_ENV,
+    client: unsure.client
+  });
+  const yes = await cli(['field', 'remove', '--form', 'THLtAu', 'field_18', '--yes'], {
+    env: WRITE_ENV,
+    client: confirmedRemove.client
+  });
+
+  assert.equal(gone.exitCode, 0, gone.stderr);
+  assert.equal(
+    url(empty.requests[0]),
+    '/api/v1/forms/DkM9f0/fields/check?checks=%5B%7B%22field_api_code%22%3A%22field_4%22%7D%5D'
+  );
+  assert.deepEqual(empty.requests[1].body, { fields: { remove: ['field_4'] } });
+
+  assert.equal(kept.exitCode, 2);
+  assert.match(kept.stderr, /field_18 holds answers, and removing it deletes them for good; pass --yes/);
+  assert.equal(holding.requests.length, 1);
+
+  assert.equal(doubt.exitCode, 2);
+  assert.match(doubt.stderr, /field_18 may hold answers \(the check failed: Service unavailable\)/);
+  assert.equal(unsure.requests.length, 1);
+
+  // Confirmed up front: nothing to ask, so nothing is checked.
+  assert.equal(yes.exitCode, 0, yes.stderr);
+  assert.deepEqual(
+    confirmedRemove.requests.map((request) => request.method),
+    ['PATCH']
+  );
+});
+
+const CHOICE_FIELD = {
+  api_code: 'field_4',
+  type: 'CheckBox',
+  label: '4. 你做出来的东西，哪儿还差点意思',
+  choices: [
+    { api_code: 'aB1c', value: '文字太假，不像人话', quota: null },
+    { api_code: 'dE2f', value: '文字太长，啰嗦', quota: null },
+    { api_code: 'gH3i', value: '图不好看', quota: null }
+  ]
+};
+
+test('choices on field update are the list the field should have, sent as the choice operations that make it so', async () => {
+  const mock = checking(false, CHOICE_FIELD);
+  const result = await cli(
+    [
+      'field',
+      'update',
+      '--form',
+      'OcfUBi',
+      'field_4',
+      '--json',
+      JSON.stringify({
+        type: 'CheckBox',
+        label: '4. 你做出来的东西，哪儿还差点意思',
+        required: true,
+        choices: [
+          { value: '文字太假，不像人话' },
+          { value: '文字太长，啰嗦', quota: 5 },
+          { value: '字和图配不到一块儿' }
+        ]
+      })
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(
+    mock.requests.map((request) => `${request.method} ${request.path}`),
+    ['GET /api/v1/forms/OcfUBi', 'GET /api/v1/forms/OcfUBi/fields/check', 'PATCH /api/v1/forms/OcfUBi']
+  );
+  assert.deepEqual(JSON.parse(String(mock.requests[1].query?.checks)), [
+    { field_api_code: 'field_4', choice_value: '图不好看' }
+  ]);
+  assert.deepEqual(mock.requests[2].body, {
+    fields: {
+      update: [{ type: 'CheckBox', label: '4. 你做出来的东西，哪儿还差点意思', required: true, api_code: 'field_4' }],
+      update_choices: [
+        {
+          add: [{ value: '字和图配不到一块儿' }],
+          update: [{ api_code: 'dE2f', quota: 5 }],
+          remove: ['gH3i'],
+          field_api_code: 'field_4'
+        }
+      ]
+    }
+  });
+});
+
+test('choices on field update that would take answers with a removed choice wait for --yes', async () => {
+  const mock = checking(true, CHOICE_FIELD);
+  const choices = JSON.stringify({ choices: [{ value: '文字太假，不像人话' }, { value: '文字太长，啰嗦' }] });
+
+  const refused = await cli(['field', 'update', '--form', 'OcfUBi', 'field_4', '--json', choices], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  assert.equal(refused.exitCode, 2);
+  assert.match(refused.stderr, /Choice "图不好看" of field_4 holds answers/);
+  assert.equal(mock.requests.filter((request) => request.method === 'PATCH').length, 0);
+
+  const sent = await cli(['field', 'update', '--form', 'OcfUBi', 'field_4', '--json', choices, '--yes'], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  assert.equal(sent.exitCode, 0, sent.stderr);
+  assert.deepEqual(mock.requests.at(-1)?.body, {
+    fields: { update_choices: [{ remove: ['gH3i'], field_api_code: 'field_4' }] }
+  });
+});
+
+/**
+ * What the API does with one field's choice operations, as openapi.yaml says:
+ * remove, insert each addition at its position (appended without one, or past
+ * the end), then move each choice given a position, lowest first. The texts in
+ * the order they come out.
+ */
+function choicesAfter(current: readonly { api_code: string; value: string }[], operations: Record<string, unknown>) {
+  const remove = (operations.remove as string[] | undefined) ?? [];
+  const list = current.filter((choice) => !remove.includes(choice.api_code)).map((choice) => ({ ...choice }));
+  for (const added of (operations.add as { value: string; position?: number }[] | undefined) ?? []) {
+    const choice = { api_code: `new:${added.value}`, value: added.value };
+    if (added.position !== undefined && added.position <= list.length) list.splice(added.position, 0, choice);
+    else list.push(choice);
+  }
+  const moves = ((operations.update as { api_code: string; position?: number }[] | undefined) ?? [])
+    .filter((update) => update.position !== undefined)
+    .sort((a, b) => (a.position as number) - (b.position as number));
+  for (const { api_code, position } of moves) {
+    const from = list.findIndex((choice) => choice.api_code === api_code);
+    const [choice] = list.splice(from, 1);
+    list.splice(Math.min(position as number, list.length), 0, choice as { api_code: string; value: string });
+  }
+  return list.map((choice) => choice.value);
+}
+
+test('choices on field update come out in the order listed: moved, inserted between, or after a removal', async () => {
+  const lists = {
+    moved: ['图不好看', '文字太假，不像人话', '文字太长，啰嗦'],
+    inserted: ['文字太假，不像人话', '字和图配不到一块儿', '文字太长，啰嗦', '图不好看'],
+    removedAndMoved: ['文字太长，啰嗦', '文字太假，不像人话'],
+    everything: ['图不好看', '新一', '文字太假，不像人话', '新二']
+  };
+  for (const [name, values] of Object.entries(lists)) {
+    const mock = checking(false, CHOICE_FIELD);
+    const json = JSON.stringify({ choices: values.map((value) => ({ value })) });
+    const result = await cli(['field', 'update', '--form', 'OcfUBi', 'field_4', '--json', json], {
+      env: WRITE_ENV,
+      client: mock.client
+    });
+    assert.equal(result.exitCode, 0, `${name}: ${result.stderr}`);
+    const body = mock.requests.at(-1)?.body as { fields: { update_choices: Record<string, unknown>[] } };
+    assert.deepEqual(choicesAfter(CHOICE_FIELD.choices, body.fields.update_choices[0] ?? {}), values, name);
+  }
+});
+
+test('a choice put first is sent as a move to position 0 and the rest after it', async () => {
+  const gender = {
+    api_code: 'field_2',
+    type: 'RadioButton',
+    label: '性别',
+    choices: [
+      { api_code: 'udsC', value: '女' },
+      { api_code: 'udsD', value: '男' }
+    ]
+  };
+  const mock = checking(false, gender);
+  const result = await cli(
+    ['field', 'update', '--form', 'howw4G', 'field_2', '--json', '{"choices":[{"value":"男"},{"value":"女"}]}'],
+    { env: WRITE_ENV, client: mock.client }
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(mock.requests.at(-1)?.body, {
+    fields: {
+      update_choices: [
+        {
+          update: [
+            { api_code: 'udsD', position: 0 },
+            { api_code: 'udsC', position: 1 }
+          ],
+          field_api_code: 'field_2'
+        }
+      ]
+    }
+  });
+});
+
+test('choices in the order the field has them, new ones last, are sent with no positions', async () => {
+  const mock = checking(false, CHOICE_FIELD);
+  const json = JSON.stringify({
+    choices: [{ value: '文字太假，不像人话' }, { value: '图不好看' }, { value: '新的' }]
+  });
+  const result = await cli(['field', 'update', '--form', 'OcfUBi', 'field_4', '--json', json], {
+    env: WRITE_ENV,
+    client: mock.client
+  });
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(mock.requests.at(-1)?.body, {
+    fields: { update_choices: [{ add: [{ value: '新的' }], remove: ['dE2f'], field_api_code: 'field_4' }] }
+  });
+});
+
+test('field update-choices reads a choice to update named by name as its value', async () => {
+  const mock = createMockClient();
+  const result = await cli(
+    [
+      'field',
+      'update-choices',
+      '--form',
+      'roFrXm',
+      'field_5',
+      '--json',
+      '{"update":[{"api_code":"aB1c","name":"男"}]}'
+    ],
+    { env: WRITE_ENV, client: mock.client }
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(mock.requests[0].body, {
+    fields: { update_choices: [{ update: [{ api_code: 'aB1c', value: '男' }], field_api_code: 'field_5' }] }
+  });
 });
 
 test('an attachment for a subtable column lands in a row of it, not in a dotted key', async () => {
@@ -4309,7 +4788,7 @@ test('preview-convert refuses a field named both ways', async () => {
 // `field list <token>` is how `form get <token>` reads, and the refusal used to
 // stop at "takes no argument".
 test('a stray token is answered with the flag that takes it', async () => {
-  const token = await cli(['field', 'list', 'wiuEAD'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
+  const token = await cli(['field', 'list', '--form', 'Kp7mQ2', 'wiuEAD'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
   assert.match(token.stderr, /--form wiuEAD/);
 
   const word = await cli(['field', 'list', 'hello'], { env: { JINSHUJU_ACCESS_TOKEN: 't' } });
@@ -5139,13 +5618,6 @@ test('a flag combination the operation behind it cannot take is refused, saying 
   const env = { JINSHUJU_ACCESS_TOKEN: 'tok' };
   const mock = createMockClient();
 
-  const viewLimit = await cli(['entry', 'list', '--form', 'Kp7mQ2', '--view', 'aB3dE9', '--limit', '10'], {
-    env,
-    client: mock.client
-  });
-  assert.equal(viewLimit.exitCode, 2);
-  assert.match(viewLimit.stderr, /--limit cannot be combined with --view/);
-
   const severalKeyword = await cli(['entry', 'count', '--form', 'Kp7mQ2', '--form', 'Vn4xR8', '--keyword', '张三'], {
     env,
     client: mock.client
@@ -5240,6 +5712,8 @@ test('every example in the help sends requests openapi.yaml takes', async () => 
     id: 'att_1',
     attachment_id: 'img_1',
     job_id: 'job_1',
+    // A field check finding nothing, so a remove the example shows without --yes goes ahead.
+    results: [{ has_data: false }],
     status: 'success',
     data: []
   };

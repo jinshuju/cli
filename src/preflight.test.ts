@@ -84,9 +84,11 @@ test('a field read back goes back as it came, null settings and choices included
   const [listedField] = (JSON.parse(listed.stdout) as { data: Record<string, unknown>[] }).data;
   assert.deepEqual(listedField, read);
 
+  // Choices as read are the choices the field has, so they change nothing and stay off the wire.
   const written = await runCli(field(JSON.stringify(listedField)), { env: ENV, client });
   assert.equal(written.exitCode, 0, written.stderr);
-  assert.deepEqual(requests[1]?.body, { fields: { update: [read] } });
+  const { choices: _choices, ...rest } = read;
+  assert.deepEqual(requests.at(-1)?.body, { fields: { update: [rest] } });
 });
 
 // `validation` is how a field read before the API version the client asks for.
@@ -160,7 +162,7 @@ test('a choice to update without its api_code is refused with the way in; choice
     client: mock.client
   });
   assert.equal(turning.exitCode, 0, turning.stderr);
-  assert.equal(mock.requests.length, 2);
+  assert.equal(mock.requests.filter((request) => request.method === 'PATCH').length, 2);
 });
 
 test('what a newer spec may take is sent: an unknown key, an unknown value, an unknown field type, a longer list', async () => {
