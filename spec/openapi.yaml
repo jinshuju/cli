@@ -269,6 +269,13 @@ paths:
         schema:
           type: boolean
           default: false
+      - name: include_evaluation_setting
+        in: query
+        required: false
+        description: When `true`, an evaluation form includes `evaluation_setting` (evaluation settings, the same as `GET /forms/{form_token}/evaluation_setting`); an OAuth token needs the `form_setting` scope for it.
+        schema:
+          type: boolean
+          default: false
       - $ref: '#/components/parameters/IncludeTransactions'
     patch:
       tags:
@@ -2366,7 +2373,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExamSetting'
         '400':
-          description: 'Invalid parameters, including: the form is not an exam, range comments overlap or end before they start, `show_timeout` is turned on while questions are required, a random question count is more than the questions there are, a question type is listed twice, or the `by_type` counts add up to 0'
+          description: 'Invalid parameters, including: the form is not an exam, range comments overlap or end before they start, `show_timeout` is turned on while questions are required, random questions are turned on while rules have questions in their conditions, a random question count is more than the questions there are, a question type is listed twice, or the `by_type` counts add up to 0'
           content:
             application/json:
               schema:
@@ -2383,13 +2390,19 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '415':
+          description: The body is not `application/json`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   "/forms/{form_token}/evaluation_setting":
     get:
       tags:
       - Form Settings
       summary: Show a form's evaluation settings
       description: |
-        Returns an evaluation form's report display, dimension (indicator) settings and total score range comments.
+        Returns an evaluation form's report display, dimension (indicator) settings, total score range comments, time limit and random questions.
         Only for forms in the evaluation scene (scene = evaluation); otherwise returns 400. Returns an empty object `{}` when the form has no evaluation settings record yet.
         OAuth scope: form_setting
       operationId: getEvaluationSetting
@@ -2420,7 +2433,9 @@ paths:
         Partially updates an evaluation form's settings (schema `EvaluationSettingInput`).
         OAuth scope: form_setting
         - `evaluation_comments` replaces the total score range comments as a whole (an empty array turns them off) and takes effect only when `notice_after_filling_mode`, passed or already saved, is reports / customize. A comment written with conditions in the form editor reads back as `id` + `conditions`; pass it back under that id, where only `comment` / `retry` can change.
-        - `indicator_setting.indicators` replaces the dimensions as a whole; pass `api_code` back to keep a dimension. A dimension binds visible scorable questions by `field_api_codes` or `field_cids`.
+        - `indicator_setting.indicators` replaces the dimensions as a whole; pass `api_code` back to keep a dimension, and of its other keys only those passed change (`name` is always passed). A dimension binds visible scorable questions by `field_api_codes` or `field_cids`.
+        - Keys left out of `indicator_setting` keep their values. Left out, `enabled` turns on when dimensions are added to a form that had none and off when `indicators` is empty, as in the form editor.
+        - When the radar module turns on or off (it is on when `enabled` is true and there are dimensions), `show_report_radar` and `show_indicator_comments` follow it unless they are passed.
       operationId: updateEvaluationSetting
       parameters:
       - $ref: '#/components/parameters/FormToken'
@@ -2438,7 +2453,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/EvaluationSetting'
         '400':
-          description: 'Invalid parameters, including: the form is not an evaluation, a comment written as conditions is left out or changed, or a dimension binds a field that is not a visible scorable question'
+          description: 'Invalid parameters, including: the form is not an evaluation, a comment written as conditions is left out or changed, a dimension binds a field that is not a visible scorable question, `show_timeout` is turned on while questions are required, random questions are turned on while rules have questions in their conditions, a random question count is more than the questions there are, a question type is listed twice, or the `by_type` counts add up to 0'
           content:
             application/json:
               schema:
@@ -2455,6 +2470,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '415':
+          description: The body is not `application/json`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   "/forms/{form_token}/wheel_fortune":
     get:
       tags:
@@ -12412,7 +12433,7 @@ components:
         - Changing `success_message_rich_text` requires a plan that includes "Success page rich text". Writing `success_message_style` as `rich_text` (passed, written back as read, or implied by passing only `success_message_rich_text`) also needs "Distribution poster" and "Certificate"; on other plans with "Success page rich text" pass `text`. Otherwise the request is refused with 400. A plan without "Success page rich text" may still write back the `rich_text` style it read; it is saved as `text`.
         - Switching `entry_submit_mode` to `redirect`, or changing the saved `success_redirect_url` / `success_redirect_fields`, requires a plan that includes "Success redirect", or the request is refused with 400; writing back the values read is accepted. Any other `entry_submit_mode` clears the redirect URL and fields.
         - `submission_region_limited=true` requires a plan that includes "Submission region limit" and at least one item in `submission_regions`.
-        - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account, and once bound, `payment_way` becomes `third_party` automatically and `payment_expirable` turns on unless passed or already `false`.
+        - `merchant_account_id` (小金商户) cannot be bound together with `wxpay_account_id` / `alipay_account_id`; a newly passed payment account must belong to the current account. The request that binds a new one sets `payment_way` to `third_party` and turns `payment_expirable` on unless passed or already `false`; on an existing form, a request that binds no new account does not change them on its own. A form created with a non-empty `setting` starts with `payment_expirable` on unless it is passed.
         - `notification_rules` replaces all notification rules created through the API as a whole (`[]` clears them); rules created in the desktop UI are not affected.
         - A `weixin_collect_way` change the settings page does not offer is refused with 400 and the reason, e.g. turning collecting off while WeChat red envelopes are on.
       properties:
@@ -12466,6 +12487,7 @@ components:
           type: boolean
         show_close_count_down:
           type: boolean
+          description: Show a countdown to the scheduled close; true needs a time range or daily schedule after the request (by_time_range_close_rule / daily_repeat_close_rule), otherwise 400. Deleting the schedule turns it off
         show_form_when_unavailable:
           type: boolean
           description: Show the questions without a submit button while the form is not open yet or has stopped; otherwise show the not_open_hide_form text
@@ -12549,8 +12571,10 @@ components:
           type: boolean
         password_required:
           type: boolean
+          description: When false, the server clears the password
         access_password:
           type: string
+          description: Taken only while password_required is true (sent or already on), otherwise 400
         allowed_audience:
           description: Who can fill in
           anyOf:
@@ -13450,7 +13474,7 @@ components:
           - SequenceField
           - LookupField
           - RollupField
-          description: Change the field to this type, keeping its api_code and entries and converting the values; a change that would clear data needs confirm_data_loss. The target is a FieldInput type (a TableColumnInput type on a table); the field's current type changes nothing. Exam questions and customized fields (Department / Grade) cannot change type in place; remove the field and add a new one instead
+          description: Change the field to this type, keeping its api_code and entries and converting the values; a change that would clear data needs confirm_data_loss. The target is a FieldInput type (a TableColumnInput type on a table); the field's current type changes nothing. A selection field changed to RadioButton, DropDown or ImageRadioButton keeps only its first selected choice. Exam questions and customized fields (Department / Grade) cannot change type in place; remove the field and add a new one instead
         confirm_data_loss:
           type: boolean
           description: Accept that the type change clears data
@@ -14258,7 +14282,7 @@ components:
       additionalProperties: false
     FieldRuleOperations:
       type: object
-      description: Incremental field display rule operations; `remove` / `update` target a rule by the 0-based `index` that `GET /forms/{form_token}/field_rules` returns; the same index cannot be both removed and updated
+      description: Incremental field display rule operations; `remove` / `update` target a rule by the 0-based `index` that `GET /forms/{form_token}/field_rules` returns; the same index cannot be both removed and updated. `add` returns 400 on an exam or evaluation with random questions on
       properties:
         add:
           type: array
@@ -14303,7 +14327,7 @@ components:
       additionalProperties: false
     RedirectRuleOperations:
       type: object
-      description: Incremental redirect rule operations; `remove` / `update` target a rule by the 0-based `index` that `GET /forms/{form_token}/redirect_rules` returns; the same index cannot be both removed and updated. `add` / `update` need a plan with the `field_redirect_rules` feature
+      description: Incremental redirect rule operations; `remove` / `update` target a rule by the 0-based `index` that `GET /forms/{form_token}/redirect_rules` returns; the same index cannot be both removed and updated. `add` / `update` need a plan with the `field_redirect_rules` feature; `add` returns 400 on an exam or evaluation with random questions on
       properties:
         add:
           type: array
@@ -15052,6 +15076,7 @@ components:
           type: boolean
         show_close_count_down:
           type: boolean
+          description: Show a countdown to the scheduled close; true needs a time range or daily schedule after the request (by_time_range_close_rule here, or daily_repeat_close_rule through the form edit endpoint), otherwise 400
         show_form_when_unavailable:
           type: boolean
           description: Show the questions without a submit button while the form is not open yet or has stopped
@@ -15066,7 +15091,7 @@ components:
           description: When true, access_password is required as well; when false, the server clears the password
         access_password:
           type: string
-          description: Only ASCII letters, digits and common symbols are allowed
+          description: Taken only while password_required is true (sent or already on), otherwise 400; only ASCII letters, digits and common symbols are allowed
         allowed_audience:
           description: Who can fill in
           anyOf:
@@ -15515,7 +15540,7 @@ components:
           properties:
             enabled:
               type: boolean
-              description: Draw questions at random for each examinee; false turns it off and keeps the rest
+              description: Draw questions at random for each examinee; false turns it off and keeps the rest. Turning it on returns 400 while a field_rules or redirect_rules condition uses an exam question; once on, PATCH /forms/{form_token} cannot add rules
             mode:
               type: string
               enum:
@@ -15525,11 +15550,11 @@ components:
             count:
               type: integer
               minimum: 1
-              description: Questions to draw in from_all mode; at most `random_questions.total` in GET
+              description: Questions to draw in from_all mode; while random questions are on, at most `random_questions.total` in GET
             question_types:
               type: array
               minItems: 1
-              description: Replaces the by_type counts as a whole; list each type once, a type left out draws none, and the counts must add up to more than 0
+              description: Replaces the by_type counts as a whole; list each type once, and a type left out draws none. While random questions are on, the counts must add up to more than 0
               items:
                 type: object
                 required:
@@ -15548,7 +15573,7 @@ components:
                   count:
                     type: integer
                     minimum: 0
-                    description: Questions to draw of this type; at most the type's `total` in GET
+                    description: Questions to draw of this type; while random questions are on, at most the type's `total` in GET
                 additionalProperties: false
             shuffle:
               type: boolean
@@ -15885,6 +15910,12 @@ components:
         show_comments:
           type: boolean
           description: Show the total-score comments in the report
+        show_timeout:
+          type: boolean
+          description: Whether the evaluation is timed
+        limited_time:
+          type: integer
+          description: Time limit in minutes
         need_attention:
           type: string
           description: Instructions shown before the evaluation
@@ -15931,6 +15962,57 @@ components:
                     type: array
                     items:
                       $ref: '#/components/schemas/IntervalComment'
+        random_questions:
+          type: object
+          description: Random questions, drawn for each respondent
+          required:
+          - enabled
+          - mode
+          - total
+          - shuffle
+          - question_types
+          properties:
+            enabled:
+              type: boolean
+            mode:
+              type: string
+              enum:
+              - by_type
+              - from_all
+              description: by_type draws `count` of each question type; from_all draws `count` from all scored questions
+            count:
+              type: integer
+              description: Questions drawn in from_all mode
+            total:
+              type: integer
+              description: Scored questions on the form
+            shuffle:
+              type: boolean
+              description: Whether the question order is shuffled
+            question_types:
+              type: array
+              description: Every question type, with what by_type draws of it
+              items:
+                type: object
+                required:
+                - question_type
+                - count
+                - total
+                properties:
+                  question_type:
+                    type: string
+                    enum:
+                    - single_select_only_fields
+                    - multi_select_fields
+                    - analytics_fields
+                    - matrix_fields
+                    description: analytics_fields are rating and NPS questions, matrix_fields are Likert questions
+                  count:
+                    type: integer
+                    description: Questions of this type drawn in by_type mode
+                  total:
+                    type: integer
+                    description: Questions of this type on the form
         anti_cheating:
           $ref: '#/components/schemas/AntiCheatingSetting'
     EvaluationSettingInput:
@@ -15952,6 +16034,14 @@ components:
           type: boolean
         show_comments:
           type: boolean
+        show_timeout:
+          type: boolean
+          description: 'Turns on the evaluation time limit. Mutually exclusive with required on scored question fields: passing true returns 400 when the form already has a required question; once on, question fields can no longer be set as required (required on respondent info fields is unaffected)'
+        limited_time:
+          type: integer
+          minimum: 1
+          maximum: 9999
+          description: Time limit in minutes
         need_attention:
           type: string
         show_dispatcher_structure:
@@ -15969,18 +16059,18 @@ components:
             $ref: '#/components/schemas/FormEvaluationCommentInput'
         indicator_setting:
           type: object
-          description: Dimension settings; indicators is replaced as a whole
+          description: Dimension settings; only the keys present are written, and indicators is replaced as a whole
           properties:
             enabled:
               type: boolean
-              default: true
+              description: Whether the report's radar module (dimensions) is on; when left out it turns on as dimensions are added to a form that had none and off when indicators is empty
             indicators_scoring_mode:
               type: string
               enum:
               - summation
               - average
               - customization
-              default: summation
+              description: How dimensions are scored; a form starts with summation
             indicators:
               type: array
               maxItems: 200
@@ -15991,7 +16081,7 @@ components:
                 properties:
                   api_code:
                     type: string
-                    description: Pass back an existing dimension's api_code to keep its identity; omit it for a new dimension
+                    description: Pass back an existing dimension's api_code to keep its identity and the settings not passed; omit it for a new dimension
                   name:
                     type: string
                     maxLength: 20
@@ -16025,6 +16115,78 @@ components:
                       additionalProperties: false
                 additionalProperties: false
           additionalProperties: false
+        random_questions:
+          type: object
+          description: Random questions; only the keys present are written. Turning it on takes `mode`, `by_type` takes `question_types` and `from_all` takes `count`
+          properties:
+            enabled:
+              type: boolean
+              description: Draw questions at random for each respondent; false turns it off and keeps the rest. Turning it on returns 400 while a field_rules or redirect_rules condition uses a scored question; once on, PATCH /forms/{form_token} cannot add rules
+            mode:
+              type: string
+              enum:
+              - by_type
+              - from_all
+              description: by_type draws a count of each question type; from_all draws `count` from all scored questions
+            count:
+              type: integer
+              minimum: 1
+              description: Questions to draw in from_all mode; while random questions are on, at most `random_questions.total` in GET
+            question_types:
+              type: array
+              minItems: 1
+              description: Replaces the by_type counts as a whole; list each type once, and a type left out draws none. While random questions are on, the counts must add up to more than 0
+              items:
+                type: object
+                required:
+                - question_type
+                - count
+                properties:
+                  question_type:
+                    type: string
+                    enum:
+                    - single_select_only_fields
+                    - multi_select_fields
+                    - analytics_fields
+                    - matrix_fields
+                    description: analytics_fields are rating and NPS questions, matrix_fields are Likert questions; GET lists every type with the questions it has
+                  count:
+                    type: integer
+                    minimum: 0
+                    description: Questions to draw of this type; while random questions are on, at most the type's `total` in GET
+                additionalProperties: false
+            shuffle:
+              type: boolean
+              description: Shuffle the question order
+          additionalProperties: false
+          allOf:
+          - if:
+              properties:
+                enabled:
+                  const: true
+              required:
+              - enabled
+            then:
+              required:
+              - mode
+          - if:
+              properties:
+                mode:
+                  const: by_type
+              required:
+              - mode
+            then:
+              required:
+              - question_types
+          - if:
+              properties:
+                mode:
+                  const: from_all
+              required:
+              - mode
+            then:
+              required:
+              - count
         anti_cheating:
           $ref: '#/components/schemas/AntiCheatingSettingInput'
       additionalProperties: false
@@ -18534,7 +18696,7 @@ components:
         editable:
           type: boolean
           default: false
-          description: Whether the searcher can edit this field on the results page
+          description: Whether the searcher can edit this field on the results page; read back as false for a field whose display suggestion is not editable
         protected:
           type: boolean
           default: false
@@ -25177,7 +25339,7 @@ components:
     PseudoFormValues:
       type: object
       additionalProperties: true
-      description: Preset values keyed by field api_code or api_code_alias, written as when creating entries; on an update, null clears a field's preset. A new pseudo form has to preset at least one field. Only AddressField / CascadeDropDown / CheckBox / DateTimeField / DropDown / EmailField / IdCardField / ImageCheckBox / ImageRadioButton / LinkField / MobileField / NameField / NumberField / RadioButton / TelephoneField / TextArea / TextField / TimeField fields can be preset
+      description: Preset values keyed by field api_code or api_code_alias, written as when creating entries, except that a FormAssociation takes only the id or token of an associated entry its filter allows; on an update, null clears a field's preset. A new pseudo form has to preset at least one field. Only AddressField / CascadeDropDown / CheckBox / DateTimeField / DropDown / EmailField / FormAssociation / IdCardField / ImageCheckBox / ImageRadioButton / LinkField / MobileField / NameField / NumberField / RadioButton / TelephoneField / TextArea / TextField / TimeField fields can be preset
     PseudoFormBatchCreateResult:
       type: object
       required:
@@ -25454,6 +25616,9 @@ components:
           exam_setting:
             $ref: '#/components/schemas/ExamSetting'
             description: Exam settings (present on an exam form when `include_exam_setting=true`), same as `GET /forms/{form_token}/exam_setting`
+          evaluation_setting:
+            $ref: '#/components/schemas/EvaluationSetting'
+            description: Evaluation settings (present on an evaluation form when `include_evaluation_setting=true`), same as `GET /forms/{form_token}/evaluation_setting`
           transactions:
             $ref: '#/components/schemas/FormTransactions'
     FormViewFillItem:

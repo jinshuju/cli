@@ -7,7 +7,7 @@ import type { Operation, Schema } from '../spec.js';
 export const BASE_PATH = '/api/v1';
 
 /** The day spec/openapi.yaml was fetched from the API, when scripts/fetch-spec.mjs recorded it. */
-export const SPEC_DATE: string | undefined = '2026-11-26';
+export const SPEC_DATE: string | undefined = '2026-11-28';
 
 export type OperationId =
   | 'aggregateEntries'
@@ -1111,6 +1111,7 @@ export const OPERATIONS: { readonly [id in OperationId]: Operation } = {
       { name: 'include_redirect_rules', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_extended_attributes', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_exam_setting', in: 'query', schema: { type: 'boolean' } },
+      { name: 'include_evaluation_setting', in: 'query', schema: { type: 'boolean' } },
       { name: 'include_transactions', in: 'query', schema: { type: 'boolean' } }
     ]
   },
@@ -3512,6 +3513,8 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
       show_report_radar: { type: 'boolean' },
       show_indicator_comments: { type: 'boolean' },
       show_comments: { type: 'boolean' },
+      show_timeout: { type: 'boolean' },
+      limited_time: { type: 'integer', minimum: 1, maximum: 9999 },
       need_attention: { type: 'string' },
       show_dispatcher_structure: { type: 'boolean' },
       show_question_settings_structure: { type: 'boolean' },
@@ -3553,6 +3556,40 @@ export const SCHEMAS: { readonly [name: string]: Schema } = {
           }
         },
         additionalProperties: false
+      },
+      random_questions: {
+        type: 'object',
+        properties: {
+          enabled: { type: 'boolean' },
+          mode: { type: 'string', enum: ['by_type', 'from_all'] },
+          count: { type: 'integer', minimum: 1 },
+          question_types: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              required: ['question_type', 'count'],
+              properties: {
+                question_type: {
+                  type: 'string',
+                  enum: ['single_select_only_fields', 'multi_select_fields', 'analytics_fields', 'matrix_fields']
+                },
+                count: { type: 'integer', minimum: 0 }
+              },
+              additionalProperties: false
+            }
+          },
+          shuffle: { type: 'boolean' }
+        },
+        additionalProperties: false,
+        allOf: [
+          { if: { properties: { enabled: { const: true } }, required: ['enabled'] }, then: { required: ['mode'] } },
+          {
+            if: { properties: { mode: { const: 'by_type' } }, required: ['mode'] },
+            then: { required: ['question_types'] }
+          },
+          { if: { properties: { mode: { const: 'from_all' } }, required: ['mode'] }, then: { required: ['count'] } }
+        ]
       },
       anti_cheating: { $ref: 'AntiCheatingSettingInput' }
     },
